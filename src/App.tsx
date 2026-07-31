@@ -111,6 +111,12 @@ import {
   SIDEBAR_MIN_WIDTH,
   type SessionSidebar
 } from './workspace/sidebar.ts';
+import {
+  collectMatchingFolderPaths,
+  itemMatchesQuery,
+  normalizeSidebarQuery,
+  textMatchesQuery
+} from './workspace/sidebarSearch.ts';
 import './App.css';
 
 type LoadedCollection = {
@@ -193,6 +199,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<WorkspaceTab | null>(null);
   const [activeEnvironmentPath, setActiveEnvironmentPath] = useState<string | null>(null);
   const [sidebar, setSidebar] = useState<SessionSidebar>({ ...DEFAULT_SIDEBAR });
+  const [sidebarQuery, setSidebarQuery] = useState('');
   const [sessionHydrated, setSessionHydrated] = useState(false);
   const [sessionHome, setSessionHome] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -226,6 +233,10 @@ export default function App() {
   runningKeyRef.current = runningKey;
 
   const hasResources = collections.length > 0 || environments.length > 0;
+  const sidebarFilter = normalizeSidebarQuery(sidebarQuery);
+  const isSearching = sidebarFilter.length > 0;
+  const collectionsSectionOpen = sidebar.collectionsExpanded;
+  const environmentsSectionOpen = sidebar.environmentsExpanded;
 
   const anyDirty =
     collections.some((entry) => isCollectionDirty(uiByPath[entry.filePath] ?? EMPTY_UI)) ||
@@ -986,6 +997,83 @@ export default function App() {
     },
     []
   );
+
+  useEffect(() => {
+    if (!sidebarFilter) {
+      return;
+    }
+
+    const openCollections = collectionsRef.current;
+    const openEnvironments = environmentsRef.current;
+
+    const anyCollectionMatch = openCollections.some((entry) => {
+      const name = entry.collection.info?.name?.trim() || 'Untitled collection';
+      return (
+        textMatchesQuery(name, sidebarFilter) ||
+        (entry.collection.item ?? []).some((item) => itemMatchesQuery(item, sidebarFilter))
+      );
+    });
+    const anyEnvironmentMatch = openEnvironments.some((entry) => {
+      const name = entry.environment.name?.trim() || 'Untitled environment';
+      return (
+        textMatchesQuery(name, sidebarFilter) ||
+        textMatchesQuery(fileName(entry.filePath), sidebarFilter)
+      );
+    });
+
+    setSidebar((current) => {
+      const collectionsExpanded = anyCollectionMatch ? true : current.collectionsExpanded;
+      const environmentsExpanded = anyEnvironmentMatch ? true : current.environmentsExpanded;
+      if (
+        collectionsExpanded === current.collectionsExpanded &&
+        environmentsExpanded === current.environmentsExpanded
+      ) {
+        return current;
+      }
+      return { ...current, collectionsExpanded, environmentsExpanded };
+    });
+
+    setUiByPath((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const entry of openCollections) {
+        const name = entry.collection.info?.name?.trim() || 'Untitled collection';
+        const matchingFolders = collectMatchingFolderPaths(
+          entry.collection.item,
+          sidebarFilter
+        );
+        const hasMatch =
+          textMatchesQuery(name, sidebarFilter) ||
+          matchingFolders.size > 0 ||
+          (entry.collection.item ?? []).some((item) =>
+            itemMatchesQuery(item, sidebarFilter)
+          );
+        if (!hasMatch) {
+          continue;
+        }
+
+        const ui = next[entry.filePath] ?? createCollectionUiState();
+        const expanded = new Set(ui.expanded);
+        let expandedChanged = !ui.collectionExpanded;
+        for (const path of matchingFolders) {
+          if (!expanded.has(path)) {
+            expanded.add(path);
+            expandedChanged = true;
+          }
+        }
+        if (!expandedChanged) {
+          continue;
+        }
+        next[entry.filePath] = {
+          ...ui,
+          collectionExpanded: true,
+          expanded
+        };
+        changed = true;
+      }
+      return changed ? next : current;
+    });
+  }, [sidebarFilter]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1771,14 +1859,35 @@ export default function App() {
             className="sidebar"
             style={{ width: sidebar.width, flexBasis: sidebar.width }}
           >
+            <div className="sidebar-search">
+              <input
+                type="search"
+                value={sidebarQuery}
+                onChange={(event) => setSidebarQuery(event.target.value)}
+                placeholder="Search…"
+                aria-label="Search collections and environments"
+                spellCheck={false}
+              />
+              {sidebarQuery ? (
+                <button
+                  type="button"
+                  className="sidebar-search-clear"
+                  aria-label="Clear search"
+                  onClick={() => setSidebarQuery('')}
+                >
+                  ✕
+                </button>
+              ) : null}
+            </div>
+
             <div className="sidebar-section">
               <div className="sidebar-section-title">
                 <button
                   type="button"
                   className="sidebar-section-toggle"
-                  aria-expanded={sidebar.collectionsExpanded}
+                  aria-expanded={collectionsSectionOpen}
                   aria-label={
-                    sidebar.collectionsExpanded
+                    collectionsSectionOpen
                       ? 'Collapse collections'
                       : 'Expand collections'
                   }
@@ -1790,7 +1899,7 @@ export default function App() {
                   }
                 >
                   <span className="sidebar-chevron" aria-hidden>
-                    {sidebar.collectionsExpanded ? '▾' : '▸'}
+                    {collectionsSectionOpen ? '▾' : '▸'}
                   </span>
                   <strong>Collections</strong>
                   <span className="sidebar-count">{totalRequests}</span>
@@ -1806,8 +1915,24 @@ export default function App() {
                 </button>
               </div>
 
-              {sidebar.collectionsExpanded
-                ? collections.map((entry) => {
+              {collectionsSectionOpen
+                ? collections.flatMap((entry) => {
+                    const collectionName =
+                      entry.collection.info?.name?.trim() || 'Untitled collection';
+                    const collectionNameMatch = textMatchesQuery(
+                      collectionName,
+                      sidebarFilter
+                    );
+                    const treeMatch =
+                      !isSearching ||
+                      collectionNameMatch ||
+                      (entry.collection.item ?? []).some((item) =>
+                        itemMatchesQuery(item, sidebarFilter)
+                      );
+                    if (isSearching && !treeMatch) {
+                      return [];
+                    }
+
                     const ui = uiByPath[entry.filePath] ?? EMPTY_UI;
                     const counts = countsByPath[entry.filePath] ?? {
                       folders: 0,
@@ -1827,12 +1952,13 @@ export default function App() {
                       (activeTab.kind === 'request' || activeTab.kind === 'folder')
                         ? activeTab.path
                         : null;
+                    const collectionExpanded = ui.collectionExpanded;
 
-                    return (
+                    return [
                       <div className="sidebar-collection" key={entry.filePath}>
                         <div
                           className={`collection-heading ${headingSelected ? 'selected' : ''} ${
-                            ui.collectionExpanded ? 'expanded' : 'collapsed'
+                            collectionExpanded ? 'expanded' : 'collapsed'
                           }`}
                           onContextMenu={(event) => openContextMenu(event, target)}
                         >
@@ -1840,11 +1966,11 @@ export default function App() {
                             type="button"
                             className="collection-chevron-button"
                             aria-label={
-                              ui.collectionExpanded
+                              collectionExpanded
                                 ? 'Collapse collection'
                                 : 'Expand collection'
                             }
-                            aria-expanded={ui.collectionExpanded}
+                            aria-expanded={collectionExpanded}
                             onClick={(event) => {
                               event.stopPropagation();
                               updateUi(entry.filePath, (current) => ({
@@ -1854,7 +1980,7 @@ export default function App() {
                             }}
                           >
                             <span className="collection-chevron" aria-hidden>
-                              {ui.collectionExpanded ? '▾' : '▸'}
+                              {collectionExpanded ? '▾' : '▸'}
                             </span>
                           </button>
                           <button
@@ -1872,9 +1998,7 @@ export default function App() {
                               ◇
                             </span>
                             <div>
-                              <strong>
-                                {entry.collection.info?.name ?? 'Untitled collection'}
-                              </strong>
+                              <strong>{collectionName}</strong>
                               <span>
                                 {counts.folders} folders · {counts.requests} requests
                               </span>
@@ -1894,24 +2018,41 @@ export default function App() {
                             ···
                           </button>
                         </div>
-                        {ui.collectionExpanded ? (
+                        {collectionExpanded ? (
                           <CollectionTree
                             collectionPath={entry.filePath}
                             items={entry.collection.item}
                             expanded={ui.expanded}
                             selectedPath={treeSelectedPath}
+                            filterQuery={sidebarFilter}
                             onToggleFolder={(path) => toggleFolder(entry.filePath, path)}
                             onSelectFolder={(path) => openFolderTab(entry.filePath, path)}
-                            onSelectRequest={(path) => openRequestTab(entry.filePath, path)}
+                            onSelectRequest={(path) =>
+                              openRequestTab(entry.filePath, path)
+                            }
                             onContextMenu={(event, treeTarget) =>
                               openContextMenu(event, treeTarget)
                             }
                           />
                         ) : null}
                       </div>
-                    );
+                    ];
                   })
                 : null}
+              {collectionsSectionOpen &&
+              isSearching &&
+              collections.every((entry) => {
+                const collectionName =
+                  entry.collection.info?.name?.trim() || 'Untitled collection';
+                return (
+                  !textMatchesQuery(collectionName, sidebarFilter) &&
+                  !(entry.collection.item ?? []).some((item) =>
+                    itemMatchesQuery(item, sidebarFilter)
+                  )
+                );
+              }) ? (
+                <p className="sidebar-empty">No matching collections</p>
+              ) : null}
             </div>
 
             <div className="sidebar-section">
@@ -1919,9 +2060,9 @@ export default function App() {
                 <button
                   type="button"
                   className="sidebar-section-toggle"
-                  aria-expanded={sidebar.environmentsExpanded}
+                  aria-expanded={environmentsSectionOpen}
                   aria-label={
-                    sidebar.environmentsExpanded
+                    environmentsSectionOpen
                       ? 'Collapse environments'
                       : 'Expand environments'
                   }
@@ -1933,7 +2074,7 @@ export default function App() {
                   }
                 >
                   <span className="sidebar-chevron" aria-hidden>
-                    {sidebar.environmentsExpanded ? '▾' : '▸'}
+                    {environmentsSectionOpen ? '▾' : '▸'}
                   </span>
                   <strong>Environments</strong>
                   <span className="sidebar-count">{environments.length}</span>
@@ -1949,8 +2090,19 @@ export default function App() {
                 </button>
               </div>
 
-              {sidebar.environmentsExpanded
-                ? environments.map((entry) => {
+              {environmentsSectionOpen
+                ? environments.flatMap((entry) => {
+                    const envName =
+                      entry.environment.name?.trim() || 'Untitled environment';
+                    const envFile = fileName(entry.filePath);
+                    if (
+                      isSearching &&
+                      !textMatchesQuery(envName, sidebarFilter) &&
+                      !textMatchesQuery(envFile, sidebarFilter)
+                    ) {
+                      return [];
+                    }
+
                     const target: EnvironmentTarget = {
                       kind: 'environment',
                       environmentPath: entry.filePath
@@ -1959,8 +2111,11 @@ export default function App() {
                       activeTab?.kind === 'environment' &&
                       activeTab.environmentPath === entry.filePath;
                     const isActive = activeEnvironmentPath === entry.filePath;
-                    const dirty = isEnvironmentDirty(entry.environment, entry.originalRaw);
-                    return (
+                    const dirty = isEnvironmentDirty(
+                      entry.environment,
+                      entry.originalRaw
+                    );
+                    return [
                       <div
                         key={entry.filePath}
                         className={`environment-row-item ${selected ? 'selected' : ''}`}
@@ -1971,8 +2126,8 @@ export default function App() {
                           className={`environment-active ${isActive ? 'is-active' : ''}`}
                           aria-label={
                             isActive
-                              ? `Active environment ${entry.environment.name ?? fileName(entry.filePath)}`
-                              : `Set ${entry.environment.name ?? fileName(entry.filePath)} active`
+                              ? `Active environment ${envName}`
+                              : `Set ${envName} active`
                           }
                           aria-pressed={isActive}
                           title={isActive ? 'Clear active' : 'Set active'}
@@ -1996,10 +2151,8 @@ export default function App() {
                             })
                           }
                         >
-                          <strong>
-                            {entry.environment.name?.trim() || 'Untitled environment'}
-                          </strong>
-                          <span>{fileName(entry.filePath)}</span>
+                          <strong>{envName}</strong>
+                          <span>{envFile}</span>
                         </button>
                         {dirty ? (
                           <span className="dirty-dot" title="Unsaved changes" />
@@ -2018,9 +2171,21 @@ export default function App() {
                           ···
                         </button>
                       </div>
-                    );
+                    ];
                   })
                 : null}
+              {environmentsSectionOpen &&
+              isSearching &&
+              environments.every((entry) => {
+                const envName =
+                  entry.environment.name?.trim() || 'Untitled environment';
+                return (
+                  !textMatchesQuery(envName, sidebarFilter) &&
+                  !textMatchesQuery(fileName(entry.filePath), sidebarFilter)
+                );
+              }) ? (
+                <p className="sidebar-empty">No matching environments</p>
+              ) : null}
             </div>
           </aside>
 

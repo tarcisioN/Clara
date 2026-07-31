@@ -6,6 +6,7 @@ import {
   isRequest,
   type ItemPath
 } from '../postman/tree.ts';
+import { itemMatchesQuery } from '../workspace/sidebarSearch.ts';
 import { encodeItemDrag, ITEM_PATH_MIME } from './dnd.ts';
 import './CollectionTree.css';
 
@@ -18,6 +19,7 @@ type CollectionTreeProps = {
   items: PostmanItem[] | undefined;
   expanded: Set<ItemPath>;
   selectedPath: ItemPath | null;
+  filterQuery?: string;
   onToggleFolder: (path: ItemPath) => void;
   onSelectFolder: (path: ItemPath) => void;
   onSelectRequest: (path: ItemPath) => void;
@@ -31,6 +33,7 @@ type TreeNodeProps = {
   depth: number;
   expanded: Set<ItemPath>;
   selectedPath: ItemPath | null;
+  filterQuery: string;
   onToggleFolder: (path: ItemPath) => void;
   onSelectFolder: (path: ItemPath) => void;
   onSelectRequest: (path: ItemPath) => void;
@@ -68,11 +71,16 @@ function TreeNode({
   depth,
   expanded,
   selectedPath,
+  filterQuery,
   onToggleFolder,
   onSelectFolder,
   onSelectRequest,
   onContextMenu
 }: TreeNodeProps) {
+  if (filterQuery && !itemMatchesQuery(item, filterQuery)) {
+    return null;
+  }
+
   const folder = isFolder(item);
   const request = isRequest(item);
   const name = item.name?.trim() || (folder ? '(folder)' : '(request)');
@@ -133,6 +141,7 @@ function TreeNode({
                 depth={depth + 1}
                 expanded={expanded}
                 selectedPath={selectedPath}
+                filterQuery={filterQuery}
                 onToggleFolder={onToggleFolder}
                 onSelectFolder={onSelectFolder}
                 onSelectRequest={onSelectRequest}
@@ -199,6 +208,7 @@ export default function CollectionTree({
   items,
   expanded,
   selectedPath,
+  filterQuery = '',
   onToggleFolder,
   onSelectFolder,
   onSelectRequest,
@@ -206,6 +216,14 @@ export default function CollectionTree({
 }: CollectionTreeProps) {
   if (!items || items.length === 0) {
     return <p className="tree-empty">Collection has no items.</p>;
+  }
+
+  const visible = filterQuery
+    ? items.some((item) => itemMatchesQuery(item, filterQuery))
+    : true;
+
+  if (filterQuery && !visible) {
+    return null;
   }
 
   return (
@@ -219,6 +237,7 @@ export default function CollectionTree({
           depth={0}
           expanded={expanded}
           selectedPath={selectedPath}
+          filterQuery={filterQuery}
           onToggleFolder={onToggleFolder}
           onSelectFolder={onSelectFolder}
           onSelectRequest={onSelectRequest}

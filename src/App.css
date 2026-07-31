@@ -156,6 +156,63 @@ button.primary {
   color: var(--text);
 }
 
+.sidebar-search {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 8px 6px;
+  background: var(--mantle);
+  border-bottom: 1px solid var(--surface-1);
+}
+
+.sidebar-search input {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border-1);
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+.sidebar-search input::placeholder {
+  color: var(--text-faint);
+}
+
+.sidebar-search input:focus {
+  outline: none;
+  border-color: var(--brand);
+}
+
+.sidebar-search-clear {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 0.6875rem;
+  cursor: pointer;
+}
+
+.sidebar-search-clear:hover {
+  background: var(--surface-1);
+  color: var(--text);
+}
+
+.sidebar-empty {
+  margin: 8px 12px;
+  color: var(--text-faint);
+  font-size: 0.75rem;
+}
+
 .sidebar-resize {
   width: 5px;
   flex: 0 0 5px;
