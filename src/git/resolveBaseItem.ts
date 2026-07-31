@@ -1,12 +1,18 @@
 import type { PostmanCollection, PostmanItem } from '../postman/types.ts';
-import { isRequest, parseItemPath, type ItemPath } from '../postman/tree.ts';
-import { pairChildren, type ChangeKind, type StructuralDiff } from './structuralDiff.ts';
+import { getItemByPath, isRequest, parseItemPath, type ItemPath } from '../postman/tree.ts';
+import {
+  pairChildren,
+  type ChangeKind,
+  type RemovedGhost,
+  type StructuralDiff
+} from './structuralDiff.ts';
 
 export type BaseItemResolution =
   | { kind: 'none' }
   | { kind: 'added' }
   | { kind: 'paired'; item: PostmanItem }
-  | { kind: 'missing' };
+  | { kind: 'missing' }
+  | { kind: 'removed'; item: PostmanItem };
 
 /**
  * Walk the current path and resolve the paired base item using the same
@@ -40,6 +46,36 @@ export function findPairedBaseItem(
   }
 
   return matched;
+}
+
+/**
+ * Resolve the base item for a removed ghost using the parent's paired base
+ * folder (or collection root) and the ghost's `baseIndex`.
+ */
+export function findRemovedBaseItem(
+  currentCollection: PostmanCollection,
+  baseCollection: PostmanCollection,
+  ghost: RemovedGhost
+): PostmanItem | undefined {
+  let baseParentItems = baseCollection.item ?? [];
+  if (ghost.parentPath) {
+    const pairedParent = findPairedBaseItem(
+      currentCollection.item,
+      baseCollection.item,
+      ghost.parentPath
+    );
+    if (!pairedParent || !Array.isArray(pairedParent.item)) {
+      // Parent path is current-tree; if pairing fails, try the same path on base.
+      const baseParent = getItemByPath(baseCollection.item, ghost.parentPath);
+      if (!baseParent || !Array.isArray(baseParent.item)) {
+        return undefined;
+      }
+      baseParentItems = baseParent.item;
+    } else {
+      baseParentItems = pairedParent.item;
+    }
+  }
+  return baseParentItems[ghost.baseIndex];
 }
 
 export function resolveBaseRequestItem(

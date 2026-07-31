@@ -172,6 +172,9 @@ Read-only field-level comparison when opening a change from the Changes list.
 - [x] Body mode change: explicit mode-change block
 - [x] Restore section / request from Diff
 - [x] Tree click opens **Edit** (default)
+- [x] Removed request from Changes → base-only Diff (no Edit)
+- [x] **Show unchanged** toggle for keyed rows
+- [x] Next/prev change keeps Diff mode
 
 ### Validation
 - [x] `make check-stage19` — textDiff + requestFieldDiff fixtures

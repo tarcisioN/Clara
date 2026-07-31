@@ -121,7 +121,7 @@ import {
   computeStructuralDiff,
   type StructuralDiff
 } from './git/structuralDiff.ts';
-import { findPairedBaseItem, resolveBaseRequestItem } from './git/resolveBaseItem.ts';
+import { findPairedBaseItem, findRemovedBaseItem, resolveBaseRequestItem } from './git/resolveBaseItem.ts';
 import { computeSemanticDiff, type RequestSectionKey } from './git/semanticDiff.ts';
 import { computeRequestFieldDiff } from './git/requestFieldDiff.ts';
 import {
@@ -266,6 +266,13 @@ export default function App() {
   const [requestViewModeByKey, setRequestViewModeByKey] = useState<
     Record<string, 'edit' | 'diff'>
   >({});
+  /** Diff for a request that exists only in the base (removed from current). */
+  const [removedDiffView, setRemovedDiffView] = useState<{
+    collectionPath: string;
+    ghostKey: string;
+    item: PostmanItem;
+    name: string;
+  } | null>(null);
   const [compareBases, setCompareBases] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [openTabs, setOpenTabs] = useState<WorkspaceTab[]>([]);
@@ -485,6 +492,18 @@ export default function App() {
     activeTab?.kind === 'request'
       ? (requestViewModeByKey[tabKey(activeTab)] ?? 'edit')
       : 'edit';
+
+  const removedFieldDiff = useMemo(() => {
+    if (!removedDiffView) {
+      return null;
+    }
+    return computeRequestFieldDiff(null, removedDiffView.item);
+  }, [removedDiffView]);
+
+  const showingRemovedDiff =
+    Boolean(removedDiffView) &&
+    focusedChangeKey === removedDiffView?.ghostKey &&
+    Boolean(removedFieldDiff);
 
   const activeEnvCompare =
     activeTab?.kind === 'environment'
@@ -1559,6 +1578,7 @@ export default function App() {
       setRequestViewModeByKey((current) =>
         current[key] === viewMode ? current : { ...current, [key]: viewMode }
       );
+      setRemovedDiffView(null);
     },
     [openTab]
   );
@@ -2418,6 +2438,7 @@ export default function App() {
       );
 
       if (entry.type === 'current') {
+        setRemovedDiffView(null);
         if (entry.nodeKind === 'request') {
           openRequestTab(collectionPath, entry.path, { viewMode: 'diff' });
           revealInSidebar(
@@ -2454,6 +2475,34 @@ export default function App() {
         updateUi(collectionPath, (ui) =>
           ui.collectionExpanded ? ui : { ...ui, collectionExpanded: true }
         );
+      }
+
+      if (entry.nodeKind === 'request') {
+        const collectionEntry = collectionsRef.current.find(
+          (candidate) => candidate.filePath === collectionPath
+        );
+        const compare = compareByPathRef.current[collectionPath];
+        if (collectionEntry && compare) {
+          const baseItem = findRemovedBaseItem(
+            collectionEntry.collection,
+            compare.baseCollection,
+            entry.ghost
+          );
+          if (baseItem && isRequest(baseItem)) {
+            setRemovedDiffView({
+              collectionPath,
+              ghostKey: entry.key,
+              item: baseItem,
+              name: entry.name
+            });
+          } else {
+            setRemovedDiffView(null);
+          }
+        } else {
+          setRemovedDiffView(null);
+        }
+      } else {
+        setRemovedDiffView(null);
       }
 
       window.requestAnimationFrame(() => {
@@ -3528,7 +3577,30 @@ export default function App() {
                 />
               )}
 
-              {activeTab?.kind === 'collection' && activeCollection && activeCounts && (
+              {showingRemovedDiff &&
+                removedDiffView &&
+                removedFieldDiff &&
+                (compareByPath[removedDiffView.collectionPath]?.baseRef ?? null) && (
+                  <div className="detail-split">
+                    <div className="detail-request">
+                      <RequestDiffPane
+                        key={`removed:${removedDiffView.ghostKey}`}
+                        name={removedDiffView.name}
+                        path={`removed · ${removedDiffView.ghostKey}`}
+                        baseRef={compareByPath[removedDiffView.collectionPath]!.baseRef}
+                        fieldDiff={removedFieldDiff}
+                        onSwitchToEdit={null}
+                        onRestoreRequest={null}
+                        onRestoreSection={null}
+                      />
+                    </div>
+                  </div>
+                )}
+
+              {!showingRemovedDiff &&
+                activeTab?.kind === 'collection' &&
+                activeCollection &&
+                activeCounts && (
                 <CollectionRunPane
                   title={activeCollection.collection.info?.name ?? 'Untitled collection'}
                   subtitle={`Run all ${activeCounts.requests} request${
@@ -3576,7 +3648,10 @@ export default function App() {
                 />
               )}
 
-              {activeTab?.kind === 'folder' && activeFolder && isFolder(activeFolder) && (
+              {!showingRemovedDiff &&
+                activeTab?.kind === 'folder' &&
+                activeFolder &&
+                isFolder(activeFolder) && (
                 <CollectionRunPane
                   title={activeFolder.name?.trim() || 'Folder'}
                   subtitle={`Run this folder (${countRequestsUnder(activeFolder)} request${
@@ -3630,7 +3705,8 @@ export default function App() {
                 />
               )}
 
-              {activeTab?.kind === 'request' &&
+              {!showingRemovedDiff &&
+                activeTab?.kind === 'request' &&
                 !(activeRequestPath && selectedItem && selectedRequest) && (
                   <div className="empty-state">
                     <span className="empty-state-icon" aria-hidden>
@@ -3641,7 +3717,8 @@ export default function App() {
                   </div>
                 )}
 
-              {activeTab?.kind === 'request' &&
+              {!showingRemovedDiff &&
+                activeTab?.kind === 'request' &&
                 activeRequestPath &&
                 selectedItem &&
                 selectedRequest && (

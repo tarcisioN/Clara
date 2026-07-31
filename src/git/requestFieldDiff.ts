@@ -110,6 +110,7 @@ function keyedList(
 ): DiffKeyedList {
   const baseUsed = new Set<number>();
   const rows: DiffKeyedRow[] = [];
+  let changed = 0;
 
   current.forEach((row) => {
     let matched = -1;
@@ -124,6 +125,7 @@ function keyedList(
     }
 
     if (matched < 0) {
+      changed += 1;
       rows.push({
         key: row.key || '(empty)',
         change: 'added',
@@ -141,8 +143,17 @@ function keyedList(
       fingerprintKv(row.key, row.value, row.disabled) ===
       fingerprintKv(baseRow.key, baseRow.value, baseRow.disabled);
     if (same) {
+      rows.push({
+        key: row.key || '(empty)',
+        change: 'unchanged',
+        baseValue: baseRow.value,
+        currentValue: row.value,
+        baseDisabled: baseRow.disabled,
+        currentDisabled: row.disabled
+      });
       return;
     }
+    changed += 1;
     rows.push({
       key: row.key || '(empty)',
       change: 'modified',
@@ -157,6 +168,7 @@ function keyedList(
     if (baseUsed.has(baseIndex)) {
       return;
     }
+    changed += 1;
     rows.push({
       key: row.key || '(empty)',
       change: 'removed',
@@ -167,7 +179,7 @@ function keyedList(
     });
   });
 
-  return { rows, hasChanges: rows.length > 0 };
+  return { rows, hasChanges: changed > 0 };
 }
 
 function textBlock(base: string, current: string): DiffTextBlock {
@@ -385,60 +397,73 @@ function kvRows(
 
 /**
  * Build the read-only field-level diff model for the Diff pane.
- * When `base` is null the request is treated as added.
+ * - `base` null → added
+ * - `current` null → removed
  */
 export function computeRequestFieldDiff(
-  current: PostmanItem,
+  current: PostmanItem | null,
   base: PostmanItem | null
 ): RequestFieldDiff {
   const semantic = computeSemanticDiff(current, base);
+  const currentItem = current && isRequest(current) ? current : null;
   const baseItem = base && isRequest(base) ? base : null;
 
   const method = scalar(
     baseItem ? requestMethod(baseItem) : '',
-    requestMethod(current)
+    currentItem ? requestMethod(currentItem) : ''
   );
-  const url = scalar(baseItem ? requestUrl(baseItem) : '', requestUrl(current));
+  const url = scalar(
+    baseItem ? requestUrl(baseItem) : '',
+    currentItem ? requestUrl(currentItem) : ''
+  );
   const name = scalar(
     baseItem ? (baseItem.name?.trim() || '') : '',
-    current.name?.trim() || ''
+    currentItem ? currentItem.name?.trim() || '' : ''
   );
   const params = keyedList(
-    kvRows(current, 'params'),
+    currentItem ? kvRows(currentItem, 'params') : [],
     baseItem ? kvRows(baseItem, 'params') : []
   );
   const headers = keyedList(
-    kvRows(current, 'headers'),
+    currentItem ? kvRows(currentItem, 'headers') : [],
     baseItem ? kvRows(baseItem, 'headers') : []
   );
-  const body = buildBody(current, baseItem);
-  const auth = buildAuth(current, baseItem);
+  const body = currentItem
+    ? buildBody(currentItem, baseItem)
+    : baseItem
+      ? buildBodyRemoved(baseItem)
+      : { kind: 'none' as const };
+  const auth = currentItem
+    ? buildAuth(currentItem, baseItem)
+    : baseItem
+      ? buildAuthRemoved(baseItem)
+      : { kind: 'unchanged' as const, typeLabel: 'inherit' };
   const prerequest = textBlock(
     baseItem ? getItemScriptSource(baseItem, 'prerequest') : '',
-    getItemScriptSource(current, 'prerequest')
+    currentItem ? getItemScriptSource(currentItem, 'prerequest') : ''
   );
   const tests = textBlock(
     baseItem ? getItemScriptSource(baseItem, 'test') : '',
-    getItemScriptSource(current, 'test')
+    currentItem ? getItemScriptSource(currentItem, 'test') : ''
   );
 
-  const changedSections = SECTION_ORDER.filter((key) => {
-    if (semantic.isAdded) {
-      return key === 'method' || key === 'url' || semantic.sections[key];
-    }
-    return semantic.sections[key];
-  });
-
-  // For added requests, surface the main sections even without semantic flags.
-  if (semantic.isAdded) {
+  const collectExtras = (): RequestSectionKey[] => {
     const extras: RequestSectionKey[] = ['method', 'url'];
-    if (params.hasChanges) extras.push('params');
-    if (headers.hasChanges) extras.push('headers');
+    if (params.hasChanges || params.rows.some((row) => row.change !== 'unchanged')) {
+      extras.push('params');
+    }
+    if (headers.hasChanges || headers.rows.some((row) => row.change !== 'unchanged')) {
+      extras.push('headers');
+    }
     if (auth.kind === 'changed') extras.push('auth');
     if (body.kind !== 'none') extras.push('body');
     if (prerequest.lines.some((line) => line.kind !== 'equal')) extras.push('prerequest');
     if (tests.lines.some((line) => line.kind !== 'equal')) extras.push('tests');
-    const unique = [...new Set([...extras, ...changedSections])];
+    return extras;
+  };
+
+  if (semantic.isAdded || semantic.isRemoved) {
+    const unique = [...new Set(collectExtras())];
     return {
       semantic,
       name,
@@ -454,6 +479,8 @@ export function computeRequestFieldDiff(
     };
   }
 
+  const changedSections = SECTION_ORDER.filter((key) => semantic.sections[key]);
+
   return {
     semantic,
     name,
@@ -466,5 +493,38 @@ export function computeRequestFieldDiff(
     prerequest,
     tests,
     changedSections
+  };
+}
+
+function buildBodyRemoved(base: PostmanItem): DiffBody {
+  const info = summarizeBody(base);
+  if (info.mode === 'none') {
+    return { kind: 'none' };
+  }
+  if (info.mode === 'raw') {
+    return { kind: 'raw', text: textBlock(info.raw ?? '', '') };
+  }
+  if (info.mode === 'urlencoded') {
+    const baseRows = (getRequestBody(base)?.urlencoded ?? []).map((param) => ({
+      key: param.key ?? '',
+      value: param.value ?? '',
+      disabled: Boolean(param.disabled)
+    }));
+    return { kind: 'urlencoded', list: keyedList([], baseRows) };
+  }
+  return {
+    kind: 'other',
+    baseSummary: info.summary,
+    currentSummary: ''
+  };
+}
+
+function buildAuthRemoved(base: PostmanItem): DiffAuth {
+  const baseType = String(resolveEditableAuthType(getRequestAuth(base)));
+  return {
+    kind: 'changed',
+    baseType,
+    currentType: '',
+    rows: keyedList([], authRows(base)).rows
   };
 }

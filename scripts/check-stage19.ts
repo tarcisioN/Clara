@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { computeRequestFieldDiff } from '../src/git/requestFieldDiff.ts';
+import { findRemovedBaseItem } from '../src/git/resolveBaseItem.ts';
+import { computeStructuralDiff } from '../src/git/structuralDiff.ts';
 import { diffLines, hasTextChanges } from '../src/git/textDiff.ts';
 import { updateRequestHeader, setRequestUrl, setRequestBodyRaw } from '../src/postman/edit.ts';
-import type { PostmanItem } from '../src/postman/types.ts';
+import type { PostmanCollection, PostmanItem } from '../src/postman/types.ts';
 
 // --- textDiff ---
 const empty = diffLines('', '');
@@ -73,10 +75,13 @@ current = updateRequestHeader(structuredClone(baseRequest), 0, {
 });
 field = computeRequestFieldDiff(current, baseRequest);
 assert.equal(field.semantic.sections.headers, true);
-assert.equal(field.headers.rows.length, 1);
-assert.equal(field.headers.rows[0]?.change, 'modified');
-assert.equal(field.headers.rows[0]?.baseValue, '1');
-assert.equal(field.headers.rows[0]?.currentValue, 'changed');
+assert.equal(field.headers.hasChanges, true);
+const changedHeaders = field.headers.rows.filter((row) => row.change !== 'unchanged');
+assert.equal(changedHeaders.length, 1);
+assert.equal(changedHeaders[0]?.change, 'modified');
+assert.equal(changedHeaders[0]?.baseValue, '1');
+assert.equal(changedHeaders[0]?.currentValue, 'changed');
+assert.ok(field.headers.rows.some((row) => row.change === 'unchanged' && row.key === 'Accept'));
 
 // Body line diff
 current = setRequestBodyRaw(structuredClone(baseRequest), '{\n  "ok": false\n}\n');
@@ -91,8 +96,17 @@ if (field.body.kind === 'raw') {
 // Added request
 field = computeRequestFieldDiff(baseRequest, null);
 assert.equal(field.semantic.isAdded, true);
+assert.equal(field.semantic.isRemoved, false);
 assert.ok(field.changedSections.includes('method'));
 assert.ok(field.changedSections.includes('url'));
+
+// Removed request
+field = computeRequestFieldDiff(null, baseRequest);
+assert.equal(field.semantic.isRemoved, true);
+assert.equal(field.semantic.isAdded, false);
+assert.ok(field.changedSections.includes('method'));
+assert.equal(field.url.kind, 'removed');
+assert.ok(field.headers.rows.every((row) => row.change === 'removed'));
 
 // Auth type change
 current = structuredClone(baseRequest);
@@ -112,5 +126,31 @@ if (field.auth.kind === 'changed') {
   assert.equal(field.auth.baseType, 'bearer');
   assert.equal(field.auth.currentType, 'basic');
 }
+
+// Removed ghost resolution via baseIndex
+const baseCollection: PostmanCollection = {
+  info: {
+    name: 'C',
+    schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+  },
+  item: [
+    { name: 'Keep', request: { method: 'GET', url: 'https://example.com/keep' } },
+    structuredClone(baseRequest)
+  ]
+};
+const currentCollection: PostmanCollection = {
+  info: baseCollection.info,
+  item: [baseCollection.item![0]!]
+};
+const structural = computeStructuralDiff(currentCollection, baseCollection);
+assert.equal(structural.removed.length, 1);
+assert.equal(structural.removed[0]?.kind, 'request');
+assert.equal(typeof structural.removed[0]?.baseIndex, 'number');
+const resolved = findRemovedBaseItem(
+  currentCollection,
+  baseCollection,
+  structural.removed[0]!
+);
+assert.equal(resolved?.name, 'Ping');
 
 console.log('check-stage19: ok');

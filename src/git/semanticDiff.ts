@@ -23,6 +23,8 @@ export type RequestSemanticDiff = {
   active: boolean;
   /** True when the current request has no base counterpart. */
   isAdded: boolean;
+  /** True when the request exists in base but was removed from current. */
+  isRemoved: boolean;
   sections: Record<RequestSectionKey, boolean>;
   hasChanges: boolean;
 };
@@ -122,24 +124,36 @@ function sectionSnapshot(item: PostmanItem): Record<RequestSectionKey, string> {
  * When `base` is null the request is treated as added (banner only, no section badges).
  */
 export function computeSemanticDiff(
-  current: PostmanItem,
+  current: PostmanItem | null,
   base: PostmanItem | null
 ): RequestSemanticDiff {
-  if (!isRequest(current)) {
-    return {
-      active: false,
-      isAdded: false,
-      sections: { ...EMPTY_SECTIONS },
-      hasChanges: false
-    };
-  }
-
-  if (!base || !isRequest(base)) {
+  if (current && isRequest(current) && (!base || !isRequest(base))) {
     return {
       active: true,
       isAdded: true,
+      isRemoved: false,
       sections: { ...EMPTY_SECTIONS },
       hasChanges: true
+    };
+  }
+
+  if (base && isRequest(base) && (!current || !isRequest(current))) {
+    return {
+      active: true,
+      isAdded: false,
+      isRemoved: true,
+      sections: { ...EMPTY_SECTIONS },
+      hasChanges: true
+    };
+  }
+
+  if (!current || !isRequest(current) || !base || !isRequest(base)) {
+    return {
+      active: false,
+      isAdded: false,
+      isRemoved: false,
+      sections: { ...EMPTY_SECTIONS },
+      hasChanges: false
     };
   }
 
@@ -158,6 +172,7 @@ export function computeSemanticDiff(
   return {
     active: true,
     isAdded: false,
+    isRemoved: false,
     sections,
     hasChanges
   };

@@ -15,6 +15,8 @@ export type RemovedGhost = {
   name: string;
   kind: 'folder' | 'request';
   method?: string;
+  /** Index of this node in the base parent's `item[]` (for resolving the base blob). */
+  baseIndex: number;
 };
 
 export type StructuralDiff = {
@@ -76,12 +78,14 @@ export function pairChildren(
   current?: PostmanItem;
   base?: PostmanItem;
   currentIndex?: number;
+  baseIndex?: number;
 }> {
   const baseUsed = new Set<number>();
   const pairs: Array<{
     current?: PostmanItem;
     base?: PostmanItem;
     currentIndex?: number;
+    baseIndex?: number;
   }> = [];
 
   current.forEach((node, currentIndex) => {
@@ -98,7 +102,7 @@ export function pairChildren(
     }
     if (matched >= 0) {
       baseUsed.add(matched);
-      pairs.push({ current: node, base: base[matched], currentIndex });
+      pairs.push({ current: node, base: base[matched], currentIndex, baseIndex: matched });
     } else {
       pairs.push({ current: node, currentIndex });
     }
@@ -106,7 +110,7 @@ export function pairChildren(
 
   base.forEach((node, index) => {
     if (!baseUsed.has(index)) {
-      pairs.push({ base: node });
+      pairs.push({ base: node, baseIndex: index });
     }
   });
 
@@ -116,7 +120,8 @@ export function pairChildren(
 function removedGhost(
   parentPath: ItemPath | null,
   item: PostmanItem,
-  sequence: number
+  sequence: number,
+  baseIndex: number
 ): RemovedGhost {
   const kind = isFolder(item) ? 'folder' : 'request';
   const name = item.name?.trim() || (kind === 'folder' ? '(folder)' : '(request)');
@@ -132,7 +137,8 @@ function removedGhost(
     parentPath,
     name,
     kind,
-    method
+    method,
+    baseIndex
   };
 }
 
@@ -196,8 +202,12 @@ export function computeStructuralDiff(
     return 0;
   };
 
-  const markRemovedNode = (item: PostmanItem, parentPath: ItemPath | null) => {
-    removed.push(removedGhost(parentPath, item, removedSeq));
+  const markRemovedNode = (
+    item: PostmanItem,
+    parentPath: ItemPath | null,
+    baseIndex: number
+  ) => {
+    removed.push(removedGhost(parentPath, item, removedSeq, baseIndex));
     removedSeq += 1;
     const weight = countSubtreeNodes(item);
     removedCount += weight;
@@ -218,7 +228,7 @@ export function computeStructuralDiff(
       }
 
       if (pair.base && !pair.current) {
-        markRemovedNode(pair.base, parentPath);
+        markRemovedNode(pair.base, parentPath, pair.baseIndex ?? 0);
         continue;
       }
 

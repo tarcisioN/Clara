@@ -212,6 +212,27 @@
   background: #fffbeb;
 }
 
+.request-diff-keyed-row.unchanged {
+  background: transparent;
+  opacity: 0.75;
+}
+
+.request-diff-show-unchanged {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--muted, #6b7280);
+  cursor: pointer;
+  user-select: none;
+}
+
+.request-diff-banner-removed {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
 .request-diff-mark {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-weight: 700;
