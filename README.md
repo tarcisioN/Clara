@@ -13,6 +13,13 @@ make install
 make dev
 ```
 
+Install a launchable macOS app into `/Applications` (unsigned local build):
+
+```bash
+make install-app
+open -a Clara
+```
+
 Newman (required for Send / Run):
 
 ```bash
@@ -25,6 +32,8 @@ If Send shows “Newman is not installed”, install as above and **restart Clar
 | Target | What it does |
 |--------|-----------|
 | `make install` | `npm install` |
+| `make install-app` | Build + copy `Clara.app` into `/Applications` (macOS) |
+| `make package` | Production build + unsigned `.app` under `release/` |
 | `make dev` | Electron + Vite |
 | `make build` | Production build |
 | `make typecheck` | `tsc --noEmit` |

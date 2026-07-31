@@ -1,0 +1,19 @@
+appId: app.clara.desktop
+productName: Clara
+copyright: Copyright © Clara contributors
+directories:
+  output: release
+  buildResources: resources
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - resources/**/*
+asar: true
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dir
+  # Local install to /Applications — skip code signing.
+  identity: null
+  icon: icon.png
+npmRebuild: false

@@ -1,8 +1,15 @@
-.PHONY: help install dev build typecheck check check-stage0 check-stage1 check-stage2 check-stage3 check-stage4 check-stage5 check-stage6 check-stage7 check-stage8 check-stage9 check-stage10 check-stage11 check-stage12 check-stage13 check-stage14 check-stage15 check-stage16 check-stage17
+.PHONY: help install install-app package dev build typecheck check check-stage0 check-stage1 check-stage2 check-stage3 check-stage4 check-stage5 check-stage6 check-stage7 check-stage8 check-stage9 check-stage10 check-stage11 check-stage12 check-stage13 check-stage14 check-stage15 check-stage16 check-stage17
+
+APP_NAME := Clara
+APP_BUNDLE := $(APP_NAME).app
+APPLICATIONS := /Applications
+RELEASE_DIR := release
 
 help:
 	@echo "Clara — available targets:"
 	@echo "  make install       Install npm dependencies"
+	@echo "  make install-app   Build + install Clara.app into /Applications (macOS)"
+	@echo "  make package       Production build + unsigned .app under release/"
 	@echo "  make dev           Start Electron + Vite"
 	@echo "  make build         Production build"
 	@echo "  make typecheck     TypeScript, no emit"
@@ -28,6 +35,20 @@ help:
 
 install:
 	npm install
+
+package: build
+	@test "$$(uname -s)" = "Darwin" || (echo "package is macOS-only for now" && exit 1)
+	CSC_IDENTITY_AUTO_DISCOVERY=false npx electron-builder --mac --dir
+
+install-app: package
+	@test "$$(uname -s)" = "Darwin" || (echo "install-app is macOS-only" && exit 1)
+	@bundle=$$(find "$(RELEASE_DIR)" -maxdepth 2 -type d -name "$(APP_BUNDLE)" | head -1); \
+	test -n "$$bundle" || (echo "$(APP_BUNDLE) not found under $(RELEASE_DIR)/" && exit 1); \
+	echo "Installing $$bundle → $(APPLICATIONS)/$(APP_BUNDLE)"; \
+	rm -rf "$(APPLICATIONS)/$(APP_BUNDLE)"; \
+	cp -R "$$bundle" "$(APPLICATIONS)/$(APP_BUNDLE)"; \
+	xattr -cr "$(APPLICATIONS)/$(APP_BUNDLE)" 2>/dev/null || true; \
+	echo "Installed. Open with: open $(APPLICATIONS)/$(APP_BUNDLE)"
 
 dev:
 	npm run dev
