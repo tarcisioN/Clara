@@ -183,6 +183,34 @@ button.primary {
   font-size: 0.625rem;
 }
 
+.sidebar-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sidebar-add:hover {
+  background: var(--surface-1);
+  color: var(--text);
+}
+
+.sidebar-collection + .sidebar-collection {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--surface-1);
+}
+
 .collection-heading {
   display: flex;
   align-items: center;

@@ -200,7 +200,7 @@ formulário genérico.
 - [x] Dirty state por request, não global — cada tab mostra o próprio indicador
 - [x] Arrastar request da árvore para a barra de tabs abre uma nova tab
 - [x] Nome longo na tab desvanece no final em vez de cortar com reticências
-- [x] Sessão persistida em `~/.clara/session.json` (collection, abas, expanded)
+- [x] Sessão persistida em `~/.clara/session.json` (collections, abas, expanded)
 - [x] Atalhos: Open/Save/Close tab/Next/Prev/Tab 1–9
 - [x] Arrastar abas para reordenar
 - [x] Toolbar method + URL + Send (Newman)
@@ -277,12 +277,41 @@ Pressuposto: `newman` está no `PATH` do usuário. Ajuda de instalação fica pa
 - [x] Expand all / Collapse all no menu da collection
 - [x] `make check-etapa9`
 
+### Etapa R3 — Múltiplas collections abertas
+- [x] Sidebar lista N collections abertas; botão **+** no título da seção abre mais uma
+- [x] Abrir uma collection **adiciona** — não fecha nem limpa as abas das outras
+- [x] Reabrir o mesmo path só foca a collection já aberta (não relê do disco)
+- [x] Estado de UI por collection (`expanded`, `collectionExpanded`, dirty) em `src/workspace/collectionUi.ts`
+- [x] Toda aba carrega `collectionPath`; `tabKey` codifica o path com `encodeURIComponent`
+- [x] Save grava a collection da aba ativa (fallback: primeira suja); dirty só dela é limpo
+- [x] Fechar collection (menu de contexto → Close) remove collection, UI state, abas e runs — confirma se suja
+- [x] Titlebar mostra dirty se **qualquer** collection estiver suja
+- [x] Runs de request indexados por `requestRunKey(collectionPath, path)`; runs de escopo por `tabKey`
+- [x] Drag da árvore para a barra de abas leva `{ collectionPath, path }` no payload
+- [x] `make check-etapa10`
+
+### Sessão v3
+
+`~/.clara/session.json` passou a guardar uma lista de collections:
+
+```
+{ "version": 3,
+  "collections": [ { "path", "expandedPaths", "collectionExpanded" } ],
+  "openTabs":    [ { "kind", "collectionPath", "path"? } ],
+  "activeTabKey": "request:<encoded path>:<item path>" }
+```
+
+Sessões v1 e v2 migram automaticamente para uma única entrada em `collections`. No hydrate,
+cada path é lido via `readCollection`; collections que falham são reportadas na status bar e
+as demais continuam abrindo normalmente.
+
 ### Validação
 - [x] Resultado alinhado ao `newman` no terminal para o mesmo request _(parse + temp collection; smoke manual na UI)_
 - [x] Edits não salvos entram no run (temp usa memória)
 - [x] Collection/folder run reporta N executions (`make check-etapa8`)
-- [x] Sessão v2 persiste abas de collection / folder / request
+- [x] Sessão v3 persiste múltiplas collections + abas de collection / folder / request
 - [x] Variables + tree mutations (`make check-etapa9`)
+- [x] `tabKey` roundtrip com paths contendo `:`, espaço, `%` e unicode (`make check-etapa10`)
 
 ---
 

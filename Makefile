@@ -1,4 +1,4 @@
-.PHONY: help install dev build typecheck check check-etapa0 check-etapa1 check-etapa2 check-etapa3 check-etapa4 check-etapa5 check-etapa6 check-etapa7 check-etapa8 check-etapa9
+.PHONY: help install dev build typecheck check check-etapa0 check-etapa1 check-etapa2 check-etapa3 check-etapa4 check-etapa5 check-etapa6 check-etapa7 check-etapa8 check-etapa9 check-etapa10
 
 help:
 	@echo "Clara — available targets:"
@@ -17,6 +17,7 @@ help:
 	@echo "  make check-etapa7  Scripts (prerequest / test)"
 	@echo "  make check-etapa8  Newman run (temp collection / parse)"
 	@echo "  make check-etapa9  Variables + tree structure (rename/delete/duplicate)"
+	@echo "  make check-etapa10 Multi-collection (tab keys / session v3)"
 
 install:
 	npm install
@@ -30,7 +31,7 @@ build:
 typecheck:
 	npm run typecheck
 
-check: typecheck check-etapa0 check-etapa1 check-etapa2 check-etapa3 check-etapa4 check-etapa5 check-etapa6 check-etapa7 check-etapa8 check-etapa9
+check: typecheck check-etapa0 check-etapa1 check-etapa2 check-etapa3 check-etapa4 check-etapa5 check-etapa6 check-etapa7 check-etapa8 check-etapa9 check-etapa10
 
 check-etapa0:
 	npm run check:etapa0
@@ -61,3 +62,6 @@ check-etapa8:
 
 check-etapa9:
 	npm run check:etapa9
+
+check-etapa10:
+	npm run check:etapa10

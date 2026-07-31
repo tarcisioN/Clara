@@ -7,24 +7,28 @@ export const CLARA_HOME = path.join(os.homedir(), '.clara');
 export const SESSION_FILE = path.join(CLARA_HOME, 'session.json');
 
 export type SessionTab =
-  | { kind: 'collection' }
-  | { kind: 'folder'; path: string }
-  | { kind: 'request'; path: string };
+  | { kind: 'collection'; collectionPath: string }
+  | { kind: 'folder'; collectionPath: string; path: string }
+  | { kind: 'request'; collectionPath: string; path: string };
+
+export type SessionCollectionEntry = {
+  path: string;
+  expandedPaths: string[];
+  collectionExpanded: boolean;
+};
 
 export type SessionState = {
-  version: 2;
-  collectionPath: string | null;
+  version: 3;
+  collections: SessionCollectionEntry[];
   openTabs: SessionTab[];
   activeTabKey: string | null;
-  expandedPaths: string[];
 };
 
 export const EMPTY_SESSION: SessionState = {
-  version: 2,
-  collectionPath: null,
+  version: 3,
+  collections: [],
   openTabs: [],
-  activeTabKey: null,
-  expandedPaths: []
+  activeTabKey: null
 };
 
 function isSessionTab(value: unknown): value is SessionTab {
@@ -32,12 +36,28 @@ function isSessionTab(value: unknown): value is SessionTab {
     return false;
   }
   const candidate = value as Record<string, unknown>;
+  if (typeof candidate.collectionPath !== 'string') {
+    return false;
+  }
   if (candidate.kind === 'collection') {
     return true;
   }
   return (
     (candidate.kind === 'folder' || candidate.kind === 'request') &&
     typeof candidate.path === 'string'
+  );
+}
+
+function isSessionCollectionEntry(value: unknown): value is SessionCollectionEntry {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.path === 'string' &&
+    Array.isArray(candidate.expandedPaths) &&
+    candidate.expandedPaths.every((entry) => typeof entry === 'string') &&
+    typeof candidate.collectionExpanded === 'boolean'
   );
 }
 
@@ -56,18 +76,97 @@ function migrateV1(value: Record<string, unknown>): SessionState | null {
     return null;
   }
 
-  const openTabs: SessionTab[] = (value.openPaths as string[]).map((path) => ({
+  const collectionPath = value.collectionPath as string | null;
+  if (!collectionPath) {
+    return { ...EMPTY_SESSION };
+  }
+
+  const openTabs: SessionTab[] = (value.openPaths as string[]).map((itemPath) => ({
     kind: 'request',
-    path
+    collectionPath,
+    path: itemPath
   }));
   const activePath = value.activePath as string | null;
 
   return {
-    version: 2,
-    collectionPath: value.collectionPath as string | null,
+    version: 3,
+    collections: [
+      {
+        path: collectionPath,
+        expandedPaths: value.expandedPaths as string[],
+        collectionExpanded: true
+      }
+    ],
     openTabs,
-    activeTabKey: activePath ? `request:${activePath}` : null,
-    expandedPaths: value.expandedPaths as string[]
+    activeTabKey: activePath
+      ? `request:${encodeURIComponent(collectionPath)}:${activePath}`
+      : null
+  };
+}
+
+function migrateV2(value: Record<string, unknown>): SessionState | null {
+  if (value.version !== 2) {
+    return null;
+  }
+  if (
+    !(value.collectionPath === null || typeof value.collectionPath === 'string') ||
+    !Array.isArray(value.openTabs) ||
+    !(value.activeTabKey === null || typeof value.activeTabKey === 'string') ||
+    !Array.isArray(value.expandedPaths) ||
+    !value.expandedPaths.every((entry) => typeof entry === 'string')
+  ) {
+    return null;
+  }
+
+  const collectionPath = value.collectionPath as string | null;
+  if (!collectionPath) {
+    return { ...EMPTY_SESSION };
+  }
+
+  const openTabs: SessionTab[] = [];
+  for (const entry of value.openTabs) {
+    if (!entry || typeof entry !== 'object') {
+      continue;
+    }
+    const tab = entry as Record<string, unknown>;
+    if (tab.kind === 'collection') {
+      openTabs.push({ kind: 'collection', collectionPath });
+      continue;
+    }
+    if (
+      (tab.kind === 'folder' || tab.kind === 'request') &&
+      typeof tab.path === 'string'
+    ) {
+      openTabs.push({
+        kind: tab.kind,
+        collectionPath,
+        path: tab.path
+      });
+    }
+  }
+
+  let activeTabKey: string | null = null;
+  const rawActive = value.activeTabKey as string | null;
+  const encoded = encodeURIComponent(collectionPath);
+  if (rawActive === 'collection') {
+    activeTabKey = `collection:${encoded}`;
+  } else if (rawActive?.startsWith('folder:')) {
+    activeTabKey = `folder:${encoded}:${rawActive.slice('folder:'.length)}`;
+  } else if (rawActive?.startsWith('request:')) {
+    activeTabKey = `request:${encoded}:${rawActive.slice('request:'.length)}`;
+  }
+
+  return {
+    version: 3,
+    collections: [
+      {
+        path: collectionPath,
+        expandedPaths: value.expandedPaths as string[],
+        collectionExpanded: true
+      }
+    ],
+    openTabs,
+    activeTabKey
   };
 }
 
@@ -77,13 +176,12 @@ function isSessionState(value: unknown): value is SessionState {
   }
   const candidate = value as Record<string, unknown>;
   return (
-    candidate.version === 2 &&
-    (candidate.collectionPath === null || typeof candidate.collectionPath === 'string') &&
+    candidate.version === 3 &&
+    Array.isArray(candidate.collections) &&
+    candidate.collections.every(isSessionCollectionEntry) &&
     Array.isArray(candidate.openTabs) &&
     candidate.openTabs.every(isSessionTab) &&
-    (candidate.activeTabKey === null || typeof candidate.activeTabKey === 'string') &&
-    Array.isArray(candidate.expandedPaths) &&
-    candidate.expandedPaths.every((entry) => typeof entry === 'string')
+    (candidate.activeTabKey === null || typeof candidate.activeTabKey === 'string')
   );
 }
 
@@ -100,9 +198,14 @@ export async function loadSession(): Promise<SessionState> {
       return parsed;
     }
     if (parsed && typeof parsed === 'object') {
-      const migrated = migrateV1(parsed as Record<string, unknown>);
-      if (migrated) {
-        return migrated;
+      const asRecord = parsed as Record<string, unknown>;
+      const migratedV2 = migrateV2(asRecord);
+      if (migratedV2) {
+        return migratedV2;
+      }
+      const migratedV1 = migrateV1(asRecord);
+      if (migratedV1) {
+        return migratedV1;
       }
     }
     return { ...EMPTY_SESSION };
@@ -118,11 +221,10 @@ export async function loadSession(): Promise<SessionState> {
 export async function saveSession(state: SessionState): Promise<SessionState> {
   await ensureClaraHome();
   const normalized: SessionState = {
-    version: 2,
-    collectionPath: state.collectionPath ?? null,
+    version: 3,
+    collections: state.collections ?? [],
     openTabs: state.openTabs ?? [],
-    activeTabKey: state.activeTabKey ?? null,
-    expandedPaths: state.expandedPaths ?? []
+    activeTabKey: state.activeTabKey ?? null
   };
   await writeFile(SESSION_FILE, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8');
   return normalized;

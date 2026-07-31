@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type DragEvent, type MouseEvent } from 'react';
 import type { WorkspaceTab } from '../workspace/tabs.ts';
 import { sameTab, tabKey } from '../workspace/tabs.ts';
-import { ITEM_PATH_MIME, TAB_PATH_MIME } from './dnd.ts';
+import { decodeItemDrag, ITEM_PATH_MIME, TAB_PATH_MIME } from './dnd.ts';
 import './RequestTabs.css';
 
 export type WorkspaceTabView = {
@@ -17,7 +17,7 @@ type RequestTabsProps = {
   activeTab: WorkspaceTab | null;
   onSelect: (tab: WorkspaceTab) => void;
   onClose: (tab: WorkspaceTab) => void;
-  onDropRequest: (path: string) => void;
+  onDropRequest: (collectionPath: string, path: string) => void;
   onReorder: (from: WorkspaceTab, to: WorkspaceTab, place: 'before' | 'after') => void;
   onContextMenu: (event: MouseEvent, tab: WorkspaceTab) => void;
 };
@@ -103,12 +103,12 @@ export default function RequestTabs({
         if (hasType(event, TAB_PATH_MIME)) {
           return;
         }
-        const path = event.dataTransfer.getData(ITEM_PATH_MIME);
-        if (!path) {
+        const payload = decodeItemDrag(event.dataTransfer.getData(ITEM_PATH_MIME));
+        if (!payload) {
           return;
         }
         event.preventDefault();
-        onDropRequest(path);
+        onDropRequest(payload.collectionPath, payload.path);
       }}
     >
       {tabs.length === 0 && (

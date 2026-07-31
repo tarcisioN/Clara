@@ -6,14 +6,15 @@ import {
   isRequest,
   type ItemPath
 } from '../postman/tree.ts';
-import { ITEM_PATH_MIME } from './dnd.ts';
+import { encodeItemDrag, ITEM_PATH_MIME } from './dnd.ts';
 import './CollectionTree.css';
 
 export type TreeTarget =
-  | { kind: 'folder'; path: ItemPath }
-  | { kind: 'request'; path: ItemPath };
+  | { kind: 'folder'; collectionPath: string; path: ItemPath }
+  | { kind: 'request'; collectionPath: string; path: ItemPath };
 
 type CollectionTreeProps = {
+  collectionPath: string;
   items: PostmanItem[] | undefined;
   expanded: Set<ItemPath>;
   selectedPath: ItemPath | null;
@@ -24,6 +25,7 @@ type CollectionTreeProps = {
 };
 
 type TreeNodeProps = {
+  collectionPath: string;
   item: PostmanItem;
   path: ItemPath;
   depth: number;
@@ -60,6 +62,7 @@ function MoreButton({
 }
 
 function TreeNode({
+  collectionPath,
   item,
   path,
   depth,
@@ -86,7 +89,7 @@ function TreeNode({
           style={{ paddingLeft: 10 + depth * 14 }}
           onContextMenu={(event) => {
             event.preventDefault();
-            onContextMenu(event, { kind: 'folder', path });
+            onContextMenu(event, { kind: 'folder', collectionPath, path });
           }}
         >
           <button
@@ -114,7 +117,9 @@ function TreeNode({
           </button>
           <MoreButton
             label={`Folder actions for ${name}`}
-            onOpen={(event) => onContextMenu(event, { kind: 'folder', path })}
+            onOpen={(event) =>
+              onContextMenu(event, { kind: 'folder', collectionPath, path })
+            }
           />
         </div>
         {isExpanded && (
@@ -122,6 +127,7 @@ function TreeNode({
             {(item.item ?? []).map((child, index) => (
               <TreeNode
                 key={childPath(path, index)}
+                collectionPath={collectionPath}
                 item={child}
                 path={childPath(path, index)}
                 depth={depth + 1}
@@ -155,7 +161,7 @@ function TreeNode({
         style={{ paddingLeft: 10 + depth * 14 }}
         onContextMenu={(event) => {
           event.preventDefault();
-          onContextMenu(event, { kind: 'request', path });
+          onContextMenu(event, { kind: 'request', collectionPath, path });
         }}
       >
         <button
@@ -165,7 +171,10 @@ function TreeNode({
           aria-current={isSelected ? 'true' : undefined}
           draggable
           onDragStart={(event) => {
-            event.dataTransfer.setData(ITEM_PATH_MIME, path);
+            event.dataTransfer.setData(
+              ITEM_PATH_MIME,
+              encodeItemDrag({ collectionPath, path })
+            );
             event.dataTransfer.setData('text/plain', name);
             event.dataTransfer.effectAllowed = 'copy';
           }}
@@ -176,7 +185,9 @@ function TreeNode({
         </button>
         <MoreButton
           label={`Request actions for ${name}`}
-          onOpen={(event) => onContextMenu(event, { kind: 'request', path })}
+          onOpen={(event) =>
+            onContextMenu(event, { kind: 'request', collectionPath, path })
+          }
         />
       </div>
     </li>
@@ -184,6 +195,7 @@ function TreeNode({
 }
 
 export default function CollectionTree({
+  collectionPath,
   items,
   expanded,
   selectedPath,
@@ -201,6 +213,7 @@ export default function CollectionTree({
       {items.map((item, index) => (
         <TreeNode
           key={childPath(null, index)}
+          collectionPath={collectionPath}
           item={item}
           path={childPath(null, index)}
           depth={0}

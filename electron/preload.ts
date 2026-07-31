@@ -7,7 +7,7 @@ export type { SessionState, AppCommand, NewmanRunView };
 
 export type OpenCollectionResult =
   | { canceled: true }
-  | { canceled: false; filePath: string; raw: string };
+  | { canceled: false; files: Array<{ filePath: string; raw: string }> };
 
 export type ReadCollectionResult = { filePath: string; raw: string };
 

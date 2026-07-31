@@ -59,7 +59,7 @@ function buildMenu() {
       label: 'File',
       submenu: [
         {
-          label: 'Open Collection…',
+          label: 'Open Collections…',
           accelerator: 'CmdOrCtrl+O',
           click: () => sendCommand({ type: 'open' })
         },
@@ -187,8 +187,8 @@ app.on('window-all-closed', () => {
 
 ipcMain.handle('collection:open', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {
-    title: 'Open Postman collection',
-    properties: ['openFile'],
+    title: 'Open Postman collection(s)',
+    properties: ['openFile', 'multiSelections'],
     filters: [
       { name: 'Postman Collection', extensions: ['json'] },
       { name: 'All Files', extensions: ['*'] }
@@ -199,13 +199,16 @@ ipcMain.handle('collection:open', async () => {
     return { canceled: true as const };
   }
 
-  const filePath = result.filePaths[0];
-  const raw = await readFile(filePath, 'utf8');
+  const files = await Promise.all(
+    result.filePaths.map(async (filePath) => ({
+      filePath,
+      raw: await readFile(filePath, 'utf8')
+    }))
+  );
 
   return {
     canceled: false as const,
-    filePath,
-    raw
+    files
   };
 });
 
