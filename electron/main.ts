@@ -4,8 +4,10 @@ import {
   dialog,
   ipcMain,
   Menu,
+  nativeImage,
   type MenuItemConstructorOptions
 } from 'electron';
+import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +30,17 @@ process.env.VITE_PUBLIC = app.isPackaged
 let mainWindow: BrowserWindow | null = null;
 
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
+
+/** Display name in menus / About; dock still shows Electron until a packaged .app. */
+app.setName('Clara');
+
+function resolveAppIconPath(): string | null {
+  const candidates = [
+    path.join(__dirname, '../resources/icon.png'),
+    path.join(process.cwd(), 'resources/icon.png')
+  ];
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
 
 function sendCommand(command: AppCommand) {
   mainWindow?.webContents.send('app:command', command);
@@ -159,10 +172,12 @@ function buildMenu() {
 }
 
 function createWindow() {
+  const iconPath = resolveAppIconPath();
   mainWindow = new BrowserWindow({
     width: 1100,
     height: 720,
     title: 'Clara',
+    ...(iconPath ? { icon: iconPath } : {}),
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     trafficLightPosition: process.platform === 'darwin' ? { x: 14, y: 11 } : undefined,
     webPreferences: {
@@ -180,6 +195,14 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  const iconPath = resolveAppIconPath();
+  if (process.platform === 'darwin' && iconPath) {
+    const image = nativeImage.createFromPath(iconPath);
+    if (!image.isEmpty()) {
+      app.dock.setIcon(image);
+    }
+  }
+
   buildMenu();
   createWindow();
 });

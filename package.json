@@ -1,5 +1,6 @@
 {
   "name": "clara",
+  "productName": "Clara",
   "version": "0.1.0",
   "private": true,
   "description": "Lightweight Postman collection editor for collections versioned in git",
