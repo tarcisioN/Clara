@@ -711,7 +711,7 @@ button.primary {
   background: hsl(8, 60%, 52%);
 }
 
-/* Bruno-inspired collection tree */
+/* Collection tree */
 .tree-root,
 .tree-children {
   padding: 0;

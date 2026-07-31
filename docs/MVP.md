@@ -2,7 +2,7 @@
 
 Objetivo: abrir um `*.postman_collection.json` do repo, editar HTTP básico em memória no schema Postman, salvar no mesmo arquivo. Sem Newman nesta fase.
 
-**Fora de escopo do MVP 1:** drag-drop, scripts/tests, OAuth avançado, GraphQL/gRPC, autosave, workspaces, sync cloud, multipart com arquivo, fork/código do Bruno.
+**Fora de escopo do MVP 1:** drag-drop, scripts/tests, OAuth avançado, GraphQL/gRPC, autosave, workspaces, sync cloud, multipart com arquivo.
 
 **Como marcar progresso:** ao concluir requisito + validação, troque `- [ ]` por `- [x]`.
 
@@ -188,7 +188,7 @@ Trocar o tipo **não apaga** arrays irmãos (`bearer` permanece ao mudar para `b
 
 ---
 
-## Etapa UX — Shell Bruno-inspired (obrigatória)
+## Etapa UX — Shell desktop (obrigatória)
 
 A UI deve ter a densidade e o fluxo de trabalho de um API client desktop, não aparência de
 formulário genérico.
@@ -205,13 +205,13 @@ formulário genérico.
 - [x] Arrastar abas para reordenar
 - [x] Toolbar method + URL + Send (Newman)
 - [x] Tabs internas `Params | Body | Headers | Auth | Pre-request | Tests`
-- [x] Paleta light inspirada no Bruno (laranja de marca, superfícies neutras, bordas discretas)
+- [x] Paleta light (laranja de marca, superfícies neutras, bordas discretas)
 - [x] Tabelas key/value compactas, sem cards empilhados
 - [x] Chrome nativo integrado no macOS (`hiddenInset`)
 
 ### Validação visual
 - [ ] Fluxo principal utilizável sem scroll vertical entre Params/Body/Headers/Auth
-- [ ] Hierarquia visual comparável ao Bruno: collection → request tab → request toolbar → pane
+- [ ] Hierarquia visual clara: collection → request tab → request toolbar → pane
 - [ ] Densidade da sidebar e das tabelas adequada para collection real
 - [ ] Open/Save e dirty state fáceis de localizar
 
@@ -238,7 +238,7 @@ Pode ficar para um mini-MVP 1.1 se atrasar o resto.
 - [ ] Etapas 0–6 concluídas (7 opcional)
 - [ ] Etapa UX validada
 - [ ] Fluxo: abrir collection do repo → editar method/URL/headers/body/auth/query → save
-- [ ] Diffs git legíveis; sem campos Bruno ou metadados inventados
+- [ ] Diffs git legíveis; sem metadados inventados fora do schema Postman
 - [ ] Smoke: `newman run <collection.json>` na collection editada funciona no terminal
 - [ ] README atualizado com como abrir/salvar
 
@@ -341,4 +341,4 @@ Collection
 └── auth?
 ```
 
-UI inspira-se no Bruno (layout split, tabelas key/value, response pane). Store e persistência são Postman-only.
+UI: layout split, tabelas key/value, response pane. Store e persistência são Postman-only.
