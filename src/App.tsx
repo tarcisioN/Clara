@@ -533,6 +533,7 @@ export default function App() {
     [updateUi]
   );
 
+  /** Only on base (re)load: re-expanding on every diff recompute fights manual collapsing. */
   const expandChangedFolders = useCallback(
     (collectionPath: string, collection: PostmanCollection, diff: StructuralDiff) => {
       const folders = collectChangedFolderPaths(
@@ -593,7 +594,6 @@ export default function App() {
             ...current,
             [collectionPath]: { ...existing, compareSource, diff }
           }));
-          expandChangedFolders(collectionPath, collection, diff);
           return;
         }
 
@@ -3402,6 +3402,9 @@ export default function App() {
                                   section
                                 )
                             : null
+                        }
+                        onRename={(name) =>
+                          editSelectedItem((item) => ({ ...item, name }))
                         }
                         onChangeMethod={(method) =>
                           editSelectedItem((item) => setRequestMethod(item, method))

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type {
   PostmanHeader,
   PostmanItem,
@@ -30,6 +30,7 @@ type RequestPaneProps = {
   compareBaseRef?: string | null;
   onRestoreRequest?: (() => void) | null;
   onRestoreSection?: ((section: RequestSectionKey) => void) | null;
+  onRename?: (name: string) => void;
   onChangeMethod: (method: string) => void;
   onChangeUrl: (raw: string) => void;
   onPromoteUrlToObject: () => void;
@@ -68,6 +69,7 @@ export default function RequestPane({
   compareBaseRef = null,
   onRestoreRequest = null,
   onRestoreSection = null,
+  onRename,
   onChangeMethod,
   onChangeUrl,
   onPromoteUrlToObject,
@@ -95,6 +97,51 @@ export default function RequestPane({
   sending
 }: RequestPaneProps) {
   const [activeSection, setActiveSection] = useState<RequestSection>('params');
+  const [renaming, setRenaming] = useState(false);
+  const [draftName, setDraftName] = useState(item.name ?? '');
+  const renameInputRef = useRef<HTMLInputElement>(null);
+  const renamingRef = useRef(false);
+  const displayName = item.name?.trim() || '(unnamed request)';
+
+  useEffect(() => {
+    if (!renaming) {
+      setDraftName(item.name ?? '');
+    }
+  }, [item.name, renaming]);
+
+  useEffect(() => {
+    if (renaming) {
+      renameInputRef.current?.focus();
+      renameInputRef.current?.select();
+    }
+  }, [renaming]);
+
+  const startRename = () => {
+    setDraftName(item.name ?? '');
+    renamingRef.current = true;
+    setRenaming(true);
+  };
+
+  const commitRename = () => {
+    if (!renamingRef.current) {
+      return;
+    }
+    renamingRef.current = false;
+    const next = draftName.trim();
+    setRenaming(false);
+    if (!onRename || !next || next === (item.name ?? '').trim()) {
+      setDraftName(item.name ?? '');
+      return;
+    }
+    onRename(next);
+  };
+
+  const cancelRename = () => {
+    renamingRef.current = false;
+    setDraftName(item.name ?? '');
+    setRenaming(false);
+  };
+
   const method = (request.method ?? 'GET').toUpperCase();
   const methods = COMMON_METHODS.includes(method)
     ? COMMON_METHODS
@@ -147,7 +194,39 @@ export default function RequestPane({
   return (
     <div className="request-pane">
       <div className="request-title">
-        <h2>{item.name?.trim() || '(unnamed request)'}</h2>
+        {renaming && onRename ? (
+          <input
+            ref={renameInputRef}
+            className="request-title-input"
+            type="text"
+            value={draftName}
+            spellCheck={false}
+            autoComplete="off"
+            aria-label="Request name"
+            onChange={(event) => setDraftName(event.target.value)}
+            onBlur={commitRename}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                commitRename();
+              } else if (event.key === 'Escape') {
+                event.preventDefault();
+                cancelRename();
+              }
+            }}
+          />
+        ) : onRename ? (
+          <button
+            type="button"
+            className="request-title-button"
+            title="Click to rename"
+            onClick={startRename}
+          >
+            {displayName}
+          </button>
+        ) : (
+          <h2>{displayName}</h2>
+        )}
         <span className="request-path">{path}</span>
       </div>
 
