@@ -4,6 +4,8 @@ export type SessionSidebar = {
   width: number;
   /** When true, selecting a main-panel tab reveals it in the sidebar. */
   followActiveTab: boolean;
+  /** When true and git compare is active, hide unchanged tree nodes. */
+  changedOnly: boolean;
 };
 
 export const SIDEBAR_MIN_WIDTH = 220;
@@ -14,7 +16,8 @@ export const DEFAULT_SIDEBAR: SessionSidebar = {
   collectionsExpanded: true,
   environmentsExpanded: true,
   width: SIDEBAR_DEFAULT_WIDTH,
-  followActiveTab: false
+  followActiveTab: false,
+  changedOnly: false
 };
 
 export function clampSidebarWidth(width: number): number {
@@ -45,6 +48,10 @@ export function normalizeSidebar(value: unknown): SessionSidebar {
     followActiveTab:
       typeof candidate.followActiveTab === 'boolean'
         ? candidate.followActiveTab
-        : DEFAULT_SIDEBAR.followActiveTab
+        : DEFAULT_SIDEBAR.followActiveTab,
+    changedOnly:
+      typeof candidate.changedOnly === 'boolean'
+        ? candidate.changedOnly
+        : DEFAULT_SIDEBAR.changedOnly
   };
 }

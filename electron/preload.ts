@@ -2,8 +2,9 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { AppCommand } from './commands.ts';
 import type { SessionState } from './session.ts';
 import type { NewmanRunView } from '../src/newman/parseResult.ts';
+import type { GitDiscoverResult, GitReadAtRefResult } from './git.ts';
 
-export type { SessionState, AppCommand, NewmanRunView };
+export type { SessionState, AppCommand, NewmanRunView, GitDiscoverResult, GitReadAtRefResult };
 
 export type OpenCollectionResult =
   | { canceled: true }
@@ -50,6 +51,13 @@ const clara = {
       folder: options?.folder,
       environmentJson: options?.environmentJson
     }),
+  discoverGit: (collectionPath: string): Promise<GitDiscoverResult> =>
+    ipcRenderer.invoke('git:discover', collectionPath),
+  readCollectionAtRef: (
+    collectionPath: string,
+    ref: string
+  ): Promise<GitReadAtRefResult> =>
+    ipcRenderer.invoke('git:readAtRef', { collectionPath, ref }),
   onCommand: (handler: (command: AppCommand) => void): (() => void) => {
     const listener = (_event: unknown, command: AppCommand) => {
       handler(command);

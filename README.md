@@ -29,6 +29,8 @@ make dev
 | `make check-stage6` | Query params (`url.query`) |
 | `make check-stage7` | Scripts (`prerequest` / `test`) |
 | `make check-stage8` | Newman run (temp collection / parse) |
+| `make check-stage12` | Git compare plumbing (discover / show at ref) |
+| `make check-stage13` | Git structural tree diff (markers / changed-only) |
 
 ## Usage (Send / Newman)
 
@@ -62,3 +64,5 @@ on-disk collection JSON does.
 ## Progress
 
 First MVP checklist: [docs/MVP.md](./docs/MVP.md)
+
+Git compare epic: [docs/EPIC-git-compare.md](./docs/EPIC-git-compare.md)

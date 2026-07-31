@@ -361,6 +361,34 @@ button.primary {
   background: var(--surface-1);
 }
 
+.sidebar-changed-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sidebar-changed-only:hover {
+  background: var(--surface-1);
+  color: var(--text);
+}
+
+.sidebar-changed-only.is-active {
+  color: var(--brand-text);
+  background: var(--surface-1);
+}
+
 .sidebar-follow-icon {
   display: inline-flex;
   align-items: center;
@@ -551,6 +579,14 @@ button.primary {
   margin-top: 2px;
   color: var(--text-faint);
   font-size: 0.625rem;
+}
+
+.collection-compare-cue {
+  display: block;
+  margin-top: 2px;
+  color: var(--brand-text);
+  font-size: 0.65rem;
+  font-weight: 550;
 }
 
 .collection-more {

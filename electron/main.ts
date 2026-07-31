@@ -19,6 +19,7 @@ import {
   type SessionState
 } from './session.ts';
 import { runNewmanCollection, type NewmanRunRequest } from './newman.ts';
+import { discoverGit, readCollectionAtRef } from './git.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -317,4 +318,21 @@ ipcMain.handle('session:home', async () => CLARA_HOME);
 
 ipcMain.handle('newman:run', async (_event, payload: NewmanRunRequest) =>
   runNewmanCollection(payload)
+);
+
+ipcMain.handle('git:discover', async (_event, collectionPath: string) =>
+  discoverGit(collectionPath)
+);
+
+ipcMain.handle(
+  'git:readAtRef',
+  async (_event, payload: { collectionPath: string; ref: string }) => {
+    if (!payload?.collectionPath || typeof payload.collectionPath !== 'string') {
+      throw new Error('collectionPath is required');
+    }
+    if (!payload?.ref || typeof payload.ref !== 'string') {
+      throw new Error('ref is required');
+    }
+    return readCollectionAtRef(payload.collectionPath, payload.ref);
+  }
 );

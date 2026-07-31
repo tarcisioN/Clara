@@ -104,6 +104,43 @@
   color: inherit;
 }
 
+.tree-change {
+  flex: 0 0 auto;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.tree-change-added {
+  color: #1f6b3a;
+  background: rgba(47, 133, 90, 0.16);
+}
+
+.tree-change-modified {
+  color: #8a5a00;
+  background: rgba(212, 136, 26, 0.18);
+}
+
+.tree-change-removed {
+  color: #8a2f2f;
+  background: rgba(180, 60, 60, 0.14);
+}
+
+.tree-row.removed {
+  opacity: 0.72;
+}
+
+.tree-row.removed .tree-label {
+  text-decoration: line-through;
+  color: #6a7563;
+}
+
 .tree-chevron {
   width: 12px;
   flex-shrink: 0;

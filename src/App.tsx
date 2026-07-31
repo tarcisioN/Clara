@@ -105,6 +105,16 @@ import {
 } from './workspace/collectionUi.ts';
 import { computeDirtyState } from './workspace/dirty.ts';
 import {
+  discoverForCollection,
+  loadCollectionAtRef,
+  type GitContext
+} from './git/context.ts';
+import {
+  collectChangedFolderPaths,
+  computeStructuralDiff,
+  type StructuralDiff
+} from './git/structuralDiff.ts';
+import {
   clampSidebarWidth,
   DEFAULT_SIDEBAR,
   SIDEBAR_MAX_WIDTH,
@@ -124,6 +134,14 @@ type LoadedCollection = {
   /** Original file bytes as text — used for dirty-free save. */
   originalRaw: string;
   collection: PostmanCollection;
+};
+
+type CollectionCompareState = {
+  baseRef: string;
+  currentBranch: string | null;
+  git: GitContext;
+  baseCollection: PostmanCollection;
+  diff: StructuralDiff;
 };
 
 type CollectionTarget = { kind: 'collection'; collectionPath: string };
@@ -194,6 +212,9 @@ export default function App() {
   const [collections, setCollections] = useState<LoadedCollection[]>([]);
   const [environments, setEnvironments] = useState<LoadedEnvironment[]>([]);
   const [uiByPath, setUiByPath] = useState<Record<string, CollectionUiState>>({});
+  const [compareByPath, setCompareByPath] = useState<Record<string, CollectionCompareState | null>>(
+    {}
+  );
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [openTabs, setOpenTabs] = useState<WorkspaceTab[]>([]);
   const [activeTab, setActiveTab] = useState<WorkspaceTab | null>(null);
@@ -215,6 +236,7 @@ export default function App() {
   const collectionsRef = useRef(collections);
   const environmentsRef = useRef(environments);
   const uiByPathRef = useRef(uiByPath);
+  const compareByPathRef = useRef(compareByPath);
   const openTabsRef = useRef(openTabs);
   const activeTabRef = useRef(activeTab);
   const activeEnvironmentPathRef = useRef(activeEnvironmentPath);
@@ -225,6 +247,7 @@ export default function App() {
   collectionsRef.current = collections;
   environmentsRef.current = environments;
   uiByPathRef.current = uiByPath;
+  compareByPathRef.current = compareByPath;
   openTabsRef.current = openTabs;
   activeTabRef.current = activeTab;
   activeEnvironmentPathRef.current = activeEnvironmentPath;
@@ -392,6 +415,77 @@ export default function App() {
     [updateUi]
   );
 
+  const expandChangedFolders = useCallback(
+    (collectionPath: string, collection: PostmanCollection, diff: StructuralDiff) => {
+      const folders = collectChangedFolderPaths(
+        collection.item,
+        diff.statusByPath,
+        diff.descendantChangeCount
+      );
+      if (folders.size === 0 && diff.changedCount === 0) {
+        return;
+      }
+      updateUi(collectionPath, (ui) => {
+        const expanded = new Set(ui.expanded);
+        let changed = !ui.collectionExpanded;
+        for (const path of folders) {
+          if (!expanded.has(path)) {
+            expanded.add(path);
+            changed = true;
+          }
+        }
+        if (!changed && ui.collectionExpanded) {
+          return ui;
+        }
+        return { ...ui, collectionExpanded: true, expanded };
+      });
+      setSidebar((current) =>
+        current.collectionsExpanded ? current : { ...current, collectionsExpanded: true }
+      );
+    },
+    [updateUi]
+  );
+
+  const refreshCompare = useCallback(
+    async (collectionPath: string, collection: PostmanCollection) => {
+      try {
+        const existing = compareByPathRef.current[collectionPath];
+        if (existing) {
+          const diff = computeStructuralDiff(collection, existing.baseCollection);
+          setCompareByPath((current) => ({
+            ...current,
+            [collectionPath]: { ...existing, diff }
+          }));
+          expandChangedFolders(collectionPath, collection, diff);
+          return;
+        }
+
+        const git = await discoverForCollection(collectionPath);
+        if (!git) {
+          setCompareByPath((current) => ({ ...current, [collectionPath]: null }));
+          return;
+        }
+
+        const baseCollection = await loadCollectionAtRef(collectionPath, git.defaultBase);
+        const diff = computeStructuralDiff(collection, baseCollection);
+        setCompareByPath((current) => ({
+          ...current,
+          [collectionPath]: {
+            baseRef: git.defaultBase,
+            currentBranch: git.currentBranch,
+            git,
+            baseCollection,
+            diff
+          }
+        }));
+        expandChangedFolders(collectionPath, collection, diff);
+      } catch {
+        setCompareByPath((current) => ({ ...current, [collectionPath]: null }));
+      }
+    },
+    [expandChangedFolders]
+  );
+
   const applyCollectionUpdate = useCallback(
     (collectionPath: string, collection: PostmanCollection) => {
       const entry = collectionsRef.current.find(
@@ -407,8 +501,9 @@ export default function App() {
       } else {
         updateUi(collectionPath, (ui) => ({ ...ui, structureDirty: true }));
       }
+      void refreshCompare(collectionPath, collection);
     },
-    [syncDirty, updateUi]
+    [refreshCompare, syncDirty, updateUi]
   );
 
   const openTab = useCallback((tab: WorkspaceTab) => {
@@ -463,9 +558,20 @@ export default function App() {
             ...current,
             [file.filePath]: createCollectionUiState(collectFolderPaths(collection.item), true)
           }));
+          setCompareByPath((current) => {
+            const next = { ...current };
+            delete next[file.filePath];
+            return next;
+          });
+          {
+            const cleared = { ...compareByPathRef.current };
+            delete cleared[file.filePath];
+            compareByPathRef.current = cleared;
+          }
           openTab({ kind: 'collection', collectionPath: file.filePath });
           opened.push(collection.info?.name ?? fileName(file.filePath));
           focusPath = file.filePath;
+          void refreshCompare(file.filePath, collection);
         } catch (error) {
           failed.push(`${fileName(file.filePath)}: ${errorMessage(error)}`);
         }
@@ -502,7 +608,7 @@ export default function App() {
     } catch (error) {
       setStatus({ kind: 'error', message: errorMessage(error) });
     }
-  }, [openTab]);
+  }, [openTab, refreshCompare]);
 
   const openEnvironment = useCallback(async () => {
     setStatus({ kind: 'idle' });
@@ -613,6 +719,11 @@ export default function App() {
 
     setCollections((list) => list.filter((entry) => entry.filePath !== collectionPath));
     setUiByPath((current) => {
+      const next = { ...current };
+      delete next[collectionPath];
+      return next;
+    });
+    setCompareByPath((current) => {
       const next = { ...current };
       delete next[collectionPath];
       return next;
@@ -1183,6 +1294,10 @@ export default function App() {
         setActiveTab(active);
         setActiveEnvironmentPath(restoredActiveEnv);
 
+        for (const entry of restored) {
+          void refreshCompare(entry.filePath, entry.collection);
+        }
+
         const allFailures = [...failures, ...envFailures];
         if (allFailures.length > 0) {
           setStatus({
@@ -1219,7 +1334,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshCompare]);
 
   const collectionPathsKey = collections.map((entry) => entry.filePath).join('\u0000');
   const environmentPathsKey = environments.map((entry) => entry.filePath).join('\u0000');
@@ -2010,6 +2125,27 @@ export default function App() {
                 </button>
                 <button
                   type="button"
+                  className={`sidebar-changed-only ${sidebar.changedOnly ? 'is-active' : ''}`}
+                  aria-label={
+                    sidebar.changedOnly
+                      ? 'Show all collection items'
+                      : 'Show only changed items vs base branch'
+                  }
+                  aria-pressed={sidebar.changedOnly}
+                  title={
+                    sidebar.changedOnly ? 'Changed only (on)' : 'Changed only'
+                  }
+                  onClick={() =>
+                    setSidebar((current) => ({
+                      ...current,
+                      changedOnly: !current.changedOnly
+                    }))
+                  }
+                >
+                  Δ
+                </button>
+                <button
+                  type="button"
                   className="sidebar-add"
                   aria-label="Open collection"
                   title="Open collection"
@@ -2057,6 +2193,10 @@ export default function App() {
                         ? activeTab.path
                         : null;
                     const collectionExpanded = ui.collectionExpanded;
+                    const compare = compareByPath[entry.filePath];
+                    const compareCue = compare
+                      ? `vs ${compare.baseRef} · ${compare.diff.changedCount} changed`
+                      : null;
 
                     return [
                       <div className="sidebar-collection" key={entry.filePath}>
@@ -2110,6 +2250,9 @@ export default function App() {
                               <span>
                                 {counts.folders} folders · {counts.requests} requests
                               </span>
+                              {compareCue ? (
+                                <span className="collection-compare-cue">{compareCue}</span>
+                              ) : null}
                             </div>
                           </button>
                           <button
@@ -2133,6 +2276,8 @@ export default function App() {
                             expanded={ui.expanded}
                             selectedPath={treeSelectedPath}
                             filterQuery={sidebarFilter}
+                            changedOnly={sidebar.changedOnly && Boolean(compare)}
+                            structuralDiff={compare?.diff ?? null}
                             onToggleFolder={(path) => toggleFolder(entry.filePath, path)}
                             onSelectFolder={(path) => openFolderTab(entry.filePath, path)}
                             onSelectRequest={(path) =>
@@ -2593,9 +2738,18 @@ export default function App() {
         <span role="status">
           {status.kind === 'idle'
             ? hasResources
-              ? anyDirty
-                ? 'Unsaved changes'
-                : 'Ready'
+              ? (() => {
+                  const compares = Object.values(compareByPath).filter(Boolean) as CollectionCompareState[];
+                  if (compares.length === 1) {
+                    const compare = compares[0];
+                    return `Comparing vs ${compare.baseRef} · ${compare.diff.changedCount} changed`;
+                  }
+                  if (compares.length > 1) {
+                    const total = compares.reduce((sum, entry) => sum + entry.diff.changedCount, 0);
+                    return `Comparing ${compares.length} collections · ${total} changed`;
+                  }
+                  return anyDirty ? 'Unsaved changes' : 'Ready';
+                })()
               : 'No collection open'
             : status.message}
         </span>

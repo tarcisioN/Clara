@@ -6,6 +6,13 @@ import {
   isRequest,
   type ItemPath
 } from '../postman/tree.ts';
+import {
+  pathVisibleWhenChangedOnly,
+  removedUnderParent,
+  type ChangeKind,
+  type RemovedGhost,
+  type StructuralDiff
+} from '../git/structuralDiff.ts';
 import { itemMatchesQuery } from '../workspace/sidebarSearch.ts';
 import { encodeItemDrag, ITEM_PATH_MIME } from './dnd.ts';
 import { tabKey } from '../workspace/tabs.ts';
@@ -21,6 +28,8 @@ type CollectionTreeProps = {
   expanded: Set<ItemPath>;
   selectedPath: ItemPath | null;
   filterQuery?: string;
+  changedOnly?: boolean;
+  structuralDiff?: StructuralDiff | null;
   onToggleFolder: (path: ItemPath) => void;
   onSelectFolder: (path: ItemPath) => void;
   onSelectRequest: (path: ItemPath) => void;
@@ -35,11 +44,61 @@ type TreeNodeProps = {
   expanded: Set<ItemPath>;
   selectedPath: ItemPath | null;
   filterQuery: string;
+  changedOnly: boolean;
+  structuralDiff: StructuralDiff | null;
   onToggleFolder: (path: ItemPath) => void;
   onSelectFolder: (path: ItemPath) => void;
   onSelectRequest: (path: ItemPath) => void;
   onContextMenu: (event: MouseEvent, target: TreeTarget) => void;
 };
+
+function ChangeMarker({ kind, count }: { kind: ChangeKind | 'removed'; count?: number }) {
+  if (kind === 'unchanged') {
+    return null;
+  }
+  const label =
+    kind === 'added' ? 'Added' : kind === 'removed' ? 'Removed' : 'Modified';
+  const badge =
+    typeof count === 'number' && count > 0 && kind === 'modified' ? String(count) : null;
+  return (
+    <span
+      className={`tree-change tree-change-${kind}`}
+      title={badge ? `${label} · ${badge} under` : label}
+      aria-label={badge ? `${label}, ${badge} changes under` : label}
+    >
+      {badge ?? (kind === 'added' ? '+' : kind === 'removed' ? '−' : '~')}
+    </span>
+  );
+}
+
+function RemovedRow({
+  ghost,
+  depth
+}: {
+  ghost: RemovedGhost;
+  depth: number;
+}) {
+  return (
+    <li className="tree-node tree-node-removed">
+      <div
+        className={`tree-row ${ghost.kind} removed`}
+        style={{ paddingLeft: 10 + depth * 14 }}
+        title={`Removed vs base: ${ghost.name}`}
+      >
+        <span className="tree-chevron spacer" aria-hidden />
+        {ghost.kind === 'request' && ghost.method ? (
+          <span className={`tree-method method-${ghost.method.toLowerCase()}`}>
+            {ghost.method}
+          </span>
+        ) : (
+          <span className="tree-icon" aria-hidden />
+        )}
+        <span className="tree-label">{ghost.name}</span>
+        <ChangeMarker kind="removed" />
+      </div>
+    </li>
+  );
+}
 
 function MoreButton({
   label,
@@ -73,6 +132,8 @@ function TreeNode({
   expanded,
   selectedPath,
   filterQuery,
+  changedOnly,
+  structuralDiff,
   onToggleFolder,
   onSelectFolder,
   onSelectRequest,
@@ -82,19 +143,36 @@ function TreeNode({
     return null;
   }
 
+  if (
+    changedOnly &&
+    structuralDiff &&
+    !pathVisibleWhenChangedOnly(
+      path,
+      structuralDiff.statusByPath,
+      structuralDiff.descendantChangeCount
+    )
+  ) {
+    return null;
+  }
+
   const folder = isFolder(item);
   const request = isRequest(item);
   const name = item.name?.trim() || (folder ? '(folder)' : '(request)');
   const isExpanded = expanded.has(path);
   const isSelected = selectedPath === path;
+  const changeKind = structuralDiff?.statusByPath.get(path) ?? 'unchanged';
+  const nestedCount = structuralDiff?.descendantChangeCount.get(path) ?? 0;
 
   if (folder) {
+    const ghosts = structuralDiff
+      ? removedUnderParent(structuralDiff.removed, path)
+      : [];
     return (
       <li className="tree-node">
         <div
           className={`tree-row folder ${isExpanded ? 'expanded' : ''} ${
             isSelected ? 'selected' : ''
-          }`}
+          } ${changeKind !== 'unchanged' ? `change-${changeKind}` : ''}`}
           style={{ paddingLeft: 10 + depth * 14 }}
           onContextMenu={(event) => {
             event.preventDefault();
@@ -125,6 +203,10 @@ function TreeNode({
             <span className="tree-icon" aria-hidden />
             <span className="tree-label">{name}</span>
           </button>
+          <ChangeMarker
+            kind={changeKind}
+            count={nestedCount > 0 ? nestedCount : undefined}
+          />
           <MoreButton
             label={`Folder actions for ${name}`}
             onOpen={(event) =>
@@ -144,11 +226,16 @@ function TreeNode({
                 expanded={expanded}
                 selectedPath={selectedPath}
                 filterQuery={filterQuery}
+                changedOnly={changedOnly}
+                structuralDiff={structuralDiff}
                 onToggleFolder={onToggleFolder}
                 onSelectFolder={onSelectFolder}
                 onSelectRequest={onSelectRequest}
                 onContextMenu={onContextMenu}
               />
+            ))}
+            {ghosts.map((ghost) => (
+              <RemovedRow key={ghost.key} ghost={ghost} depth={depth + 1} />
             ))}
           </ul>
         )}
@@ -168,7 +255,9 @@ function TreeNode({
   return (
     <li className="tree-node">
       <div
-        className={`tree-row request ${isSelected ? 'selected' : ''}`}
+        className={`tree-row request ${isSelected ? 'selected' : ''} ${
+          changeKind !== 'unchanged' ? `change-${changeKind}` : ''
+        }`}
         style={{ paddingLeft: 10 + depth * 14 }}
         onContextMenu={(event) => {
           event.preventDefault();
@@ -195,6 +284,7 @@ function TreeNode({
           <span className={`tree-method method-${method.toLowerCase()}`}>{method}</span>
           <span className="tree-label">{name}</span>
         </button>
+        <ChangeMarker kind={changeKind} />
         <MoreButton
           label={`Request actions for ${name}`}
           onOpen={(event) =>
@@ -212,26 +302,37 @@ export default function CollectionTree({
   expanded,
   selectedPath,
   filterQuery = '',
+  changedOnly = false,
+  structuralDiff = null,
   onToggleFolder,
   onSelectFolder,
   onSelectRequest,
   onContextMenu
 }: CollectionTreeProps) {
   if (!items || items.length === 0) {
-    return <p className="tree-empty">Collection has no items.</p>;
+    const rootGhosts = structuralDiff
+      ? removedUnderParent(structuralDiff.removed, null)
+      : [];
+    if (rootGhosts.length === 0) {
+      return <p className="tree-empty">Collection has no items.</p>;
+    }
   }
 
   const visible = filterQuery
-    ? items.some((item) => itemMatchesQuery(item, filterQuery))
+    ? (items ?? []).some((item) => itemMatchesQuery(item, filterQuery))
     : true;
 
-  if (filterQuery && !visible) {
+  if (filterQuery && !visible && !(structuralDiff && changedOnly)) {
     return null;
   }
 
+  const rootGhosts = structuralDiff
+    ? removedUnderParent(structuralDiff.removed, null)
+    : [];
+
   return (
     <ul className="tree-root">
-      {items.map((item, index) => (
+      {(items ?? []).map((item, index) => (
         <TreeNode
           key={childPath(null, index)}
           collectionPath={collectionPath}
@@ -241,11 +342,16 @@ export default function CollectionTree({
           expanded={expanded}
           selectedPath={selectedPath}
           filterQuery={filterQuery}
+          changedOnly={changedOnly}
+          structuralDiff={structuralDiff}
           onToggleFolder={onToggleFolder}
           onSelectFolder={onSelectFolder}
           onSelectRequest={onSelectRequest}
           onContextMenu={onContextMenu}
         />
+      ))}
+      {rootGhosts.map((ghost) => (
+        <RemovedRow key={ghost.key} ghost={ghost} depth={0} />
       ))}
     </ul>
   );

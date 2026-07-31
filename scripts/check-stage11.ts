@@ -114,6 +114,7 @@ try {
   assert.equal(migrated.sidebar.environmentsExpanded, true);
   assert.equal(migrated.sidebar.width, 270);
   assert.equal(migrated.sidebar.followActiveTab, false);
+  assert.equal(migrated.sidebar.changedOnly, false);
   assert.equal(migrated.openTabs.length, 2);
   assert.equal(migrated.openTabs[1]?.kind, 'environment');
 
@@ -128,12 +129,14 @@ try {
       collectionsExpanded: false,
       environmentsExpanded: true,
       width: 360,
-      followActiveTab: true
+      followActiveTab: true,
+      changedOnly: true
     }
   });
   assert.equal(saved.version, 4);
   assert.equal(saved.sidebar.width, 360);
   assert.equal(saved.sidebar.followActiveTab, true);
+  assert.equal(saved.sidebar.changedOnly, true);
   assert.equal(saved.activeEnvironmentPath, envPath);
 
   const reloaded = await session.loadSession();
