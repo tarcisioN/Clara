@@ -1,11 +1,55 @@
 .sidebar-section-changes {
-  flex: 0 1 auto;
-  max-height: 32%;
+  flex: 0 0 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--border-0);
+  border-top: 0;
   overflow: hidden;
+  position: relative;
+}
+
+.sidebar-section-changes.is-collapsed {
+  flex: 0 0 auto;
+}
+
+.change-list-resize {
+  flex: 0 0 5px;
+  height: 5px;
+  margin-top: -2px;
+  margin-bottom: -2px;
+  cursor: row-resize;
+  touch-action: none;
+  background: transparent;
+  border: 0;
+  position: relative;
+  z-index: 2;
+}
+
+.change-list-resize::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 2px;
+  height: 1px;
+  background: var(--surface-2);
+}
+
+.change-list-resize:hover::after,
+.change-list-resize:focus-visible::after {
+  background: var(--brand);
+}
+
+.change-list-resize:focus-visible {
+  outline: none;
+}
+
+.sidebar-section-changes.is-collapsed .change-list-resize {
+  cursor: default;
+}
+
+.sidebar-section-changes.is-collapsed .change-list-resize::after {
+  background: var(--border-0);
 }
 
 .change-list-header {
@@ -24,6 +68,7 @@
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  flex: 0 0 auto;
 }
 
 .change-list-nav {
@@ -56,6 +101,7 @@
   display: flex;
   gap: 6px;
   padding: 0 10px 8px;
+  flex: 0 0 auto;
 }
 
 .change-list-base,
@@ -137,6 +183,7 @@
   font-size: 0.7rem;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
 }
 
 .change-list-stat.added {

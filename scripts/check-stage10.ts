@@ -151,6 +151,7 @@ try {
     sidebar: {
       collectionsExpanded: true,
       environmentsExpanded: true,
+      changesExpanded: true,
       width: 270
     }
   });

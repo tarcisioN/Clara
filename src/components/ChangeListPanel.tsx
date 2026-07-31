@@ -1,7 +1,20 @@
-import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type PointerEvent
+} from 'react';
 import type { ChangeListEntry } from '../git/changeList.ts';
 import { folderLabelForEntry } from '../git/changeList.ts';
 import type { PostmanCollection } from '../postman/types.ts';
+import {
+  CHANGES_COLLAPSE_HEIGHT,
+  CHANGES_DEFAULT_HEIGHT,
+  clampChangesHeight
+} from '../workspace/sidebar.ts';
 import './ChangeListPanel.css';
 
 type ChangeListPanelProps = {
@@ -12,6 +25,8 @@ type ChangeListPanelProps = {
   collection: PostmanCollection;
   entries: ChangeListEntry[];
   activeKey: string | null;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
   onSelect: (entry: ChangeListEntry) => void;
   onPrev: () => void;
   onNext: () => void;
@@ -167,6 +182,8 @@ export default function ChangeListPanel({
   collection,
   entries,
   activeKey,
+  expanded,
+  onExpandedChange,
   onSelect,
   onPrev,
   onNext,
@@ -177,20 +194,140 @@ export default function ChangeListPanel({
   const added = entries.filter((entry) => entry.changeKind === 'added').length;
   const modified = entries.filter((entry) => entry.changeKind === 'modified').length;
   const removed = entries.filter((entry) => entry.changeKind === 'removed').length;
+  const [height, setHeight] = useState(CHANGES_DEFAULT_HEIGHT);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const resizeRef = useRef<{ startY: number; startHeight: number } | null>(null);
+  const wasExpandedRef = useRef(expanded);
+
+  useEffect(() => {
+    if (expanded && !wasExpandedRef.current) {
+      setHeight(CHANGES_DEFAULT_HEIGHT);
+    }
+    wasExpandedRef.current = expanded;
+  }, [expanded]);
+
+  const maxHeightForParent = () => {
+    const sidebar = panelRef.current?.parentElement;
+    if (!sidebar) {
+      return undefined;
+    }
+    // Leave room for search, collections header, and environments header.
+    return Math.max(CHANGES_DEFAULT_HEIGHT, sidebar.clientHeight - 160);
+  };
+
+  const onResizePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (!expanded) {
+      return;
+    }
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeRef.current = {
+      startY: event.clientY,
+      startHeight: height
+    };
+  };
+
+  const onResizePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const drag = resizeRef.current;
+    if (!drag) {
+      return;
+    }
+    // Handle sits on the top edge: drag up → taller, drag down → shorter.
+    const next = drag.startHeight + (drag.startY - event.clientY);
+    if (next <= CHANGES_COLLAPSE_HEIGHT) {
+      resizeRef.current = null;
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      } catch {
+        // already released
+      }
+      onExpandedChange(false);
+      return;
+    }
+    setHeight(clampChangesHeight(next, maxHeightForParent()));
+  };
+
+  const onResizePointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    if (!resizeRef.current) {
+      return;
+    }
+    resizeRef.current = null;
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // already released
+    }
+  };
+
+  const toggleExpanded = () => {
+    if (expanded) {
+      onExpandedChange(false);
+      return;
+    }
+    setHeight(CHANGES_DEFAULT_HEIGHT);
+    onExpandedChange(true);
+  };
 
   let lastGroup: string | null = null;
 
   return (
-    <div className="sidebar-section sidebar-section-changes">
+    <div
+      ref={panelRef}
+      className={`sidebar-section sidebar-section-changes ${expanded ? '' : 'is-collapsed'}`.trim()}
+      style={expanded ? { height } : undefined}
+    >
+      <div
+        className="change-list-resize"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-valuemin={CHANGES_COLLAPSE_HEIGHT}
+        aria-valuemax={maxHeightForParent() ?? 800}
+        aria-valuenow={expanded ? height : CHANGES_COLLAPSE_HEIGHT}
+        aria-label="Resize changes panel"
+        aria-disabled={!expanded}
+        tabIndex={expanded ? 0 : -1}
+        onPointerDown={onResizePointerDown}
+        onPointerMove={onResizePointerMove}
+        onPointerUp={onResizePointerUp}
+        onPointerCancel={onResizePointerUp}
+        onKeyDown={(event) => {
+          if (!expanded) {
+            return;
+          }
+          if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+            event.preventDefault();
+            const delta = event.key === 'ArrowUp' ? 16 : -16;
+            const next = height + delta;
+            if (next <= CHANGES_COLLAPSE_HEIGHT) {
+              onExpandedChange(false);
+              return;
+            }
+            setHeight(clampChangesHeight(next, maxHeightForParent()));
+          }
+        }}
+      />
+
       <div className="sidebar-section-title change-list-header">
-        <div className="change-list-title">
+        <button
+          type="button"
+          className="sidebar-section-toggle change-list-title"
+          aria-expanded={expanded}
+          aria-label={expanded ? 'Collapse changes' : 'Expand changes'}
+          onClick={toggleExpanded}
+        >
+          <span className="sidebar-chevron" aria-hidden>
+            {expanded ? '▾' : '▸'}
+          </span>
           <strong>Changes</strong>
           {currentBranch ? (
             <span className="sidebar-count" title="Current branch">
               {currentBranch}
             </span>
           ) : null}
-        </div>
+          <span className="sidebar-count" title="Change counts">
+            +{added} ~{modified} −{removed}
+          </span>
+        </button>
         <div className="change-list-actions">
           <button
             type="button"
@@ -224,68 +361,72 @@ export default function ChangeListPanel({
         </div>
       </div>
 
-      <div className="change-list-controls">
-        <BranchSuggestionBox
-          baseRef={baseRef}
-          branches={branches}
-          onChangeBase={onChangeBase}
-        />
-        <label className="change-list-source">
-          <span className="visually-hidden">Compare source</span>
-          <select
-            value={compareSource}
-            aria-label="Compare source"
-            title="Working tree includes unsaved edits; Saved uses the last written file"
-            onChange={(event) =>
-              onChangeSource(event.target.value === 'saved' ? 'saved' : 'working')
-            }
-          >
-            <option value="working">Working</option>
-            <option value="saved">Saved</option>
-          </select>
-        </label>
-      </div>
+      {expanded ? (
+        <>
+          <div className="change-list-controls">
+            <BranchSuggestionBox
+              baseRef={baseRef}
+              branches={branches}
+              onChangeBase={onChangeBase}
+            />
+            <label className="change-list-source">
+              <span className="visually-hidden">Compare source</span>
+              <select
+                value={compareSource}
+                aria-label="Compare source"
+                title="Working tree includes unsaved edits; Saved uses the last written file"
+                onChange={(event) =>
+                  onChangeSource(event.target.value === 'saved' ? 'saved' : 'working')
+                }
+              >
+                <option value="working">Working</option>
+                <option value="saved">Saved</option>
+              </select>
+            </label>
+          </div>
 
-      <div className="change-list-summary">
-        <span className="change-list-stat added">+{added}</span>
-        <span className="change-list-stat modified">~{modified}</span>
-        <span className="change-list-stat removed">−{removed}</span>
-      </div>
+          <div className="change-list-summary">
+            <span className="change-list-stat added">+{added}</span>
+            <span className="change-list-stat modified">~{modified}</span>
+            <span className="change-list-stat removed">−{removed}</span>
+          </div>
 
-      {entries.length === 0 ? (
-        <p className="change-list-empty">No changes vs {baseRef}</p>
-      ) : (
-        <ul className="change-list">
-          {entries.map((entry) => {
-            const group = folderLabelForEntry(entry, collection);
-            const showGroup = group !== lastGroup;
-            lastGroup = group;
-            const selected = entry.key === activeKey;
-            return (
-              <li key={entry.key}>
-                {showGroup ? <div className="change-list-group">{group}</div> : null}
-                <button
-                  type="button"
-                  className={`change-list-row ${selected ? 'selected' : ''} ${entry.changeKind}`}
-                  onClick={() => onSelect(entry)}
-                >
-                  <ChangeBadge kind={entry.changeKind} />
-                  {entry.nodeKind === 'request' && entry.method ? (
-                    <span className={`tree-method method-${entry.method.toLowerCase()}`}>
-                      {entry.method}
-                    </span>
-                  ) : (
-                    <span className="change-list-folder-icon" aria-hidden>
-                      ▸
-                    </span>
-                  )}
-                  <span className="change-list-name">{entry.name}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+          {entries.length === 0 ? (
+            <p className="change-list-empty">No changes vs {baseRef}</p>
+          ) : (
+            <ul className="change-list">
+              {entries.map((entry) => {
+                const group = folderLabelForEntry(entry, collection);
+                const showGroup = group !== lastGroup;
+                lastGroup = group;
+                const selected = entry.key === activeKey;
+                return (
+                  <li key={entry.key}>
+                    {showGroup ? <div className="change-list-group">{group}</div> : null}
+                    <button
+                      type="button"
+                      className={`change-list-row ${selected ? 'selected' : ''} ${entry.changeKind}`}
+                      onClick={() => onSelect(entry)}
+                    >
+                      <ChangeBadge kind={entry.changeKind} />
+                      {entry.nodeKind === 'request' && entry.method ? (
+                        <span className={`tree-method method-${entry.method.toLowerCase()}`}>
+                          {entry.method}
+                        </span>
+                      ) : (
+                        <span className="change-list-folder-icon" aria-hidden>
+                          ▸
+                        </span>
+                      )}
+                      <span className="change-list-name">{entry.name}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </>
+      ) : null}
     </div>
   );
 }

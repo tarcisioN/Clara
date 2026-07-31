@@ -2169,9 +2169,14 @@ export default function App() {
   const focusChangeEntry = useCallback(
     (collectionPath: string, entry: ChangeListEntry) => {
       setFocusedChangeKey(entry.key);
-      setSidebar((current) =>
-        current.collectionsExpanded ? current : { ...current, collectionsExpanded: true }
-      );
+      setSidebar((current) => {
+        const next = {
+          ...current,
+          collectionsExpanded: true,
+          changesExpanded: true
+        };
+        return current.collectionsExpanded && current.changesExpanded ? current : next;
+      });
       updateUi(collectionPath, (ui) =>
         ui.collectionExpanded ? ui : { ...ui, collectionExpanded: true }
       );
@@ -2970,6 +2975,14 @@ export default function App() {
                 collection={activeCollection.collection}
                 entries={changeList}
                 activeKey={focusedChangeKey}
+                expanded={sidebar.changesExpanded}
+                onExpandedChange={(expanded) =>
+                  setSidebar((current) =>
+                    current.changesExpanded === expanded
+                      ? current
+                      : { ...current, changesExpanded: expanded }
+                  )
+                }
                 onSelect={(entry) => {
                   focusChangeEntry(activeCollection.filePath, entry);
                 }}

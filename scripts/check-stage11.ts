@@ -17,6 +17,16 @@ import {
   type PostmanEnvironment
 } from '../src/postman/environment.ts';
 import { parseTabKey, tabKey, toSessionTab, fromSessionTab } from '../src/workspace/tabs.ts';
+import {
+  CHANGES_DEFAULT_HEIGHT,
+  CHANGES_MIN_HEIGHT,
+  clampChangesHeight
+} from '../src/workspace/sidebar.ts';
+
+assert.equal(clampChangesHeight(CHANGES_DEFAULT_HEIGHT), CHANGES_DEFAULT_HEIGHT);
+assert.equal(clampChangesHeight(10), CHANGES_MIN_HEIGHT);
+assert.equal(clampChangesHeight(900, 300), 300);
+assert.equal(clampChangesHeight(Number.NaN), CHANGES_DEFAULT_HEIGHT);
 
 const sample: PostmanEnvironment = {
   id: 'env-1',
@@ -112,6 +122,7 @@ try {
   assert.equal(migrated.activeEnvironmentPath, null);
   assert.equal(migrated.sidebar.collectionsExpanded, true);
   assert.equal(migrated.sidebar.environmentsExpanded, true);
+  assert.equal(migrated.sidebar.changesExpanded, true);
   assert.equal(migrated.sidebar.width, 270);
   assert.equal(migrated.sidebar.followActiveTab, false);
   assert.equal(migrated.sidebar.changedOnly, false);
@@ -128,6 +139,7 @@ try {
     sidebar: {
       collectionsExpanded: false,
       environmentsExpanded: true,
+      changesExpanded: false,
       width: 360,
       followActiveTab: true,
       changedOnly: true
@@ -136,6 +148,7 @@ try {
   });
   assert.equal(saved.version, 4);
   assert.equal(saved.sidebar.width, 360);
+  assert.equal(saved.sidebar.changesExpanded, false);
   assert.equal(saved.sidebar.followActiveTab, false);
   assert.equal(saved.sidebar.changedOnly, false);
   assert.deepEqual(saved.compareBases, {});
