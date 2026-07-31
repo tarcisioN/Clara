@@ -312,6 +312,9 @@ Assumption: `newman` is on the user's `PATH`. Installation help comes later.
   "sidebar": { "collectionsExpanded", "environmentsExpanded", "width" } }
 ```
 
+`Follow active tab` and `Changed only` are in-memory only — they always start off
+after relaunch (not restored from `session.json`).
+
 Sessions v1–v3 migrate automatically to v4 (empty environments, default sidebar).
 On hydrate, failures reading environments do not block collections.
 

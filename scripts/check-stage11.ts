@@ -136,10 +136,28 @@ try {
   });
   assert.equal(saved.version, 4);
   assert.equal(saved.sidebar.width, 360);
-  assert.equal(saved.sidebar.followActiveTab, true);
-  assert.equal(saved.sidebar.changedOnly, true);
+  assert.equal(saved.sidebar.followActiveTab, false);
+  assert.equal(saved.sidebar.changedOnly, false);
   assert.deepEqual(saved.compareBases, {});
   assert.equal(saved.activeEnvironmentPath, envPath);
+
+  // Stale true flags in session.json must not survive load.
+  writeFileSync(
+    path.join(home, '.clara', 'session.json'),
+    JSON.stringify({
+      ...saved,
+      sidebar: {
+        ...saved.sidebar,
+        followActiveTab: true,
+        changedOnly: true
+      }
+    }),
+    'utf8'
+  );
+  const reloadedFilters = await session.loadSession();
+  assert.equal(reloadedFilters.sidebar.followActiveTab, false);
+  assert.equal(reloadedFilters.sidebar.changedOnly, false);
+  assert.equal(reloadedFilters.sidebar.width, 360);
 
   const withBase = await session.saveSession({
     ...saved,

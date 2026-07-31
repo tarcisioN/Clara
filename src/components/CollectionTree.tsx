@@ -33,8 +33,8 @@ type CollectionTreeProps = {
   focusedRemovedKey?: string | null;
   onSelectRemoved?: (ghost: RemovedGhost) => void;
   onToggleFolder: (path: ItemPath) => void;
-  onSelectFolder: (path: ItemPath) => void;
-  onSelectRequest: (path: ItemPath) => void;
+  onSelectFolder: (path: ItemPath, options?: { forceNew?: boolean }) => void;
+  onSelectRequest: (path: ItemPath, options?: { forceNew?: boolean }) => void;
   onContextMenu: (event: MouseEvent, target: TreeTarget) => void;
 };
 
@@ -51,10 +51,16 @@ type TreeNodeProps = {
   focusedRemovedKey: string | null;
   onSelectRemoved?: (ghost: RemovedGhost) => void;
   onToggleFolder: (path: ItemPath) => void;
-  onSelectFolder: (path: ItemPath) => void;
-  onSelectRequest: (path: ItemPath) => void;
+  onSelectFolder: (path: ItemPath, options?: { forceNew?: boolean }) => void;
+  onSelectRequest: (path: ItemPath, options?: { forceNew?: boolean }) => void;
   onContextMenu: (event: MouseEvent, target: TreeTarget) => void;
 };
+
+function openModifiers(event: { metaKey: boolean; ctrlKey: boolean }): {
+  forceNew?: boolean;
+} {
+  return event.metaKey || event.ctrlKey ? { forceNew: true } : {};
+}
 
 function ChangeMarker({ kind, count }: { kind: ChangeKind | 'removed'; count?: number }) {
   if (kind === 'unchanged') {
@@ -223,7 +229,7 @@ function TreeNode({
           <button
             type="button"
             className="tree-folder-select"
-            onClick={() => onSelectFolder(path)}
+            onClick={(event) => onSelectFolder(path, openModifiers(event))}
             aria-current={isSelected ? 'true' : undefined}
           >
             <span className="tree-icon" aria-hidden />
@@ -302,7 +308,7 @@ function TreeNode({
         <button
           type="button"
           className="tree-request-select"
-          onClick={() => onSelectRequest(path)}
+          onClick={(event) => onSelectRequest(path, openModifiers(event))}
           aria-current={isSelected ? 'true' : undefined}
           draggable
           onDragStart={(event) => {

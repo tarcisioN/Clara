@@ -91,11 +91,13 @@ import {
 } from './postman/edit.ts';
 import {
   fromSessionTab,
+  nextOpenTabs,
   parseTabKey,
   requestRunKey,
   sameTab,
   tabKey,
   toSessionTab,
+  type OpenTabOptions,
   type WorkspaceTab
 } from './workspace/tabs.ts';
 import {
@@ -774,12 +776,38 @@ export default function App() {
     [refreshCompare, syncDirty, updateUi]
   );
 
-  const openTab = useCallback((tab: WorkspaceTab) => {
-    setOpenTabs((current) =>
-      current.some((entry) => sameTab(entry, tab)) ? current : [...current, tab]
-    );
-    setActiveTab(tab);
+  const isTabDirty = useCallback((tab: WorkspaceTab): boolean => {
+    if (tab.kind === 'environment') {
+      const entry = environmentsRef.current.find(
+        (candidate) => candidate.filePath === tab.environmentPath
+      );
+      return entry ? isEnvironmentDirty(entry.environment, entry.originalRaw) : false;
+    }
+    const ui = uiByPathRef.current[tab.collectionPath];
+    if (!ui) {
+      return false;
+    }
+    if (tab.kind === 'collection') {
+      return ui.collectionDirty || ui.structureDirty;
+    }
+    if (tab.kind === 'folder') {
+      return ui.dirtyFolderPaths.has(tab.path);
+    }
+    return ui.dirtyPaths.has(tab.path);
   }, []);
+
+  const openTab = useCallback(
+    (tab: WorkspaceTab, options?: OpenTabOptions) => {
+      setOpenTabs((current) =>
+        nextOpenTabs(current, tab, activeTabRef.current, {
+          forceNew: options?.forceNew,
+          isDirty: isTabDirty
+        })
+      );
+      setActiveTab(tab);
+    },
+    [isTabDirty]
+  );
 
   const activeEnvironmentJson = useCallback((): string | undefined => {
     const path = activeEnvironmentPathRef.current;
@@ -836,7 +864,7 @@ export default function App() {
             delete cleared[file.filePath];
             compareByPathRef.current = cleared;
           }
-          openTab({ kind: 'collection', collectionPath: file.filePath });
+          openTab({ kind: 'collection', collectionPath: file.filePath }, { forceNew: true });
           opened.push(collection.info?.name ?? fileName(file.filePath));
           focusPath = file.filePath;
           void refreshCompare(file.filePath, collection);
@@ -907,7 +935,7 @@ export default function App() {
             ...list,
             { filePath: file.filePath, originalRaw: file.raw, environment }
           ]);
-          openTab({ kind: 'environment', environmentPath: file.filePath });
+          openTab({ kind: 'environment', environmentPath: file.filePath }, { forceNew: true });
           if (activeEnvironmentPathRef.current == null) {
             setActiveEnvironmentPath(file.filePath);
           }
@@ -1239,7 +1267,7 @@ export default function App() {
   }, [activeEnvironmentJson]);
 
   const openRequestTab = useCallback(
-    (collectionPath: string, path: ItemPath) => {
+    (collectionPath: string, path: ItemPath, options?: OpenTabOptions) => {
       const entry = collectionsRef.current.find(
         (candidate) => candidate.filePath === collectionPath
       );
@@ -1250,13 +1278,13 @@ export default function App() {
       if (!item || !isRequest(item)) {
         return;
       }
-      openTab({ kind: 'request', collectionPath, path });
+      openTab({ kind: 'request', collectionPath, path }, options);
     },
     [openTab]
   );
 
   const openFolderTab = useCallback(
-    (collectionPath: string, path: ItemPath) => {
+    (collectionPath: string, path: ItemPath, options?: OpenTabOptions) => {
       const entry = collectionsRef.current.find(
         (candidate) => candidate.filePath === collectionPath
       );
@@ -1267,7 +1295,7 @@ export default function App() {
       if (!item || !isFolder(item)) {
         return;
       }
-      openTab({ kind: 'folder', collectionPath, path });
+      openTab({ kind: 'folder', collectionPath, path }, options);
       updateUi(collectionPath, (ui) =>
         ui.expanded.has(path)
           ? ui
@@ -1276,26 +1304,6 @@ export default function App() {
     },
     [openTab, updateUi]
   );
-
-  const isTabDirty = useCallback((tab: WorkspaceTab): boolean => {
-    if (tab.kind === 'environment') {
-      const entry = environmentsRef.current.find(
-        (candidate) => candidate.filePath === tab.environmentPath
-      );
-      return entry ? isEnvironmentDirty(entry.environment, entry.originalRaw) : false;
-    }
-    const ui = uiByPathRef.current[tab.collectionPath];
-    if (!ui) {
-      return false;
-    }
-    if (tab.kind === 'collection') {
-      return ui.collectionDirty || ui.structureDirty;
-    }
-    if (tab.kind === 'folder') {
-      return ui.dirtyFolderPaths.has(tab.path);
-    }
-    return ui.dirtyPaths.has(tab.path);
-  }, []);
 
   const closeTab = useCallback(
     (tab: WorkspaceTab, options?: { force?: boolean }) => {
@@ -2755,11 +2763,16 @@ export default function App() {
                           <button
                             type="button"
                             className="collection-heading-select"
-                            onClick={() =>
-                              openTab({
-                                kind: 'collection',
-                                collectionPath: entry.filePath
-                              })
+                            onClick={(event) =>
+                              openTab(
+                                {
+                                  kind: 'collection',
+                                  collectionPath: entry.filePath
+                                },
+                                event.metaKey || event.ctrlKey
+                                  ? { forceNew: true }
+                                  : undefined
+                              )
                             }
                             title={entry.filePath}
                           >
@@ -2800,9 +2813,11 @@ export default function App() {
                             changedOnly={sidebar.changedOnly && Boolean(compare)}
                             structuralDiff={compare?.diff ?? null}
                             onToggleFolder={(path) => toggleFolder(entry.filePath, path)}
-                            onSelectFolder={(path) => openFolderTab(entry.filePath, path)}
-                            onSelectRequest={(path) =>
-                              openRequestTab(entry.filePath, path)
+                            onSelectFolder={(path, options) =>
+                              openFolderTab(entry.filePath, path, options)
+                            }
+                            onSelectRequest={(path, options) =>
+                              openRequestTab(entry.filePath, path, options)
                             }
                             focusedRemovedKey={
                               compare && focusedChangeKey?.startsWith('__removed__')
@@ -2956,11 +2971,16 @@ export default function App() {
                           type="button"
                           className="environment-select"
                           title={entry.filePath}
-                          onClick={() =>
-                            openTab({
-                              kind: 'environment',
-                              environmentPath: entry.filePath
-                            })
+                          onClick={(event) =>
+                            openTab(
+                              {
+                                kind: 'environment',
+                                environmentPath: entry.filePath
+                              },
+                              event.metaKey || event.ctrlKey
+                                ? { forceNew: true }
+                                : undefined
+                            )
                           }
                         >
                           <strong>{envName}</strong>
@@ -3023,7 +3043,9 @@ export default function App() {
               activeTab={activeTab}
               onSelect={setActiveTab}
               onClose={closeTab}
-              onDropRequest={openRequestTab}
+              onDropRequest={(collectionPath, path) =>
+                openRequestTab(collectionPath, path, { forceNew: true })
+              }
               onReorder={reorderTabs}
               onContextMenu={(event, tab) =>
                 openContextMenu(event, { kind: 'tab', tab })

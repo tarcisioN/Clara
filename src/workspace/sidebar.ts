@@ -2,9 +2,15 @@ export type SessionSidebar = {
   collectionsExpanded: boolean;
   environmentsExpanded: boolean;
   width: number;
-  /** When true, selecting a main-panel tab reveals it in the sidebar. */
+  /**
+   * Ephemeral UI toggle — not restored across app launches.
+   * When true, selecting a main-panel tab reveals it in the sidebar.
+   */
   followActiveTab: boolean;
-  /** When true and git compare is active, hide unchanged tree nodes. */
+  /**
+   * Ephemeral UI toggle — not restored across app launches.
+   * When true and git compare is active, hide unchanged tree nodes.
+   */
   changedOnly: boolean;
 };
 
@@ -45,13 +51,8 @@ export function normalizeSidebar(value: unknown): SessionSidebar {
       typeof candidate.width === 'number'
         ? clampSidebarWidth(candidate.width)
         : DEFAULT_SIDEBAR.width,
-    followActiveTab:
-      typeof candidate.followActiveTab === 'boolean'
-        ? candidate.followActiveTab
-        : DEFAULT_SIDEBAR.followActiveTab,
-    changedOnly:
-      typeof candidate.changedOnly === 'boolean'
-        ? candidate.changedOnly
-        : DEFAULT_SIDEBAR.changedOnly
+    // Session-only filters: always start off after reopen / reload from disk.
+    followActiveTab: DEFAULT_SIDEBAR.followActiveTab,
+    changedOnly: DEFAULT_SIDEBAR.changedOnly
   };
 }

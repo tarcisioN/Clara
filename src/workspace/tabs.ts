@@ -36,6 +36,40 @@ export function sameTab(a: WorkspaceTab, b: WorkspaceTab): boolean {
   return tabKey(a) === tabKey(b);
 }
 
+export type OpenTabOptions = {
+  /** Always append a new tab slot (⌘/Ctrl+click, drag onto tab bar, file dialog). */
+  forceNew?: boolean;
+};
+
+/**
+ * Decide the next tab strip after opening `tab`.
+ * - Already open → unchanged list (caller still activates).
+ * - `forceNew` → append.
+ * - Else if the active tab is present and not dirty → replace it in place.
+ * - Else → append.
+ */
+export function nextOpenTabs(
+  current: WorkspaceTab[],
+  tab: WorkspaceTab,
+  active: WorkspaceTab | null,
+  options: OpenTabOptions & { isDirty: (tab: WorkspaceTab) => boolean }
+): WorkspaceTab[] {
+  if (current.some((entry) => sameTab(entry, tab))) {
+    return current;
+  }
+  if (options.forceNew) {
+    return [...current, tab];
+  }
+  if (
+    active &&
+    current.some((entry) => sameTab(entry, active)) &&
+    !options.isDirty(active)
+  ) {
+    return current.map((entry) => (sameTab(entry, active) ? tab : entry));
+  }
+  return [...current, tab];
+}
+
 export function parseTabKey(key: string): WorkspaceTab | null {
   if (key.startsWith('environment:')) {
     try {

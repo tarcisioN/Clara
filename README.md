@@ -71,6 +71,8 @@ on-disk collection JSON does.
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab |
 | `⌘/Ctrl+1…9` | Go to tab N |
 | `⌘/Ctrl+Enter` | Send (Newman) |
+| Click sidebar item | Open / replace active tab if it is not dirty |
+| `⌘/Ctrl`+click sidebar | Open in a new tab |
 | Drag tab | Reorder |
 | Drag request from tree → bar | Open tab |
 

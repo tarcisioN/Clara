@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
   fromSessionTab,
+  nextOpenTabs,
   parseTabKey,
   requestRunKey,
   sameTab,
@@ -66,6 +67,39 @@ assert.equal(isCollectionDirty(dirtyUi), true);
 const cleaned = clearCollectionDirty(dirtyUi);
 assert.equal(isCollectionDirty(cleaned), false);
 assert.equal(cleaned.expanded.has('0.1'), true, 'clearing dirty keeps expanded state');
+
+// Opening a tab replaces the clean active tab; dirty active appends; forceNew always appends.
+const reqA: WorkspaceTab = { kind: 'request', collectionPath: a, path: '0' };
+const reqB: WorkspaceTab = { kind: 'request', collectionPath: a, path: '1' };
+const reqC: WorkspaceTab = { kind: 'request', collectionPath: a, path: '2' };
+const neverDirty = () => false;
+const onlyADirty = (tab: WorkspaceTab) => sameTab(tab, reqA);
+
+assert.deepEqual(
+  nextOpenTabs([reqA], reqB, reqA, { isDirty: neverDirty }),
+  [reqB],
+  'clean active is replaced'
+);
+assert.deepEqual(
+  nextOpenTabs([reqA], reqB, reqA, { isDirty: onlyADirty }),
+  [reqA, reqB],
+  'dirty active keeps a new slot'
+);
+assert.deepEqual(
+  nextOpenTabs([reqA], reqB, reqA, { forceNew: true, isDirty: neverDirty }),
+  [reqA, reqB],
+  'forceNew appends even when active is clean'
+);
+assert.deepEqual(
+  nextOpenTabs([reqA, reqB], reqA, reqB, { isDirty: neverDirty }),
+  [reqA, reqB],
+  'already-open tab does not duplicate'
+);
+assert.deepEqual(
+  nextOpenTabs([reqA], reqC, null, { isDirty: neverDirty }),
+  [reqA, reqC],
+  'no active tab → append'
+);
 
 // Session v3: multiple collections round-trip, and v2 migrates into one entry.
 const home = mkdtempSync(path.join(tmpdir(), 'clara-stage10-'));
