@@ -4,6 +4,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { CLARA_HOME } from './session.ts';
+import {
+  isNewmanNotFoundError,
+  newmanMissingRunView
+} from '../src/newman/missing.ts';
 import { parseNewmanJsonReport, type NewmanRunView } from '../src/newman/parseResult.ts';
 
 export type { NewmanRunView };
@@ -99,18 +103,17 @@ export async function runNewmanCollection(
     try {
       spawned = await runCommand('newman', args);
     } catch (error) {
+      if (isNewmanNotFoundError(error)) {
+        const stderr = error instanceof Error ? error.message : String(error);
+        return newmanMissingRunView(command, stderr);
+      }
       const message = error instanceof Error ? error.message : String(error);
-      const notFound =
-        (error as NodeJS.ErrnoException).code === 'ENOENT' ||
-        /not found|ENOENT/i.test(message);
       return {
         ok: false,
         exitCode: null,
         command,
         stderr: message,
-        error: notFound
-          ? 'Newman was not found on PATH. Install it with: npm install -g newman'
-          : message,
+        error: message,
         executions: [],
         execution: null,
         failures: []

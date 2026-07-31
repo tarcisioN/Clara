@@ -28,6 +28,8 @@ export type NewmanRunView = {
   command: string;
   stderr: string;
   error?: string;
+  /** True when the newman binary was not found on PATH. */
+  missingNewman?: boolean;
   /** All request executions from the Newman report. */
   executions: NewmanExecutionView[];
   /** Convenience: first execution (single-request runs). */

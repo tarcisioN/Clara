@@ -118,4 +118,20 @@ assert.equal(multi.executions.length, 2);
 assert.equal(multi.execution?.name, 'A');
 assert.equal(multi.executions[1]?.method, 'POST');
 
+import {
+  isNewmanNotFoundError,
+  newmanMissingRunView,
+  NEWMAN_MISSING_ERROR
+} from '../src/newman/missing.ts';
+
+assert.equal(isNewmanNotFoundError({ code: 'ENOENT', message: 'spawn newman ENOENT' }), true);
+assert.equal(isNewmanNotFoundError(new Error('command not found: newman')), true);
+assert.equal(isNewmanNotFoundError(new Error('permission denied')), false);
+
+const missing = newmanMissingRunView('newman run …', 'spawn ENOENT');
+assert.equal(missing.ok, false);
+assert.equal(missing.missingNewman, true);
+assert.equal(missing.error, NEWMAN_MISSING_ERROR);
+assert.equal(missing.executions.length, 0);
+
 console.log('stage8 checks passed');

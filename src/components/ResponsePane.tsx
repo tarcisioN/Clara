@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { executionStatusTone, type NewmanRunView } from '../newman/parseResult.ts';
+import NewmanMissingGuide from './NewmanMissingGuide.tsx';
 import './ResponsePane.css';
 
 type ResponsePaneProps = {
@@ -65,7 +66,9 @@ export default function ResponsePane({ result, running }: ResponsePaneProps) {
           </>
         )}
         {!running && result && !result.ok && (
-          <span className="response-status status-error">Failed</span>
+          <span className="response-status status-error">
+            {result.missingNewman ? 'Newman missing' : 'Failed'}
+          </span>
         )}
       </div>
 
@@ -84,7 +87,13 @@ export default function ResponsePane({ result, running }: ResponsePaneProps) {
         </div>
       )}
 
-      {result && !running && (
+      {result && !running && result.missingNewman ? (
+        <div className="response-errors">
+          <NewmanMissingGuide />
+        </div>
+      ) : null}
+
+      {result && !running && !result.missingNewman && (
         <>
           {(result.error || runtimeFailures.length > 0 || result.stderr.trim()) && (
             <div className="response-errors">

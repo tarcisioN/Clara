@@ -264,7 +264,7 @@ Assumption: `newman` is on the user's `PATH`. Installation help comes later.
 - [x] Results list per request (status, time, tests)
 - [x] Expand request for Body / Headers / Tests
 - [x] `-e` with open environment
-- [ ] Detect missing Newman and guide installation
+- [x] Detect missing Newman and guide installation
 
 ### Stage R2 — Variables + explorer context menu
 - [x] Show/edit `variable[]` on collection and folder tabs (inheritance for child requests)

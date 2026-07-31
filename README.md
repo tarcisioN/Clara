@@ -13,6 +13,15 @@ make install
 make dev
 ```
 
+Newman (required for Send / Run):
+
+```bash
+npm install -g newman
+newman --version
+```
+
+If Send shows “Newman is not installed”, install as above and **restart Clara** so the GUI picks up PATH changes (especially on macOS).
+
 | Target | What it does |
 |--------|-----------|
 | `make install` | `npm install` |

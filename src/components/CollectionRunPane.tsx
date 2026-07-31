@@ -4,6 +4,7 @@ import {
   type NewmanExecutionView,
   type NewmanRunView
 } from '../newman/parseResult.ts';
+import NewmanMissingGuide from './NewmanMissingGuide.tsx';
 import './CollectionRunPane.css';
 
 type CollectionRunPaneProps = {
@@ -184,7 +185,11 @@ export default function CollectionRunPane({
         <div className="collection-run-banner running">Calling Newman…</div>
       )}
 
-      {result && !running && (
+      {result && !running && result.missingNewman ? (
+        <NewmanMissingGuide compact />
+      ) : null}
+
+      {result && !running && !result.missingNewman && (
         <div
           className={`collection-run-banner ${result.ok ? 'ok' : 'failed'}`}
         >
@@ -199,7 +204,7 @@ export default function CollectionRunPane({
         </div>
       )}
 
-      {result?.stderr.trim() && !running ? (
+      {result?.stderr.trim() && !running && !result.missingNewman ? (
         <pre className="collection-run-stderr">{result.stderr.trim()}</pre>
       ) : null}
 

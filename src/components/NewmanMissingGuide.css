@@ -1,0 +1,45 @@
+.newman-missing {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(180, 60, 60, 0.35);
+  border-radius: 8px;
+  background: rgba(180, 60, 60, 0.08);
+  color: var(--text);
+  font-size: 0.8125rem;
+}
+
+.newman-missing.compact {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+}
+
+.newman-missing strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #8a2f2f;
+  font-size: 0.875rem;
+}
+
+.newman-missing ol {
+  margin: 0 0 10px;
+  padding-left: 1.25rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.newman-missing li + li {
+  margin-top: 4px;
+}
+
+.newman-missing-cmd {
+  margin: 0;
+}
+
+.newman-missing-cmd code {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.06);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+}

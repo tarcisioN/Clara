@@ -1152,14 +1152,18 @@ export default function App() {
       setRequestRuns((runs) => ({ ...runs, [requestRunKey(collectionPath, path)]: result }));
       const code = result.execution?.code;
       const unsaved = uiByPathRef.current[collectionPath]?.dirtyPaths.has(path) ?? false;
-      setStatus({
-        kind: result.error && !result.execution ? 'error' : 'ok',
-        message: result.execution
-          ? `Newman ${code ?? '—'} ${result.execution.status}${
-              unsaved ? ' · unsaved edits' : ''
-            }`.trim()
-          : result.error ?? 'Newman finished'
-      });
+      if (result.missingNewman) {
+        setStatus({ kind: 'error', message: result.error ?? 'Newman not found' });
+      } else {
+        setStatus({
+          kind: result.error && !result.execution ? 'error' : 'ok',
+          message: result.execution
+            ? `Newman ${code ?? '—'} ${result.execution.status}${
+                unsaved ? ' · unsaved edits' : ''
+              }`.trim()
+            : result.error ?? 'Newman finished'
+        });
+      }
     } catch (error) {
       setStatus({ kind: 'error', message: errorMessage(error) });
     } finally {
