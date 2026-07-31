@@ -2,6 +2,8 @@ export type SessionSidebar = {
   collectionsExpanded: boolean;
   environmentsExpanded: boolean;
   width: number;
+  /** When true, selecting a main-panel tab reveals it in the sidebar. */
+  followActiveTab: boolean;
 };
 
 export const SIDEBAR_MIN_WIDTH = 220;
@@ -11,7 +13,8 @@ export const SIDEBAR_DEFAULT_WIDTH = 270;
 export const DEFAULT_SIDEBAR: SessionSidebar = {
   collectionsExpanded: true,
   environmentsExpanded: true,
-  width: SIDEBAR_DEFAULT_WIDTH
+  width: SIDEBAR_DEFAULT_WIDTH,
+  followActiveTab: false
 };
 
 export function clampSidebarWidth(width: number): number {
@@ -38,6 +41,10 @@ export function normalizeSidebar(value: unknown): SessionSidebar {
     width:
       typeof candidate.width === 'number'
         ? clampSidebarWidth(candidate.width)
-        : DEFAULT_SIDEBAR.width
+        : DEFAULT_SIDEBAR.width,
+    followActiveTab:
+      typeof candidate.followActiveTab === 'boolean'
+        ? candidate.followActiveTab
+        : DEFAULT_SIDEBAR.followActiveTab
   };
 }

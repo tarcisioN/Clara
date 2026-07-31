@@ -150,15 +150,16 @@ button.primary {
   min-width: 220px;
   max-width: 520px;
   flex: 0 0 auto;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   border-right: none;
   background: var(--mantle);
   color: var(--text);
 }
 
 .sidebar-search {
-  position: sticky;
-  top: 0;
+  flex: 0 0 auto;
   z-index: 1;
   display: flex;
   align-items: center;
@@ -247,8 +248,20 @@ button.primary {
 
 .sidebar-section + .sidebar-section {
   border-top: 1px solid var(--surface-1);
-  margin-top: 4px;
-  padding-top: 2px;
+}
+
+.sidebar-section-collections {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.sidebar-section-environments {
+  flex: 0 1 auto;
+  max-height: 45%;
+  margin-top: auto;
+  overflow: auto;
+  background: var(--mantle);
 }
 
 .sidebar-section-title {
@@ -320,6 +333,42 @@ button.primary {
 .sidebar-add:hover {
   background: var(--surface-1);
   color: var(--text);
+}
+
+.sidebar-follow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.sidebar-follow:hover {
+  background: var(--surface-1);
+  color: var(--text);
+}
+
+.sidebar-follow.is-active {
+  color: var(--brand-text);
+  background: var(--surface-1);
+}
+
+.sidebar-follow-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-follow-icon svg {
+  display: block;
 }
 
 .environment-row-item {

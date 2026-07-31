@@ -8,6 +8,7 @@ import {
 } from '../postman/tree.ts';
 import { itemMatchesQuery } from '../workspace/sidebarSearch.ts';
 import { encodeItemDrag, ITEM_PATH_MIME } from './dnd.ts';
+import { tabKey } from '../workspace/tabs.ts';
 import './CollectionTree.css';
 
 export type TreeTarget =
@@ -99,6 +100,7 @@ function TreeNode({
             event.preventDefault();
             onContextMenu(event, { kind: 'folder', collectionPath, path });
           }}
+          data-sidebar-key={tabKey({ kind: 'folder', collectionPath, path })}
         >
           <button
             type="button"
@@ -172,6 +174,7 @@ function TreeNode({
           event.preventDefault();
           onContextMenu(event, { kind: 'request', collectionPath, path });
         }}
+        data-sidebar-key={tabKey({ kind: 'request', collectionPath, path })}
       >
         <button
           type="button"

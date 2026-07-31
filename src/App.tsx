@@ -364,10 +364,17 @@ export default function App() {
 
   const updateUi = useCallback(
     (collectionPath: string, updater: (ui: CollectionUiState) => CollectionUiState) => {
-      setUiByPath((current) => ({
-        ...current,
-        [collectionPath]: updater(current[collectionPath] ?? createCollectionUiState())
-      }));
+      setUiByPath((current) => {
+        const previous = current[collectionPath] ?? createCollectionUiState();
+        const next = updater(previous);
+        if (next === previous && current[collectionPath]) {
+          return current;
+        }
+        return {
+          ...current,
+          [collectionPath]: next
+        };
+      });
     },
     []
   );
@@ -1576,32 +1583,90 @@ export default function App() {
     ];
   })();
 
-  const revealInSidebar = (tab: WorkspaceTab) => {
-    if (tab.kind === 'environment') {
-      setSidebar((current) => ({ ...current, environmentsExpanded: true }));
-      setActiveTab(tab);
-      return;
-    }
-    if (tab.kind === 'collection') {
-      updateUi(tab.collectionPath, (ui) => ({ ...ui, collectionExpanded: true }));
-      setSidebar((current) => ({ ...current, collectionsExpanded: true }));
-      setActiveTab(tab);
-      return;
-    }
-    const indexes = tab.path.split('.');
-    updateUi(tab.collectionPath, (ui) => {
-      const expanded = new Set(ui.expanded);
-      for (let depth = 1; depth < indexes.length; depth += 1) {
-        expanded.add(indexes.slice(0, depth).join('.'));
+  const scrollSidebarTargetIntoView = useCallback((tab: WorkspaceTab) => {
+    const key = tabKey(tab);
+    window.requestAnimationFrame(() => {
+      const element = document.querySelector(
+        `[data-sidebar-key="${CSS.escape(key)}"]`
+      );
+      if (element instanceof HTMLElement) {
+        element.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
-      if (tab.kind === 'folder') {
-        expanded.add(tab.path);
-      }
-      return { ...ui, expanded, collectionExpanded: true };
     });
-    setSidebar((current) => ({ ...current, collectionsExpanded: true }));
-    setActiveTab(tab);
-  };
+  }, []);
+
+  const revealInSidebar = useCallback(
+    (tab: WorkspaceTab, options?: { activate?: boolean }) => {
+      const activate = options?.activate !== false;
+
+      if (tab.kind === 'environment') {
+        setSidebar((current) =>
+          current.environmentsExpanded
+            ? current
+            : { ...current, environmentsExpanded: true }
+        );
+        if (activate) {
+          setActiveTab(tab);
+        }
+        scrollSidebarTargetIntoView(tab);
+        return;
+      }
+
+      if (tab.kind === 'collection') {
+        updateUi(tab.collectionPath, (ui) =>
+          ui.collectionExpanded ? ui : { ...ui, collectionExpanded: true }
+        );
+        setSidebar((current) =>
+          current.collectionsExpanded
+            ? current
+            : { ...current, collectionsExpanded: true }
+        );
+        if (activate) {
+          setActiveTab(tab);
+        }
+        scrollSidebarTargetIntoView(tab);
+        return;
+      }
+
+      const indexes = tab.path.split('.');
+      updateUi(tab.collectionPath, (ui) => {
+        const expanded = new Set(ui.expanded);
+        let changed = !ui.collectionExpanded;
+        for (let depth = 1; depth < indexes.length; depth += 1) {
+          const ancestor = indexes.slice(0, depth).join('.');
+          if (!expanded.has(ancestor)) {
+            expanded.add(ancestor);
+            changed = true;
+          }
+        }
+        if (tab.kind === 'folder' && !expanded.has(tab.path)) {
+          expanded.add(tab.path);
+          changed = true;
+        }
+        if (!changed) {
+          return ui;
+        }
+        return { ...ui, expanded, collectionExpanded: true };
+      });
+      setSidebar((current) =>
+        current.collectionsExpanded
+          ? current
+          : { ...current, collectionsExpanded: true }
+      );
+      if (activate) {
+        setActiveTab(tab);
+      }
+      window.setTimeout(() => scrollSidebarTargetIntoView(tab), 0);
+    },
+    [scrollSidebarTargetIntoView, updateUi]
+  );
+
+  useEffect(() => {
+    if (!sessionHydrated || !sidebar.followActiveTab || !activeTab) {
+      return;
+    }
+    revealInSidebar(activeTab, { activate: false });
+  }, [sessionHydrated, sidebar.followActiveTab, activeTab, revealInSidebar]);
 
   const applyEnvironmentUpdate = (
     environmentPath: string,
@@ -1880,7 +1945,7 @@ export default function App() {
               ) : null}
             </div>
 
-            <div className="sidebar-section">
+            <div className="sidebar-section sidebar-section-collections">
               <div className="sidebar-section-title">
                 <button
                   type="button"
@@ -1903,6 +1968,45 @@ export default function App() {
                   </span>
                   <strong>Collections</strong>
                   <span className="sidebar-count">{totalRequests}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`sidebar-follow ${sidebar.followActiveTab ? 'is-active' : ''}`}
+                  aria-label={
+                    sidebar.followActiveTab
+                      ? 'Stop following active tab in sidebar'
+                      : 'Follow active tab in sidebar'
+                  }
+                  aria-pressed={sidebar.followActiveTab}
+                  title={
+                    sidebar.followActiveTab
+                      ? 'Following active tab'
+                      : 'Follow active tab'
+                  }
+                  onClick={() => {
+                    setSidebar((current) => {
+                      const next = !current.followActiveTab;
+                      if (next && activeTabRef.current) {
+                        window.setTimeout(() => {
+                          revealInSidebar(activeTabRef.current!, { activate: false });
+                        }, 0);
+                      }
+                      return { ...current, followActiveTab: next };
+                    });
+                  }}
+                >
+                  <span className="sidebar-follow-icon" aria-hidden>
+                    <svg viewBox="0 0 16 16" width="14" height="14" fill="none">
+                      <circle cx="8" cy="8" r="5.25" stroke="currentColor" strokeWidth="1.25" />
+                      <circle cx="8" cy="8" r="1.6" fill="currentColor" />
+                      <path
+                        d="M8 1.25v2.1M8 12.65v2.1M1.25 8h2.1M12.65 8h2.1"
+                        stroke="currentColor"
+                        strokeWidth="1.25"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -1960,6 +2064,10 @@ export default function App() {
                           className={`collection-heading ${headingSelected ? 'selected' : ''} ${
                             collectionExpanded ? 'expanded' : 'collapsed'
                           }`}
+                          data-sidebar-key={tabKey({
+                            kind: 'collection',
+                            collectionPath: entry.filePath
+                          })}
                           onContextMenu={(event) => openContextMenu(event, target)}
                         >
                           <button
@@ -2055,7 +2163,7 @@ export default function App() {
               ) : null}
             </div>
 
-            <div className="sidebar-section">
+            <div className="sidebar-section sidebar-section-environments">
               <div className="sidebar-section-title">
                 <button
                   type="button"
@@ -2119,6 +2227,10 @@ export default function App() {
                       <div
                         key={entry.filePath}
                         className={`environment-row-item ${selected ? 'selected' : ''}`}
+                        data-sidebar-key={tabKey({
+                          kind: 'environment',
+                          environmentPath: entry.filePath
+                        })}
                         onContextMenu={(event) => openContextMenu(event, target)}
                       >
                         <button
