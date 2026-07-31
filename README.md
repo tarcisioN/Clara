@@ -41,6 +41,8 @@ make dev
 3. Clara grava uma collection temporária de 1 request em `~/.clara/runs/` e chama Newman
 4. O arquivo da collection no repo **não** é modificado pelo run
 5. Painel **Response**: status, tempo, size, Body / Headers / Test results
+6. Clicar na collection ou numa pasta abre uma aba de Run
+7. **Run collection** / **Run folder** (`newman --folder <nome>`)
 
 ## Sessão (`~/.clara`)
 

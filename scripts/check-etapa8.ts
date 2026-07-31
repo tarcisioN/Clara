@@ -83,11 +83,39 @@ const parsed = parseNewmanJsonReport(JSON.stringify(report), {
   stderr: ''
 });
 assert.equal(parsed.ok, false);
+assert.equal(parsed.executions.length, 1);
 assert.equal(parsed.execution?.code, 200);
 assert.equal(parsed.execution?.body, '{"ok":true}');
 assert.equal(parsed.execution?.headers[0]?.key, 'Content-Type');
 assert.equal(parsed.execution?.assertions[0]?.ok, true);
 assert.equal(parsed.execution?.assertions[1]?.ok, false);
 assert.equal(parsed.failures[0]?.name, 'body ok');
+assert.equal(parsed.executions[0]?.name, 'Ping');
+
+const multi = parseNewmanJsonReport(
+  JSON.stringify({
+    run: {
+      executions: [
+        {
+          item: { name: 'A' },
+          request: { method: 'GET', url: 'https://example.com/a' },
+          response: { code: 200, status: 'OK', header: [], stream: { type: 'Buffer', data: [] }, responseTime: 1, responseSize: 0 },
+          assertions: [{ assertion: 'ok' }]
+        },
+        {
+          item: { name: 'B' },
+          request: { method: 'POST', url: 'https://example.com/b' },
+          response: { code: 500, status: 'Error', header: [], stream: { type: 'Buffer', data: [] }, responseTime: 2, responseSize: 0 },
+          assertions: []
+        }
+      ],
+      failures: []
+    }
+  }),
+  { exitCode: 0, command: 'newman run …', stderr: '' }
+);
+assert.equal(multi.executions.length, 2);
+assert.equal(multi.execution?.name, 'A');
+assert.equal(multi.executions[1]?.method, 'POST');
 
 console.log('etapa8 checks passed');

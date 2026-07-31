@@ -13,6 +13,7 @@ type CollectionTreeProps = {
   expanded: Set<ItemPath>;
   selectedPath: ItemPath | null;
   onToggleFolder: (path: ItemPath) => void;
+  onSelectFolder: (path: ItemPath) => void;
   onSelectRequest: (path: ItemPath) => void;
 };
 
@@ -23,6 +24,7 @@ type TreeNodeProps = {
   expanded: Set<ItemPath>;
   selectedPath: ItemPath | null;
   onToggleFolder: (path: ItemPath) => void;
+  onSelectFolder: (path: ItemPath) => void;
   onSelectRequest: (path: ItemPath) => void;
 };
 
@@ -33,6 +35,7 @@ function TreeNode({
   expanded,
   selectedPath,
   onToggleFolder,
+  onSelectFolder,
   onSelectRequest
 }: TreeNodeProps) {
   const folder = isFolder(item);
@@ -44,19 +47,36 @@ function TreeNode({
   if (folder) {
     return (
       <li className="tree-node">
-        <button
-          type="button"
-          className={`tree-row folder ${isExpanded ? 'expanded' : ''}`}
+        <div
+          className={`tree-row folder ${isExpanded ? 'expanded' : ''} ${
+            isSelected ? 'selected' : ''
+          }`}
           style={{ paddingLeft: 10 + depth * 14 }}
-          onClick={() => onToggleFolder(path)}
-          aria-expanded={isExpanded}
         >
-          <span className="tree-chevron" aria-hidden>
-            {isExpanded ? '▾' : '▸'}
-          </span>
-          <span className="tree-icon" aria-hidden />
-          <span className="tree-label">{name}</span>
-        </button>
+          <button
+            type="button"
+            className="tree-chevron-button"
+            aria-label={isExpanded ? 'Collapse folder' : 'Expand folder'}
+            aria-expanded={isExpanded}
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleFolder(path);
+            }}
+          >
+            <span className="tree-chevron" aria-hidden>
+              {isExpanded ? '▾' : '▸'}
+            </span>
+          </button>
+          <button
+            type="button"
+            className="tree-folder-select"
+            onClick={() => onSelectFolder(path)}
+            aria-current={isSelected ? 'true' : undefined}
+          >
+            <span className="tree-icon" aria-hidden />
+            <span className="tree-label">{name}</span>
+          </button>
+        </div>
         {isExpanded && (
           <ul className="tree-children">
             {(item.item ?? []).map((child, index) => (
@@ -68,6 +88,7 @@ function TreeNode({
                 expanded={expanded}
                 selectedPath={selectedPath}
                 onToggleFolder={onToggleFolder}
+                onSelectFolder={onSelectFolder}
                 onSelectRequest={onSelectRequest}
               />
             ))}
@@ -114,6 +135,7 @@ export default function CollectionTree({
   expanded,
   selectedPath,
   onToggleFolder,
+  onSelectFolder,
   onSelectRequest
 }: CollectionTreeProps) {
   if (!items || items.length === 0) {
@@ -131,6 +153,7 @@ export default function CollectionTree({
           expanded={expanded}
           selectedPath={selectedPath}
           onToggleFolder={onToggleFolder}
+          onSelectFolder={onSelectFolder}
           onSelectRequest={onSelectRequest}
         />
       ))}

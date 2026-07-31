@@ -88,6 +88,13 @@
   color: var(--method-get);
 }
 
+.request-tab-method.badge-collection,
+.request-tab-method.badge-folder {
+  color: var(--brand-text);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
 .request-tab-method.method-post,
 .request-tab-method.method-patch {
   color: var(--method-post);

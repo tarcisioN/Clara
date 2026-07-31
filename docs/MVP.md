@@ -258,14 +258,19 @@ Pressuposto: `newman` está no `PATH` do usuário. Ajuda de instalação fica pa
 - [x] Falhas / stderr do Newman visíveis
 - [x] `make check-etapa8`
 
-### Etapa R1 — (depois) Environment + collection run
+### Etapa R1 — Collection / folder run
+- [x] Clicar na collection abre uma aba (Run collection)
+- [x] Clicar numa pasta abre uma aba (Run folder via Newman `--folder`)
+- [x] Lista de resultados por request (status, tempo, testes)
+- [x] Expandir request para Body / Headers / Tests
 - [ ] `-e` com environment aberto
-- [ ] Run da collection / folder inteira
 - [ ] Detectar Newman ausente e orientar instalação
 
 ### Validação
 - [x] Resultado alinhado ao `newman` no terminal para o mesmo request _(parse + temp collection; smoke manual na UI)_
 - [x] Edits não salvos entram no run (temp usa memória)
+- [x] Collection/folder run reporta N executions (`make check-etapa8`)
+- [x] Sessão v2 persiste abas de collection / folder / request
 
 ---
 

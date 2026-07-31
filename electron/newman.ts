@@ -11,6 +11,8 @@ export type { NewmanRunView };
 export type NewmanRunRequest = {
   /** Serialized Postman collection (usually a single-request temp collection). */
   collectionJson: string;
+  /** Newman `--folder` name; runs only that folder when set. */
+  folder?: string;
 };
 
 const RUNS_DIR = path.join(CLARA_HOME, 'runs');
@@ -71,6 +73,7 @@ export async function runNewmanCollection(
   const args = [
     'run',
     collectionPath,
+    ...(payload.folder ? ['--folder', payload.folder] : []),
     '--reporters',
     'json',
     '--reporter-json-export',
@@ -98,6 +101,7 @@ export async function runNewmanCollection(
         error: notFound
           ? 'Newman was not found on PATH. Install it with: npm install -g newman'
           : message,
+        executions: [],
         execution: null,
         failures: []
       };
@@ -116,6 +120,7 @@ export async function runNewmanCollection(
           spawned.stderr.trim() ||
           spawned.stdout.trim() ||
           'Newman did not write a JSON report',
+        executions: [],
         execution: null,
         failures: []
       };

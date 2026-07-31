@@ -187,7 +187,18 @@ button.primary {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin: 0 6px;
   padding: 10px 12px 7px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.collection-heading:hover {
+  background: var(--surface-0);
+}
+
+.collection-heading.selected {
+  background: var(--surface-1);
 }
 
 .collection-icon {

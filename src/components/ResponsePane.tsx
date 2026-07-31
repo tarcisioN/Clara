@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { NewmanRunView } from '../newman/parseResult.ts';
+import { executionStatusTone, type NewmanRunView } from '../newman/parseResult.ts';
 import './ResponsePane.css';
 
 type ResponsePaneProps = {
@@ -19,28 +19,13 @@ function formatBytes(size: number | null): string {
   return `${(size / 1024).toFixed(1)} KB`;
 }
 
-function statusClass(code: number | null): string {
-  if (code == null) {
-    return 'unknown';
-  }
-  if (code >= 200 && code < 300) {
-    return 'ok';
-  }
-  if (code >= 300 && code < 400) {
-    return 'redirect';
-  }
-  if (code >= 400) {
-    return 'error';
-  }
-  return 'unknown';
-}
-
 export default function ResponsePane({ result, running }: ResponsePaneProps) {
   const [section, setSection] = useState<ResponseSection>('body');
   const execution = result?.execution ?? null;
   const testTotal = execution?.assertions.length ?? 0;
   const testsPassed = execution?.assertions.filter((assertion) => assertion.ok).length ?? 0;
   const testsFailed = testTotal - testsPassed;
+  const statusTone = execution ? executionStatusTone(execution) : 'unknown';
   const failedAssertionNames = new Set(
     execution?.assertions
       .filter((assertion) => !assertion.ok)
@@ -57,16 +42,7 @@ export default function ResponsePane({ result, running }: ResponsePaneProps) {
         {!running && execution && (
           <>
             <span
-              className={`response-status status-${
-                testTotal > 0 && testsPassed === testTotal
-                  ? 'tests-passed'
-                  : testsFailed > 0 &&
-                      execution.code != null &&
-                      execution.code >= 200 &&
-                      execution.code < 300
-                    ? 'tests-failed'
-                  : statusClass(execution.code)
-              }`}
+              className={`response-status status-${statusTone}`}
               title={
                 testTotal > 0 && testsPassed === testTotal
                   ? `HTTP ${execution.code ?? '—'}; all ${testTotal} tests passed`
@@ -74,7 +50,7 @@ export default function ResponsePane({ result, running }: ResponsePaneProps) {
                     ? `HTTP ${execution.code ?? '—'}; ${testsFailed} test${
                         testsFailed === 1 ? '' : 's'
                       } failed`
-                  : undefined
+                    : undefined
               }
             >
               {execution.code ?? '—'} {execution.status}

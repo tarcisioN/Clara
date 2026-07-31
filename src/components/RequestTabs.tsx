@@ -1,28 +1,26 @@
 import { useLayoutEffect, useRef, useState, type DragEvent } from 'react';
-import type { ItemPath } from '../postman/tree.ts';
+import type { WorkspaceTab } from '../workspace/tabs.ts';
+import { sameTab, tabKey } from '../workspace/tabs.ts';
 import { ITEM_PATH_MIME, TAB_PATH_MIME } from './dnd.ts';
 import './RequestTabs.css';
 
-export type RequestTab = {
-  path: ItemPath;
+export type WorkspaceTabView = {
+  tab: WorkspaceTab;
   name: string;
-  method: string;
+  badge: string;
+  badgeClass?: string;
   dirty: boolean;
 };
 
 type RequestTabsProps = {
-  tabs: RequestTab[];
-  activePath: ItemPath | null;
-  onSelect: (path: ItemPath) => void;
-  onClose: (path: ItemPath) => void;
-  onDropRequest: (path: ItemPath) => void;
-  onReorder: (fromPath: ItemPath, toPath: ItemPath, place: 'before' | 'after') => void;
+  tabs: WorkspaceTabView[];
+  activeTab: WorkspaceTab | null;
+  onSelect: (tab: WorkspaceTab) => void;
+  onClose: (tab: WorkspaceTab) => void;
+  onDropRequest: (path: string) => void;
+  onReorder: (from: WorkspaceTab, to: WorkspaceTab, place: 'before' | 'after') => void;
 };
 
-/**
- * Fades the tail of the label instead of cutting it with an ellipsis, which
- * needs to know whether the text actually overflows its box.
- */
 function TabLabel({ children }: { children: string }) {
   const ref = useRef<HTMLSpanElement>(null);
   const [overflowing, setOverflowing] = useState(false);
@@ -57,7 +55,7 @@ function dropPlace(event: DragEvent<HTMLElement>): 'before' | 'after' {
 
 export default function RequestTabs({
   tabs,
-  activePath,
+  activeTab,
   onSelect,
   onClose,
   onDropRequest,
@@ -65,7 +63,7 @@ export default function RequestTabs({
 }: RequestTabsProps) {
   const [treeDropTarget, setTreeDropTarget] = useState(false);
   const [reorderOver, setReorderOver] = useState<{
-    path: ItemPath;
+    key: string;
     place: 'before' | 'after';
   } | null>(null);
 
@@ -76,7 +74,7 @@ export default function RequestTabs({
     <div
       className={`request-tabs ${treeDropTarget ? 'drop-target' : ''}`}
       role="tablist"
-      aria-label="Open requests"
+      aria-label="Open tabs"
       onDragOver={(event) => {
         if (hasType(event, TAB_PATH_MIME)) {
           event.preventDefault();
@@ -113,89 +111,98 @@ export default function RequestTabs({
     >
       {tabs.length === 0 && (
         <span className="request-tabs-hint">
-          Select or drag a request here to open a tab
+          Select a collection, folder, or request to open a tab
         </span>
       )}
 
-      {tabs.map((tab) => (
-        <div
-          key={tab.path}
-          className={[
-            'request-tab',
-            tab.path === activePath ? 'active' : '',
-            reorderOver?.path === tab.path ? `reorder-${reorderOver.place}` : ''
-          ]
-            .filter(Boolean)
-            .join(' ')}
-          role="tab"
-          aria-selected={tab.path === activePath}
-          tabIndex={tab.path === activePath ? 0 : -1}
-          draggable
-          onClick={() => onSelect(tab.path)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
+      {tabs.map((entry) => {
+        const key = tabKey(entry.tab);
+        const active = activeTab ? sameTab(entry.tab, activeTab) : false;
+        return (
+          <div
+            key={key}
+            className={[
+              'request-tab',
+              active ? 'active' : '',
+              reorderOver?.key === key ? `reorder-${reorderOver.place}` : ''
+            ]
+              .filter(Boolean)
+              .join(' ')}
+            role="tab"
+            aria-selected={active}
+            tabIndex={active ? 0 : -1}
+            draggable
+            onClick={() => onSelect(entry.tab)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                onSelect(entry.tab);
+              }
+            }}
+            onAuxClick={(event) => {
+              if (event.button === 1) {
+                event.preventDefault();
+                onClose(entry.tab);
+              }
+            }}
+            onDragStart={(event) => {
+              event.dataTransfer.setData(TAB_PATH_MIME, key);
+              event.dataTransfer.setData('text/plain', entry.name);
+              event.dataTransfer.effectAllowed = 'move';
+            }}
+            onDragEnd={() => setReorderOver(null)}
+            onDragOver={(event) => {
+              if (!hasType(event, TAB_PATH_MIME)) {
+                return;
+              }
               event.preventDefault();
-              onSelect(tab.path);
-            }
-          }}
-          onAuxClick={(event) => {
-            if (event.button === 1) {
-              event.preventDefault();
-              onClose(tab.path);
-            }
-          }}
-          onDragStart={(event) => {
-            event.dataTransfer.setData(TAB_PATH_MIME, tab.path);
-            event.dataTransfer.setData('text/plain', tab.name);
-            event.dataTransfer.effectAllowed = 'move';
-          }}
-          onDragEnd={() => setReorderOver(null)}
-          onDragOver={(event) => {
-            if (!hasType(event, TAB_PATH_MIME)) {
-              return;
-            }
-            event.preventDefault();
-            event.stopPropagation();
-            event.dataTransfer.dropEffect = 'move';
-            setReorderOver({ path: tab.path, place: dropPlace(event) });
-          }}
-          onDrop={(event) => {
-            if (!hasType(event, TAB_PATH_MIME)) {
-              return;
-            }
-            event.preventDefault();
-            event.stopPropagation();
-            const fromPath = event.dataTransfer.getData(TAB_PATH_MIME);
-            setReorderOver(null);
-            if (!fromPath || fromPath === tab.path) {
-              return;
-            }
-            onReorder(fromPath, tab.path, dropPlace(event));
-          }}
-        >
-          <span className={`request-tab-method method-${tab.method.toLowerCase()}`}>
-            {tab.method}
-          </span>
-          <TabLabel>{tab.name}</TabLabel>
-          <button
-            type="button"
-            className={`request-tab-close ${tab.dirty ? 'dirty' : ''}`}
-            aria-label={tab.dirty ? `Close ${tab.name} (unsaved changes)` : `Close ${tab.name}`}
-            title={tab.dirty ? 'Unsaved changes' : 'Close tab'}
-            onClick={(event) => {
               event.stopPropagation();
-              onClose(tab.path);
+              event.dataTransfer.dropEffect = 'move';
+              setReorderOver({ key, place: dropPlace(event) });
+            }}
+            onDrop={(event) => {
+              if (!hasType(event, TAB_PATH_MIME)) {
+                return;
+              }
+              event.preventDefault();
+              event.stopPropagation();
+              const fromKey = event.dataTransfer.getData(TAB_PATH_MIME);
+              setReorderOver(null);
+              const fromTab = tabs.find((candidate) => tabKey(candidate.tab) === fromKey)?.tab;
+              if (!fromTab || sameTab(fromTab, entry.tab)) {
+                return;
+              }
+              onReorder(fromTab, entry.tab, dropPlace(event));
             }}
           >
-            <span className="close-glyph" aria-hidden>
-              ✕
+            <span
+              className={`request-tab-method ${entry.badgeClass ?? ''}`.trim()}
+            >
+              {entry.badge}
             </span>
-            <span className="dirty-glyph" aria-hidden>
-              ●
-            </span>
-          </button>
-        </div>
-      ))}
+            <TabLabel>{entry.name}</TabLabel>
+            <button
+              type="button"
+              className={`request-tab-close ${entry.dirty ? 'dirty' : ''}`}
+              aria-label={
+                entry.dirty ? `Close ${entry.name} (unsaved changes)` : `Close ${entry.name}`
+              }
+              title={entry.dirty ? 'Unsaved changes' : 'Close tab'}
+              onClick={(event) => {
+                event.stopPropagation();
+                onClose(entry.tab);
+              }}
+            >
+              <span className="close-glyph" aria-hidden>
+                ✕
+              </span>
+              <span className="dirty-glyph" aria-hidden>
+                ●
+              </span>
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }

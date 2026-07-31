@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppCommand } from '../electron/commands.ts';
 import CollectionTree from './components/CollectionTree.tsx';
+import CollectionRunPane from './components/CollectionRunPane.tsx';
 import RequestPane from './components/RequestPane.tsx';
-import RequestTabs, { type RequestTab } from './components/RequestTabs.tsx';
+import RequestTabs, { type WorkspaceTabView } from './components/RequestTabs.tsx';
 import ResponsePane from './components/ResponsePane.tsx';
 import { buildSingleRequestCollection } from './newman/buildRunCollection.ts';
 import type { NewmanRunView } from './newman/parseResult.ts';
@@ -15,8 +16,10 @@ import {
 } from './postman/types.ts';
 import {
   collectFolderPaths,
+  countRequestsUnder,
   getItemByPath,
   getRequestByPath,
+  isFolder,
   isRequest,
   type ItemPath
 } from './postman/tree.ts';
@@ -45,6 +48,14 @@ import {
   updateRequestUrlEncodedParam,
   setItemScriptSource
 } from './postman/edit.ts';
+import {
+  fromSessionTab,
+  parseTabKey,
+  sameTab,
+  tabKey,
+  toSessionTab,
+  type WorkspaceTab
+} from './workspace/tabs.ts';
 import './App.css';
 
 type LoadedCollection = {
@@ -60,80 +71,48 @@ function fileName(filePath: string): string {
   return filePath.split(/[\\/]/).pop() ?? filePath;
 }
 
-function filterValidRequestPaths(
+function filterValidTabs(
   items: PostmanItem[] | undefined,
-  paths: ItemPath[]
-): ItemPath[] {
-  return paths.filter((path) => {
-    const item = getItemByPath(items, path);
-    return Boolean(item && isRequest(item));
+  tabs: WorkspaceTab[]
+): WorkspaceTab[] {
+  return tabs.filter((tab) => {
+    if (tab.kind === 'collection') {
+      return true;
+    }
+    const item = getItemByPath(items, tab.path);
+    if (!item) {
+      return false;
+    }
+    if (tab.kind === 'folder') {
+      return isFolder(item);
+    }
+    return isRequest(item);
   });
-}
-
-function applyCollection(
-  filePath: string,
-  raw: string,
-  preferred?: {
-    openPaths?: ItemPath[];
-    activePath?: ItemPath | null;
-    expandedPaths?: ItemPath[];
-  }
-): {
-  loaded: LoadedCollection;
-  expanded: Set<ItemPath>;
-  openPaths: ItemPath[];
-  activePath: ItemPath | null;
-} {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error('File is not valid JSON');
-  }
-
-  const collection = assertPostmanCollection(parsed);
-  const openPaths = filterValidRequestPaths(collection.item, preferred?.openPaths ?? []);
-  const activePath =
-    preferred?.activePath && openPaths.includes(preferred.activePath)
-      ? preferred.activePath
-      : (openPaths[0] ?? null);
-  const expanded = new Set(
-    preferred?.expandedPaths?.length
-      ? preferred.expandedPaths
-      : [...collectFolderPaths(collection.item)]
-  );
-
-  return {
-    loaded: { filePath, originalRaw: raw, collection },
-    expanded,
-    openPaths,
-    activePath
-  };
 }
 
 export default function App() {
   const [loaded, setLoaded] = useState<LoadedCollection | null>(null);
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [expanded, setExpanded] = useState<Set<ItemPath>>(new Set());
-  const [openPaths, setOpenPaths] = useState<ItemPath[]>([]);
-  const [activePath, setActivePath] = useState<ItemPath | null>(null);
+  const [openTabs, setOpenTabs] = useState<WorkspaceTab[]>([]);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab | null>(null);
   const [dirtyPaths, setDirtyPaths] = useState<Set<ItemPath>>(new Set());
   const [sessionHydrated, setSessionHydrated] = useState(false);
   const [sessionHome, setSessionHome] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  const [lastRun, setLastRun] = useState<{ path: ItemPath; result: NewmanRunView } | null>(
-    null
-  );
+  const [requestRuns, setRequestRuns] = useState<Record<string, NewmanRunView>>({});
+  const [scopeRuns, setScopeRuns] = useState<Record<string, NewmanRunView>>({});
+  const [runningKey, setRunningKey] = useState<string | null>(null);
 
   const dirty = dirtyPaths.size > 0;
 
   const loadedRef = useRef(loaded);
-  const openPathsRef = useRef(openPaths);
-  const activePathRef = useRef(activePath);
+  const openTabsRef = useRef(openTabs);
+  const activeTabRef = useRef(activeTab);
   const dirtyPathsRef = useRef(dirtyPaths);
   loadedRef.current = loaded;
-  openPathsRef.current = openPaths;
-  activePathRef.current = activePath;
+  openTabsRef.current = openTabs;
+  activeTabRef.current = activeTab;
   dirtyPathsRef.current = dirtyPaths;
 
   const counts = useMemo(
@@ -141,46 +120,93 @@ export default function App() {
     [loaded]
   );
 
-  const tabs = useMemo<RequestTab[]>(() => {
+  const tabs = useMemo<WorkspaceTabView[]>(() => {
     if (!loaded) {
       return [];
     }
-    return openPaths.flatMap((path) => {
-      const item = getItemByPath(loaded.collection.item, path);
-      const request = getRequestByPath(loaded.collection.item, path);
-      if (!item || !request) {
+    return openTabs.flatMap((tab): WorkspaceTabView[] => {
+      if (tab.kind === 'collection') {
+        return [
+          {
+            tab,
+            name: loaded.collection.info?.name?.trim() || 'Collection',
+            badge: 'COL',
+            badgeClass: 'badge-collection',
+            dirty: false
+          }
+        ];
+      }
+      const item = getItemByPath(loaded.collection.item, tab.path);
+      if (!item) {
+        return [];
+      }
+      if (tab.kind === 'folder') {
+        if (!isFolder(item)) {
+          return [];
+        }
+        return [
+          {
+            tab,
+            name: item.name?.trim() || 'Folder',
+            badge: 'DIR',
+            badgeClass: 'badge-folder',
+            dirty: false
+          }
+        ];
+      }
+      const request = getRequestByPath(loaded.collection.item, tab.path);
+      if (!request || !isRequest(item)) {
         return [];
       }
       return [
         {
-          path,
+          tab,
           name: item.name?.trim() || 'Untitled request',
-          method: (request.method ?? 'GET').toUpperCase(),
-          dirty: dirtyPaths.has(path)
+          badge: (request.method ?? 'GET').toUpperCase(),
+          badgeClass: `method-${(request.method ?? 'GET').toLowerCase()}`,
+          dirty: dirtyPaths.has(tab.path)
         }
       ];
     });
-  }, [loaded, openPaths, dirtyPaths]);
+  }, [loaded, openTabs, dirtyPaths]);
+
+  const activeRequestPath =
+    activeTab?.kind === 'request' ? activeTab.path : null;
 
   const selectedItem = useMemo(() => {
-    if (!loaded || !activePath) {
+    if (!loaded || !activeRequestPath) {
       return null;
     }
-    return getItemByPath(loaded.collection.item, activePath) ?? null;
-  }, [loaded, activePath]);
+    return getItemByPath(loaded.collection.item, activeRequestPath) ?? null;
+  }, [loaded, activeRequestPath]);
 
   const selectedRequest = useMemo(() => {
-    if (!loaded || !activePath) {
+    if (!loaded || !activeRequestPath) {
       return null;
     }
-    return getRequestByPath(loaded.collection.item, activePath) ?? null;
-  }, [loaded, activePath]);
+    return getRequestByPath(loaded.collection.item, activeRequestPath) ?? null;
+  }, [loaded, activeRequestPath]);
 
-  const resetTabs = () => {
-    setOpenPaths([]);
-    setActivePath(null);
+  const activeFolder =
+    activeTab?.kind === 'folder' && loaded
+      ? getItemByPath(loaded.collection.item, activeTab.path)
+      : null;
+
+  const resetWorkspace = () => {
+    setOpenTabs([]);
+    setActiveTab(null);
     setDirtyPaths(new Set());
+    setRequestRuns({});
+    setScopeRuns({});
+    setRunningKey(null);
   };
+
+  const openTab = useCallback((tab: WorkspaceTab) => {
+    setOpenTabs((current) =>
+      current.some((entry) => sameTab(entry, tab)) ? current : [...current, tab]
+    );
+    setActiveTab(tab);
+  }, []);
 
   const openCollection = useCallback(async () => {
     setStatus({ kind: 'idle' });
@@ -190,26 +216,36 @@ export default function App() {
         return;
       }
 
-      const next = applyCollection(result.filePath, result.raw);
-      setLoaded(next.loaded);
-      setExpanded(next.expanded);
-      setOpenPaths(next.openPaths);
-      setActivePath(next.activePath);
-      setDirtyPaths(new Set());
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(result.raw);
+      } catch {
+        throw new Error('File is not valid JSON');
+      }
+
+      const collection = assertPostmanCollection(parsed);
+      setLoaded({
+        filePath: result.filePath,
+        originalRaw: result.raw,
+        collection
+      });
+      setExpanded(collectFolderPaths(collection.item));
+      resetWorkspace();
+      openTab({ kind: 'collection' });
       setStatus({
         kind: 'ok',
-        message: `Opened ${next.loaded.collection.info?.name ?? 'collection'}`
+        message: `Opened ${collection.info?.name ?? 'collection'}`
       });
     } catch (error) {
       setLoaded(null);
       setExpanded(new Set());
-      resetTabs();
+      resetWorkspace();
       setStatus({
         kind: 'error',
         message: error instanceof Error ? error.message : String(error)
       });
     }
-  }, []);
+  }, [openTab]);
 
   const saveCollection = useCallback(async () => {
     const current = loadedRef.current;
@@ -238,17 +274,20 @@ export default function App() {
 
   const sendRequest = useCallback(async () => {
     const current = loadedRef.current;
-    const path = activePathRef.current;
-    if (!current || !path || sending) {
+    const tab = activeTabRef.current;
+    if (!current || !tab || tab.kind !== 'request' || sending) {
       return;
     }
 
+    const path = tab.path;
+    const key = tabKey(tab);
     setSending(true);
+    setRunningKey(key);
     setStatus({ kind: 'idle' });
     try {
       const runCollection = buildSingleRequestCollection(current.collection, path);
       const result = await window.clara.runNewman(serializeCollection(runCollection));
-      setLastRun({ path, result });
+      setRequestRuns((runs) => ({ ...runs, [path]: result }));
       const code = result.execution?.code;
       const unsaved = dirtyPathsRef.current.has(path);
       setStatus({
@@ -266,75 +305,167 @@ export default function App() {
       });
     } finally {
       setSending(false);
+      setRunningKey(null);
     }
   }, [sending]);
 
-  const closeRequestTab = useCallback((path: ItemPath) => {
-    setOpenPaths((current) => {
-      const index = current.indexOf(path);
+  const runScope = useCallback(
+    async (tab: WorkspaceTab) => {
+      const current = loadedRef.current;
+      if (!current || runningKey) {
+        return;
+      }
+      if (tab.kind !== 'collection' && tab.kind !== 'folder') {
+        return;
+      }
+
+      const key = tabKey(tab);
+      let folderName: string | undefined;
+      if (tab.kind === 'folder') {
+        const folder = getItemByPath(current.collection.item, tab.path);
+        if (!folder || !isFolder(folder)) {
+          return;
+        }
+        folderName = folder.name?.trim() || undefined;
+        if (!folderName) {
+          setStatus({
+            kind: 'error',
+            message: 'Folder needs a name for Newman --folder'
+          });
+          return;
+        }
+      }
+
+      setRunningKey(key);
+      setActiveTab(tab);
+      setStatus({ kind: 'idle' });
+      try {
+        const result = await window.clara.runNewman(
+          serializeCollection(current.collection),
+          folderName ? { folder: folderName } : undefined
+        );
+        setScopeRuns((runs) => ({ ...runs, [key]: result }));
+        const total = result.executions.length;
+        const failed = result.failures.length;
+        setStatus({
+          kind: result.error && total === 0 ? 'error' : 'ok',
+          message: result.error
+            ? result.error
+            : `${tab.kind === 'folder' ? 'Folder' : 'Collection'} run · ${total} request${
+                total === 1 ? '' : 's'
+              }${failed ? ` · ${failed} failure${failed === 1 ? '' : 's'}` : ''}${
+                dirtyPathsRef.current.size > 0 ? ' · unsaved edits' : ''
+              }`
+        });
+      } catch (error) {
+        setStatus({
+          kind: 'error',
+          message: error instanceof Error ? error.message : String(error)
+        });
+      } finally {
+        setRunningKey(null);
+      }
+    },
+    [runningKey]
+  );
+
+  const openRequestTab = useCallback(
+    (path: ItemPath) => {
+      const current = loadedRef.current;
+      if (!current) {
+        return;
+      }
+      const item = getItemByPath(current.collection.item, path);
+      if (!item || !isRequest(item)) {
+        return;
+      }
+      openTab({ kind: 'request', path });
+    },
+    [openTab]
+  );
+
+  const openFolderTab = useCallback(
+    (path: ItemPath) => {
+      const current = loadedRef.current;
+      if (!current) {
+        return;
+      }
+      const item = getItemByPath(current.collection.item, path);
+      if (!item || !isFolder(item)) {
+        return;
+      }
+      openTab({ kind: 'folder', path });
+      setExpanded((currentExpanded) => {
+        if (currentExpanded.has(path)) {
+          return currentExpanded;
+        }
+        const next = new Set(currentExpanded);
+        next.add(path);
+        return next;
+      });
+    },
+    [openTab]
+  );
+
+  const openCollectionTab = useCallback(() => {
+    openTab({ kind: 'collection' });
+  }, [openTab]);
+
+  const closeTab = useCallback((tab: WorkspaceTab) => {
+    setOpenTabs((current) => {
+      const index = current.findIndex((entry) => sameTab(entry, tab));
       if (index === -1) {
         return current;
       }
-      const next = current.filter((openPath) => openPath !== path);
-      setActivePath((active) =>
-        active === path ? next[Math.min(index, next.length - 1)] ?? null : active
+      const next = current.filter((entry) => !sameTab(entry, tab));
+      setActiveTab((active) =>
+        active && sameTab(active, tab)
+          ? next[Math.min(index, next.length - 1)] ?? null
+          : active
       );
       return next;
     });
   }, []);
 
-  const openRequestTab = useCallback((path: ItemPath) => {
-    const current = loadedRef.current;
-    if (!current) {
-      return;
-    }
-    const item = getItemByPath(current.collection.item, path);
-    if (!item || !isRequest(item)) {
-      return;
-    }
-    setOpenPaths((paths) => (paths.includes(path) ? paths : [...paths, path]));
-    setActivePath(path);
-  }, []);
-
   const cycleTab = useCallback((delta: number) => {
-    const paths = openPathsRef.current;
-    if (paths.length === 0) {
+    const tabsList = openTabsRef.current;
+    if (tabsList.length === 0) {
       return;
     }
-    const currentIndex = activePathRef.current
-      ? paths.indexOf(activePathRef.current)
+    const currentIndex = activeTabRef.current
+      ? tabsList.findIndex((tab) => sameTab(tab, activeTabRef.current!))
       : -1;
     const nextIndex =
       currentIndex === -1
         ? 0
-        : (currentIndex + delta + paths.length) % paths.length;
-    setActivePath(paths[nextIndex] ?? null);
+        : (currentIndex + delta + tabsList.length) % tabsList.length;
+    setActiveTab(tabsList[nextIndex] ?? null);
   }, []);
 
   const selectTabAt = useCallback((index: number) => {
-    const path = openPathsRef.current[index];
-    if (path) {
-      setActivePath(path);
+    const tab = openTabsRef.current[index];
+    if (tab) {
+      setActiveTab(tab);
     }
   }, []);
 
   const reorderTabs = useCallback(
-    (fromPath: ItemPath, toPath: ItemPath, place: 'before' | 'after') => {
-      setOpenPaths((current) => {
-        const from = current.indexOf(fromPath);
-        const to = current.indexOf(toPath);
-        if (from === -1 || to === -1 || fromPath === toPath) {
+    (fromTab: WorkspaceTab, toTab: WorkspaceTab, place: 'before' | 'after') => {
+      setOpenTabs((current) => {
+        const from = current.findIndex((tab) => sameTab(tab, fromTab));
+        const to = current.findIndex((tab) => sameTab(tab, toTab));
+        if (from === -1 || to === -1 || sameTab(fromTab, toTab)) {
           return current;
         }
-        const next = current.filter((path) => path !== fromPath);
-        let insertAt = next.indexOf(toPath);
+        const next = current.filter((tab) => !sameTab(tab, fromTab));
+        let insertAt = next.findIndex((tab) => sameTab(tab, toTab));
         if (insertAt === -1) {
           return current;
         }
         if (place === 'after') {
           insertAt += 1;
         }
-        next.splice(insertAt, 0, fromPath);
+        next.splice(insertAt, 0, fromTab);
         return next;
       });
     },
@@ -364,19 +495,43 @@ export default function App() {
           if (cancelled) {
             return;
           }
-          const next = applyCollection(result.filePath, result.raw, {
-            openPaths: session.openPaths,
-            activePath: session.activePath,
-            expandedPaths: session.expandedPaths
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(result.raw);
+          } catch {
+            throw new Error('File is not valid JSON');
+          }
+          const collection = assertPostmanCollection(parsed);
+          const restoredTabs = filterValidTabs(
+            collection.item,
+            (session.openTabs ?? []).map(fromSessionTab)
+          );
+          const restoredActive =
+            session.activeTabKey != null
+              ? parseTabKey(session.activeTabKey)
+              : null;
+          const active =
+            restoredActive &&
+            restoredTabs.some((tab) => sameTab(tab, restoredActive))
+              ? restoredActive
+              : (restoredTabs[0] ?? null);
+
+          setLoaded({
+            filePath: result.filePath,
+            originalRaw: result.raw,
+            collection
           });
-          setLoaded(next.loaded);
-          setExpanded(next.expanded);
-          setOpenPaths(next.openPaths);
-          setActivePath(next.activePath);
+          setExpanded(
+            session.expandedPaths.length
+              ? new Set(session.expandedPaths)
+              : collectFolderPaths(collection.item)
+          );
+          setOpenTabs(restoredTabs);
+          setActiveTab(active);
           setDirtyPaths(new Set());
           setStatus({
             kind: 'ok',
-            message: `Restored ${next.loaded.collection.info?.name ?? 'collection'}`
+            message: `Restored ${collection.info?.name ?? 'collection'}`
           });
         } catch (error) {
           setStatus({
@@ -412,16 +567,16 @@ export default function App() {
 
     const handle = window.setTimeout(() => {
       void window.clara.saveSession({
-        version: 1,
+        version: 2,
         collectionPath: loaded?.filePath ?? null,
-        openPaths,
-        activePath,
+        openTabs: openTabs.map(toSessionTab),
+        activeTabKey: activeTab ? tabKey(activeTab) : null,
         expandedPaths: [...expanded]
       });
     }, 250);
 
     return () => window.clearTimeout(handle);
-  }, [sessionHydrated, loaded?.filePath, openPaths, activePath, expanded]);
+  }, [sessionHydrated, loaded?.filePath, openTabs, activeTab, expanded]);
 
   useEffect(() => {
     return window.clara.onCommand((command: AppCommand) => {
@@ -436,8 +591,8 @@ export default function App() {
           void sendRequest();
           break;
         case 'close-tab':
-          if (activePathRef.current) {
-            closeRequestTab(activePathRef.current);
+          if (activeTabRef.current) {
+            closeTab(activeTabRef.current);
           }
           break;
         case 'next-tab':
@@ -451,17 +606,17 @@ export default function App() {
           break;
       }
     });
-  }, [openCollection, saveCollection, sendRequest, closeRequestTab, cycleTab, selectTabAt]);
+  }, [openCollection, saveCollection, sendRequest, closeTab, cycleTab, selectTabAt]);
 
   const editSelectedItem = (updater: (item: PostmanItem) => PostmanItem) => {
-    if (!loaded || !activePath) {
+    if (!loaded || !activeRequestPath) {
       return;
     }
 
     try {
-      const collection = updateCollectionItem(loaded.collection, activePath, updater);
+      const collection = updateCollectionItem(loaded.collection, activeRequestPath, updater);
       setLoaded({ ...loaded, collection });
-      setDirtyPaths((current) => new Set(current).add(activePath));
+      setDirtyPaths((current) => new Set(current).add(activeRequestPath));
     } catch (error) {
       setStatus({
         kind: 'error',
@@ -481,6 +636,11 @@ export default function App() {
       return next;
     });
   };
+
+  const treeSelectedPath =
+    activeTab?.kind === 'request' || activeTab?.kind === 'folder'
+      ? activeTab.path
+      : null;
 
   return (
     <div className={`app ${navigator.userAgent.includes('Mac') ? 'platform-mac' : ''}`}>
@@ -536,7 +696,20 @@ export default function App() {
               <strong>Collections</strong>
               <span className="sidebar-count">{counts.requests}</span>
             </div>
-            <div className="collection-heading">
+            <div
+              className={`collection-heading ${
+                activeTab?.kind === 'collection' ? 'selected' : ''
+              }`}
+              role="button"
+              tabIndex={0}
+              onClick={openCollectionTab}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  openCollectionTab();
+                }
+              }}
+            >
               <span className="collection-icon" aria-hidden>
                 ◇
               </span>
@@ -550,8 +723,9 @@ export default function App() {
             <CollectionTree
               items={loaded.collection.item}
               expanded={expanded}
-              selectedPath={activePath}
+              selectedPath={treeSelectedPath}
               onToggleFolder={toggleFolder}
+              onSelectFolder={openFolderTab}
               onSelectRequest={openRequestTab}
             />
           </aside>
@@ -559,114 +733,163 @@ export default function App() {
           <section className="main-workspace">
             <RequestTabs
               tabs={tabs}
-              activePath={activePath}
-              onSelect={setActivePath}
-              onClose={closeRequestTab}
+              activeTab={activeTab}
+              onSelect={setActiveTab}
+              onClose={closeTab}
               onDropRequest={openRequestTab}
               onReorder={reorderTabs}
             />
 
             <main className="detail">
-              {!(activePath && selectedItem && selectedRequest) && (
+              {!activeTab && (
                 <div className="empty-state">
                   <span className="empty-state-icon" aria-hidden>
                     ↖
                   </span>
-                  <h2>Select a request</h2>
-                  <p>Choose a request from the collection tree to start editing.</p>
+                  <h2>Select a collection, folder, or request</h2>
+                  <p>Open a tab from the sidebar to edit or run.</p>
                 </div>
               )}
-              {activePath && selectedItem && selectedRequest && (
-                <div className="detail-split">
-                  <div className="detail-request">
-                    <RequestPane
-                      key={activePath}
-                      item={selectedItem}
-                      request={selectedRequest}
-                      path={activePath}
-                      onChangeMethod={(method) =>
-                        editSelectedItem((item) => setRequestMethod(item, method))
-                      }
-                      onChangeUrl={(raw) => editSelectedItem((item) => setRequestUrl(item, raw))}
-                      onPromoteUrlToObject={() =>
-                        editSelectedItem((item) => promoteRequestUrlToObject(item))
-                      }
-                      onAddQueryParam={() =>
-                        editSelectedItem((item) => addRequestQueryParam(item))
-                      }
-                      onChangeQueryParam={(index, patch) =>
-                        editSelectedItem((item) => updateRequestQueryParam(item, index, patch))
-                      }
-                      onToggleQueryParamDisabled={(index, disabled) =>
-                        editSelectedItem((item) =>
-                          setRequestQueryParamDisabled(item, index, disabled)
-                        )
-                      }
-                      onRemoveQueryParam={(index) =>
-                        editSelectedItem((item) => removeRequestQueryParam(item, index))
-                      }
-                      onAddHeader={() => editSelectedItem((item) => addRequestHeader(item))}
-                      onChangeHeader={(index, patch) =>
-                        editSelectedItem((item) => updateRequestHeader(item, index, patch))
-                      }
-                      onToggleHeaderDisabled={(index, disabled) =>
-                        editSelectedItem((item) => setRequestHeaderDisabled(item, index, disabled))
-                      }
-                      onRemoveHeader={(index) =>
-                        editSelectedItem((item) => removeRequestHeader(item, index))
-                      }
-                      onChangeBodyMode={(mode) =>
-                        editSelectedItem((item) => setRequestBodyMode(item, mode))
-                      }
-                      onChangeBodyRaw={(raw) =>
-                        editSelectedItem((item) => setRequestBodyRaw(item, raw))
-                      }
-                      onAddUrlEncoded={() =>
-                        editSelectedItem((item) => addRequestUrlEncodedParam(item))
-                      }
-                      onChangeUrlEncoded={(index, patch) =>
-                        editSelectedItem((item) => updateRequestUrlEncodedParam(item, index, patch))
-                      }
-                      onToggleUrlEncodedDisabled={(index, disabled) =>
-                        editSelectedItem((item) =>
-                          setRequestUrlEncodedParamDisabled(item, index, disabled)
-                        )
-                      }
-                      onRemoveUrlEncoded={(index) =>
-                        editSelectedItem((item) => removeRequestUrlEncodedParam(item, index))
-                      }
-                      onChangeAuthType={(type) =>
-                        editSelectedItem((item) => setRequestAuthType(item, type))
-                      }
-                      onChangeBearerToken={(token) =>
-                        editSelectedItem((item) => setRequestBearerToken(item, token))
-                      }
-                      onChangeBasicAuth={(patch) =>
-                        editSelectedItem((item) => setRequestBasicAuth(item, patch))
-                      }
-                      onChangeApiKeyAuth={(patch) =>
-                        editSelectedItem((item) => setRequestApiKeyAuth(item, patch))
-                      }
-                      onChangePrerequestScript={(source) =>
-                        editSelectedItem((item) => setItemScriptSource(item, 'prerequest', source))
-                      }
-                      onChangeTestScript={(source) =>
-                        editSelectedItem((item) => setItemScriptSource(item, 'test', source))
-                      }
-                      onSend={() => void sendRequest()}
-                      sending={sending}
-                    />
-                  </div>
-                  <div className="detail-response">
-                    <ResponsePane
-                      result={
-                        lastRun && lastRun.path === activePath ? lastRun.result : null
-                      }
-                      running={sending}
-                    />
-                  </div>
-                </div>
+
+              {activeTab?.kind === 'collection' && (
+                <CollectionRunPane
+                  title={loaded.collection.info?.name ?? 'Untitled collection'}
+                  subtitle={`Run all ${counts.requests} request${
+                    counts.requests === 1 ? '' : 's'
+                  } with Newman. Uses in-memory edits — Save is not required.`}
+                  runLabel="Run collection"
+                  requestCount={counts.requests}
+                  result={scopeRuns[tabKey(activeTab)] ?? null}
+                  running={runningKey === tabKey(activeTab)}
+                  onRun={() => void runScope(activeTab)}
+                />
               )}
+
+              {activeTab?.kind === 'folder' && activeFolder && isFolder(activeFolder) && (
+                <CollectionRunPane
+                  title={activeFolder.name?.trim() || 'Folder'}
+                  subtitle={`Run this folder (${countRequestsUnder(activeFolder)} request${
+                    countRequestsUnder(activeFolder) === 1 ? '' : 's'
+                  }) via Newman --folder. Uses in-memory edits — Save is not required.`}
+                  runLabel="Run folder"
+                  requestCount={countRequestsUnder(activeFolder)}
+                  result={scopeRuns[tabKey(activeTab)] ?? null}
+                  running={runningKey === tabKey(activeTab)}
+                  onRun={() => void runScope(activeTab)}
+                />
+              )}
+
+              {activeTab?.kind === 'request' &&
+                !(activeRequestPath && selectedItem && selectedRequest) && (
+                  <div className="empty-state">
+                    <span className="empty-state-icon" aria-hidden>
+                      ↖
+                    </span>
+                    <h2>Select a request</h2>
+                    <p>Choose a request from the collection tree to start editing.</p>
+                  </div>
+                )}
+
+              {activeTab?.kind === 'request' &&
+                activeRequestPath &&
+                selectedItem &&
+                selectedRequest && (
+                  <div className="detail-split">
+                    <div className="detail-request">
+                      <RequestPane
+                        key={activeRequestPath}
+                        item={selectedItem}
+                        request={selectedRequest}
+                        path={activeRequestPath}
+                        onChangeMethod={(method) =>
+                          editSelectedItem((item) => setRequestMethod(item, method))
+                        }
+                        onChangeUrl={(raw) =>
+                          editSelectedItem((item) => setRequestUrl(item, raw))
+                        }
+                        onPromoteUrlToObject={() =>
+                          editSelectedItem((item) => promoteRequestUrlToObject(item))
+                        }
+                        onAddQueryParam={() =>
+                          editSelectedItem((item) => addRequestQueryParam(item))
+                        }
+                        onChangeQueryParam={(index, patch) =>
+                          editSelectedItem((item) => updateRequestQueryParam(item, index, patch))
+                        }
+                        onToggleQueryParamDisabled={(index, disabled) =>
+                          editSelectedItem((item) =>
+                            setRequestQueryParamDisabled(item, index, disabled)
+                          )
+                        }
+                        onRemoveQueryParam={(index) =>
+                          editSelectedItem((item) => removeRequestQueryParam(item, index))
+                        }
+                        onAddHeader={() => editSelectedItem((item) => addRequestHeader(item))}
+                        onChangeHeader={(index, patch) =>
+                          editSelectedItem((item) => updateRequestHeader(item, index, patch))
+                        }
+                        onToggleHeaderDisabled={(index, disabled) =>
+                          editSelectedItem((item) =>
+                            setRequestHeaderDisabled(item, index, disabled)
+                          )
+                        }
+                        onRemoveHeader={(index) =>
+                          editSelectedItem((item) => removeRequestHeader(item, index))
+                        }
+                        onChangeBodyMode={(mode) =>
+                          editSelectedItem((item) => setRequestBodyMode(item, mode))
+                        }
+                        onChangeBodyRaw={(raw) =>
+                          editSelectedItem((item) => setRequestBodyRaw(item, raw))
+                        }
+                        onAddUrlEncoded={() =>
+                          editSelectedItem((item) => addRequestUrlEncodedParam(item))
+                        }
+                        onChangeUrlEncoded={(index, patch) =>
+                          editSelectedItem((item) =>
+                            updateRequestUrlEncodedParam(item, index, patch)
+                          )
+                        }
+                        onToggleUrlEncodedDisabled={(index, disabled) =>
+                          editSelectedItem((item) =>
+                            setRequestUrlEncodedParamDisabled(item, index, disabled)
+                          )
+                        }
+                        onRemoveUrlEncoded={(index) =>
+                          editSelectedItem((item) => removeRequestUrlEncodedParam(item, index))
+                        }
+                        onChangeAuthType={(type) =>
+                          editSelectedItem((item) => setRequestAuthType(item, type))
+                        }
+                        onChangeBearerToken={(token) =>
+                          editSelectedItem((item) => setRequestBearerToken(item, token))
+                        }
+                        onChangeBasicAuth={(patch) =>
+                          editSelectedItem((item) => setRequestBasicAuth(item, patch))
+                        }
+                        onChangeApiKeyAuth={(patch) =>
+                          editSelectedItem((item) => setRequestApiKeyAuth(item, patch))
+                        }
+                        onChangePrerequestScript={(source) =>
+                          editSelectedItem((item) =>
+                            setItemScriptSource(item, 'prerequest', source)
+                          )
+                        }
+                        onChangeTestScript={(source) =>
+                          editSelectedItem((item) => setItemScriptSource(item, 'test', source))
+                        }
+                        onSend={() => void sendRequest()}
+                        sending={sending}
+                      />
+                    </div>
+                    <div className="detail-response">
+                      <ResponsePane
+                        result={requestRuns[activeRequestPath] ?? null}
+                        running={sending && runningKey === tabKey(activeTab)}
+                      />
+                    </div>
+                  </div>
+                )}
             </main>
           </section>
         </div>
@@ -678,7 +901,9 @@ export default function App() {
           {status.kind === 'idle'
             ? loaded
               ? dirty
-                ? `Unsaved changes in ${dirtyPaths.size} request${dirtyPaths.size > 1 ? 's' : ''}`
+                ? `Unsaved changes in ${dirtyPaths.size} request${
+                    dirtyPaths.size > 1 ? 's' : ''
+                  }`
                 : 'Ready'
               : 'No collection open'
             : status.message}

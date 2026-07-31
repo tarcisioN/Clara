@@ -1,0 +1,342 @@
+.collection-run-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.collection-run-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 24px 14px;
+  border-bottom: 1px solid var(--border-0);
+}
+
+.collection-run-header h2 {
+  margin: 0 0 4px;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.collection-run-header p {
+  margin: 0;
+  max-width: 42rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.collection-run-button {
+  flex: 0 0 auto;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.collection-run-button:hover:not(:disabled) {
+  filter: brightness(0.96);
+}
+
+.collection-run-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.collection-run-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--border-0);
+  font-size: 0.75rem;
+}
+
+.collection-run-banner.running {
+  color: var(--brand-text);
+  background: var(--crust);
+}
+
+.collection-run-banner.ok {
+  color: var(--test-pass);
+  background: hsl(211, 80%, 97%);
+}
+
+.collection-run-banner.failed {
+  color: #8a2f24;
+  background: #fff5f3;
+}
+
+.collection-run-stderr {
+  margin: 0;
+  padding: 8px 24px;
+  max-height: 72px;
+  overflow: auto;
+  border-bottom: 1px solid var(--border-0);
+  color: #8a2f24;
+  background: #fff5f3;
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.6875rem;
+}
+
+.collection-run-empty {
+  display: grid;
+  place-content: center;
+  gap: 4px;
+  flex: 1;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.collection-run-empty p {
+  margin: 0;
+}
+
+.collection-run-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.collection-run-list > li {
+  border-bottom: 1px solid var(--border-0);
+}
+
+.collection-run-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) minmax(90px, auto) 72px 70px 16px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 24px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 0.75rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.collection-run-row:hover {
+  background: var(--surface-0);
+}
+
+.collection-run-list > li.open .collection-run-row {
+  background: var(--crust);
+}
+
+.collection-run-method {
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: var(--method-get);
+}
+
+.collection-run-method.method-post,
+.collection-run-method.method-patch {
+  color: var(--method-post);
+}
+
+.collection-run-method.method-put {
+  color: var(--method-put);
+}
+
+.collection-run-method.method-delete {
+  color: var(--method-delete);
+}
+
+.collection-run-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.collection-run-status {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.collection-run-status.status-ok {
+  color: var(--method-get);
+}
+
+.collection-run-status.status-tests-passed {
+  color: var(--test-pass);
+}
+
+.collection-run-status.status-tests-failed,
+.collection-run-status.status-redirect {
+  color: var(--method-put);
+}
+
+.collection-run-status.status-error,
+.collection-run-status.status-unknown {
+  color: var(--method-delete);
+}
+
+.collection-run-time,
+.collection-run-tests {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.collection-run-tests {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  justify-content: flex-end;
+}
+
+.collection-run-tests .test-result-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.collection-run-tests .test-result-dot.passed {
+  background: var(--test-pass);
+}
+
+.collection-run-tests .test-result-dot.failed {
+  background: var(--method-delete);
+}
+
+.collection-run-tests.muted,
+.collection-run-chevron {
+  color: var(--text-faint);
+}
+
+.collection-run-detail {
+  padding: 0 24px 14px;
+  background: var(--crust);
+}
+
+.collection-run-detail-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0 8px;
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+}
+
+.collection-run-url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.collection-run-detail-tabs {
+  display: flex;
+  gap: 16px;
+  border-bottom: 1px solid var(--border-0);
+}
+
+.collection-run-detail-tabs > button {
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-subtle);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.collection-run-detail-tabs > button.active {
+  color: var(--text);
+  border-bottom-color: var(--brand);
+}
+
+.collection-run-detail-tabs .tab-count {
+  margin-left: 4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--surface-1);
+  color: var(--text-muted);
+  font-size: 0.625rem;
+  line-height: 16px;
+  text-align: center;
+}
+
+.collection-run-detail-body {
+  padding-top: 10px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.collection-run-detail-body pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.collection-run-detail-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.collection-run-detail-body th,
+.collection-run-detail-body td {
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--border-0);
+  text-align: left;
+  vertical-align: top;
+}
+
+.collection-run-assertions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.75rem;
+}
+
+.collection-run-assertions li {
+  display: flex;
+  gap: 8px;
+}
+
+.collection-run-assertions li.pass {
+  color: var(--test-pass);
+}
+
+.collection-run-assertions li.fail {
+  color: var(--method-delete);
+}
+
+.collection-run-assertions li.muted {
+  color: var(--text-muted);
+}
+
+.collection-run-assertions p {
+  margin: 2px 0 0;
+  color: var(--text-subtle);
+  font-weight: 400;
+}

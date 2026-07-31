@@ -117,3 +117,14 @@ export function collectFolderPaths(items: PostmanItem[] | undefined): Set<ItemPa
   walk(items, null);
   return paths;
 }
+
+/** Count request items under a folder (or 1 if the node itself is a request). */
+export function countRequestsUnder(item: PostmanItem): number {
+  if (isRequest(item)) {
+    return 1;
+  }
+  if (!isFolder(item)) {
+    return 0;
+  }
+  return (item.item ?? []).reduce((sum, child) => sum + countRequestsUnder(child), 0);
+}

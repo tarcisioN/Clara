@@ -28,6 +28,9 @@ export type NewmanRunView = {
   command: string;
   stderr: string;
   error?: string;
+  /** All request executions from the Newman report. */
+  executions: NewmanExecutionView[];
+  /** Convenience: first execution (single-request runs). */
   execution: NewmanExecutionView | null;
   failures: Array<{ name: string; message: string }>;
 };
@@ -95,6 +98,68 @@ function urlToString(url: unknown): string {
   return '';
 }
 
+function mapExecution(
+  execution: NonNullable<NonNullable<NewmanJsonReport['run']>['executions']>[number]
+): NewmanExecutionView {
+  const response = execution.response ?? null;
+  const headers = (response?.header ?? [])
+    .filter((header) => typeof header?.key === 'string')
+    .map((header) => ({
+      key: header.key ?? '',
+      value: header.value ?? ''
+    }));
+
+  return {
+    name: execution.item?.name ?? 'Request',
+    method: (execution.request?.method ?? 'GET').toUpperCase(),
+    url: urlToString(execution.request?.url),
+    code: response?.code ?? null,
+    status: response?.status ?? '',
+    responseTime: response?.responseTime ?? null,
+    responseSize: response?.responseSize ?? null,
+    headers,
+    body: decodeStream(response?.stream),
+    assertions: (execution.assertions ?? []).map((assertion) => ({
+      name: assertion.assertion ?? 'assertion',
+      ok: !assertion.error,
+      error: assertion.error?.message
+    }))
+  };
+}
+
+/** Status color for the response toolbar / collection run rows. */
+export function executionStatusTone(
+  execution: Pick<NewmanExecutionView, 'code' | 'assertions'>
+): 'tests-passed' | 'tests-failed' | 'ok' | 'redirect' | 'error' | 'unknown' {
+  const total = execution.assertions.length;
+  const passed = execution.assertions.filter((assertion) => assertion.ok).length;
+  if (total > 0 && passed === total) {
+    return 'tests-passed';
+  }
+  if (
+    total > passed &&
+    execution.code != null &&
+    execution.code >= 200 &&
+    execution.code < 300
+  ) {
+    return 'tests-failed';
+  }
+  const code = execution.code;
+  if (code == null) {
+    return 'unknown';
+  }
+  if (code >= 200 && code < 300) {
+    return 'ok';
+  }
+  if (code >= 300 && code < 400) {
+    return 'redirect';
+  }
+  if (code >= 400) {
+    return 'error';
+  }
+  return 'unknown';
+}
+
 /** Normalize Newman `--reporter-json-export` output for the response pane. */
 export function parseNewmanJsonReport(
   raw: string,
@@ -110,25 +175,13 @@ export function parseNewmanJsonReport(
       command: meta.command,
       stderr: meta.stderr,
       error: 'Could not parse Newman JSON report',
+      executions: [],
       execution: null,
       failures: []
     };
   }
 
-  const execution = report.run?.executions?.[0];
-  const response = execution?.response ?? null;
-  const headers = (response?.header ?? [])
-    .filter((header) => typeof header?.key === 'string')
-    .map((header) => ({
-      key: header.key ?? '',
-      value: header.value ?? ''
-    }));
-
-  const assertions: NewmanAssertion[] = (execution?.assertions ?? []).map((assertion) => ({
-    name: assertion.assertion ?? 'assertion',
-    ok: !assertion.error,
-    error: assertion.error?.message
-  }));
+  const executions = (report.run?.executions ?? []).map(mapExecution);
 
   const failures = (report.run?.failures ?? []).map((failure) => ({
     name: failure.error?.test ?? failure.source?.name ?? failure.error?.name ?? 'failure',
@@ -144,20 +197,8 @@ export function parseNewmanJsonReport(
     command: meta.command,
     stderr: meta.stderr,
     error: runError,
-    execution: execution
-      ? {
-          name: execution.item?.name ?? 'Request',
-          method: (execution.request?.method ?? 'GET').toUpperCase(),
-          url: urlToString(execution.request?.url),
-          code: response?.code ?? null,
-          status: response?.status ?? '',
-          responseTime: response?.responseTime ?? null,
-          responseSize: response?.responseSize ?? null,
-          headers,
-          body: decodeStream(response?.stream),
-          assertions
-        }
-      : null,
+    executions,
+    execution: executions[0] ?? null,
     failures
   };
 }

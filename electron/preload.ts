@@ -24,8 +24,14 @@ const clara = {
   saveSession: (state: SessionState): Promise<SessionState> =>
     ipcRenderer.invoke('session:save', state),
   getSessionHome: (): Promise<string> => ipcRenderer.invoke('session:home'),
-  runNewman: (collectionJson: string): Promise<NewmanRunView> =>
-    ipcRenderer.invoke('newman:run', { collectionJson }),
+  runNewman: (
+    collectionJson: string,
+    options?: { folder?: string }
+  ): Promise<NewmanRunView> =>
+    ipcRenderer.invoke('newman:run', {
+      collectionJson,
+      folder: options?.folder
+    }),
   onCommand: (handler: (command: AppCommand) => void): (() => void) => {
     const listener = (_event: unknown, command: AppCommand) => {
       handler(command);
