@@ -1,10 +1,10 @@
 # Clara
 
-Editor leve de collections Postman versionadas no repositório.
+Lightweight editor for Postman collections versioned in the repository.
 
-- Schema em memória = JSON Postman (v2.1), sem conversão para outro formato
-- Persistência no mesmo arquivo da collection
-- Execução via Newman (`Send` / `⌘Enter`; assume `newman` no PATH)
+- In-memory schema = Postman JSON (v2.1), with no conversion to another format
+- Persistence to the same collection file
+- Execution via Newman (`Send` / `⌘Enter`; assumes `newman` on PATH)
 
 ## Setup
 
@@ -13,52 +13,52 @@ make install
 make dev
 ```
 
-| Target | O que faz |
+| Target | What it does |
 |--------|-----------|
 | `make install` | `npm install` |
 | `make dev` | Electron + Vite |
-| `make build` | Build de produção |
+| `make build` | Production build |
 | `make typecheck` | `tsc --noEmit` |
-| `make check` | Typecheck + todas as checks de etapa |
-| `make check-etapa0` | Skeleton open/save |
-| `make check-etapa1` | Árvore / paths |
-| `make check-etapa2` | Edição de method / URL |
-| `make check-etapa3` | Headers (key / value / disabled) |
-| `make check-etapa4` | Body (raw / urlencoded) |
-| `make check-etapa5` | Auth (bearer / basic / apikey) |
-| `make check-etapa6` | Query params (`url.query`) |
-| `make check-etapa7` | Scripts (`prerequest` / `test`) |
-| `make check-etapa8` | Newman run (temp collection / parse) |
+| `make check` | Typecheck + all stage checks |
+| `make check-stage0` | Skeleton open/save |
+| `make check-stage1` | Tree / paths |
+| `make check-stage2` | Method / URL editing |
+| `make check-stage3` | Headers (key / value / disabled) |
+| `make check-stage4` | Body (raw / urlencoded) |
+| `make check-stage5` | Auth (bearer / basic / apikey) |
+| `make check-stage6` | Query params (`url.query`) |
+| `make check-stage7` | Scripts (`prerequest` / `test`) |
+| `make check-stage8` | Newman run (temp collection / parse) |
 
-## Uso (Send / Newman)
+## Usage (Send / Newman)
 
-1. `make dev` — requer `newman` no `PATH` (`npm i -g newman`)
-2. Abrir um request → **Send** ou `⌘/Ctrl+Enter`
-3. Clara grava uma collection temporária de 1 request em `~/.clara/runs/` e chama Newman
-4. O arquivo da collection no repo **não** é modificado pelo run
-5. Painel **Response**: status, tempo, size, Body / Headers / Test results
-6. Clicar na collection ou numa pasta abre uma aba de Run
-7. **Run collection** / **Run folder** (`newman --folder <nome>`)
+1. `make dev` — requires `newman` on `PATH` (`npm i -g newman`)
+2. Open a request → **Send** or `⌘/Ctrl+Enter`
+3. Clara writes a temporary 1-request collection under `~/.clara/runs/` and invokes Newman
+4. The collection file in the repo is **not** modified by the run
+5. **Response** panel: status, time, size, Body / Headers / Test results
+6. Clicking the collection or a folder opens a Run tab
+7. **Run collection** / **Run folder** (`newman --folder <name>`)
 
-## Sessão (`~/.clara`)
+## Session (`~/.clara`)
 
-Clara guarda metadados de sessão em `~/.clara/session.json` (collection aberta,
-abas, pasta expandida). Edits não salvos **não** entram nesse arquivo — só o
-JSON da collection no disco.
+Clara stores session metadata in `~/.clara/session.json` (open collection,
+tabs, expanded folder). Unsaved edits do **not** go into that file — only the
+on-disk collection JSON does.
 
-## Atalhos
+## Shortcuts
 
-| Atalho | Ação |
+| Shortcut | Action |
 |--------|------|
-| `⌘/Ctrl+O` | Abrir collection |
-| `⌘/Ctrl+S` | Salvar |
-| `⌘/Ctrl+W` | Fechar aba ativa |
-| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Próxima / anterior aba |
-| `⌘/Ctrl+1…9` | Ir para a aba N |
+| `⌘/Ctrl+O` | Open collection |
+| `⌘/Ctrl+S` | Save |
+| `⌘/Ctrl+W` | Close active tab |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Next / previous tab |
+| `⌘/Ctrl+1…9` | Go to tab N |
 | `⌘/Ctrl+Enter` | Send (Newman) |
-| Arrastar aba | Reordenar |
-| Arrastar request da árvore → barra | Abrir aba |
+| Drag tab | Reorder |
+| Drag request from tree → bar | Open tab |
 
-## Progresso
+## Progress
 
-Checklist do primeiro MVP: [docs/MVP.md](./docs/MVP.md)
+First MVP checklist: [docs/MVP.md](./docs/MVP.md)

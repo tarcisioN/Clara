@@ -1,4 +1,4 @@
-.PHONY: help install dev build typecheck check check-etapa0 check-etapa1 check-etapa2 check-etapa3 check-etapa4 check-etapa5 check-etapa6 check-etapa7 check-etapa8 check-etapa9 check-etapa10 check-etapa11
+.PHONY: help install dev build typecheck check check-stage0 check-stage1 check-stage2 check-stage3 check-stage4 check-stage5 check-stage6 check-stage7 check-stage8 check-stage9 check-stage10 check-stage11
 
 help:
 	@echo "Clara — available targets:"
@@ -6,19 +6,19 @@ help:
 	@echo "  make dev           Start Electron + Vite"
 	@echo "  make build         Production build"
 	@echo "  make typecheck     TypeScript, no emit"
-	@echo "  make check         Typecheck + all etapa checks"
-	@echo "  make check-etapa0  Skeleton (open/save/parse)"
-	@echo "  make check-etapa1  Tree (paths / folder vs request)"
-	@echo "  make check-etapa2  Request editing (method / url)"
-	@echo "  make check-etapa3  Headers (key / value / disabled)"
-	@echo "  make check-etapa4  Body (raw / urlencoded)"
-	@echo "  make check-etapa5  Auth (bearer / basic / apikey)"
-	@echo "  make check-etapa6  Query params (url.query)"
-	@echo "  make check-etapa7  Scripts (prerequest / test)"
-	@echo "  make check-etapa8  Newman run (temp collection / parse)"
-	@echo "  make check-etapa9  Variables + tree structure (rename/delete/duplicate)"
-	@echo "  make check-etapa10 Multi-collection (tab keys / session v3→v4)"
-	@echo "  make check-etapa11 Environments (parse/edit/dirty / session v4)"
+	@echo "  make check         Typecheck + all stage checks"
+	@echo "  make check-stage0  Skeleton (open/save/parse)"
+	@echo "  make check-stage1  Tree (paths / folder vs request)"
+	@echo "  make check-stage2  Request editing (method / url)"
+	@echo "  make check-stage3  Headers (key / value / disabled)"
+	@echo "  make check-stage4  Body (raw / urlencoded)"
+	@echo "  make check-stage5  Auth (bearer / basic / apikey)"
+	@echo "  make check-stage6  Query params (url.query)"
+	@echo "  make check-stage7  Scripts (prerequest / test)"
+	@echo "  make check-stage8  Newman run (temp collection / parse)"
+	@echo "  make check-stage9  Variables + tree structure (rename/delete/duplicate)"
+	@echo "  make check-stage10 Multi-collection (tab keys / session v3→v4)"
+	@echo "  make check-stage11 Environments (parse/edit/dirty / session v4)"
 
 install:
 	npm install
@@ -32,40 +32,40 @@ build:
 typecheck:
 	npm run typecheck
 
-check: typecheck check-etapa0 check-etapa1 check-etapa2 check-etapa3 check-etapa4 check-etapa5 check-etapa6 check-etapa7 check-etapa8 check-etapa9 check-etapa10 check-etapa11
+check: typecheck check-stage0 check-stage1 check-stage2 check-stage3 check-stage4 check-stage5 check-stage6 check-stage7 check-stage8 check-stage9 check-stage10 check-stage11
 
-check-etapa0:
-	npm run check:etapa0
+check-stage0:
+	npm run check:stage0
 
-check-etapa1:
-	npm run check:etapa1
+check-stage1:
+	npm run check:stage1
 
-check-etapa2:
-	npm run check:etapa2
+check-stage2:
+	npm run check:stage2
 
-check-etapa3:
-	npm run check:etapa3
+check-stage3:
+	npm run check:stage3
 
-check-etapa4:
-	npm run check:etapa4
+check-stage4:
+	npm run check:stage4
 
-check-etapa5:
-	npm run check:etapa5
+check-stage5:
+	npm run check:stage5
 
-check-etapa6:
-	npm run check:etapa6
+check-stage6:
+	npm run check:stage6
 
-check-etapa7:
-	npm run check:etapa7
+check-stage7:
+	npm run check:stage7
 
-check-etapa8:
-	npm run check:etapa8
+check-stage8:
+	npm run check:stage8
 
-check-etapa9:
-	npm run check:etapa9
+check-stage9:
+	npm run check:stage9
 
-check-etapa10:
-	npm run check:etapa10
+check-stage10:
+	npm run check:stage10
 
-check-etapa11:
-	npm run check:etapa11
+check-stage11:
+	npm run check:stage11

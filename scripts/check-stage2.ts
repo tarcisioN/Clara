@@ -109,4 +109,4 @@ const serialized = serializeCollection(editedMethod);
 assert.match(serialized, /\n$/);
 assert.ok(JSON.parse(serialized));
 
-console.log('etapa2 checks passed');
+console.log('stage2 checks passed');

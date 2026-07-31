@@ -92,4 +92,4 @@ assert.deepEqual(serialized.item[1].event[0].script.exec, [
 ]);
 assert.equal(serialized.item[0].item[0].event[0].listen, 'prerequest');
 
-console.log('etapa7 checks passed');
+console.log('stage7 checks passed');

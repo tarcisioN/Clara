@@ -143,4 +143,4 @@ assert.equal(
   false
 );
 
-console.log('check-etapa9: ok');
+console.log('check-stage9: ok');

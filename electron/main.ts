@@ -199,7 +199,7 @@ app.whenReady().then(() => {
   if (process.platform === 'darwin' && iconPath) {
     const image = nativeImage.createFromPath(iconPath);
     if (!image.isEmpty()) {
-      app.dock.setIcon(image);
+      app.dock?.setIcon(image);
     }
   }
 

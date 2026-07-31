@@ -20,7 +20,7 @@ import {
 // Tab identity survives collection paths with separators, spaces and unicode.
 const awkwardPaths = [
   '/Users/dev/apis/prod.postman_collection.json',
-  '/Users/dev/my apis/a:b/coleção.json',
+  '/Users/dev/测试/my apis/a:b/collection.json',
   'C:\\Users\\dev\\api%20v2\\team.json',
   '/tmp/weird#name?v=1.json'
 ];
@@ -68,7 +68,7 @@ assert.equal(isCollectionDirty(cleaned), false);
 assert.equal(cleaned.expanded.has('0.1'), true, 'clearing dirty keeps expanded state');
 
 // Session v3: multiple collections round-trip, and v2 migrates into one entry.
-const home = mkdtempSync(path.join(tmpdir(), 'clara-etapa10-'));
+const home = mkdtempSync(path.join(tmpdir(), 'clara-stage10-'));
 const previousHome = process.env.HOME;
 process.env.HOME = home;
 try {
@@ -134,4 +134,4 @@ try {
   rmSync(home, { recursive: true, force: true });
 }
 
-console.log('etapa10 checks passed');
+console.log('stage10 checks passed');

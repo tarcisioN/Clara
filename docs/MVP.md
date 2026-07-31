@@ -1,306 +1,306 @@
-# Clara — MVP 1 (editar collection Postman)
+# Clara — MVP 1 (edit Postman collection)
 
-Objetivo: abrir um `*.postman_collection.json` do repo, editar HTTP básico em memória no schema Postman, salvar no mesmo arquivo. Sem Newman nesta fase.
+Goal: open a `*.postman_collection.json` from the repo, edit basic HTTP in memory on the Postman schema, save to the same file. No Newman in this phase.
 
-**Fora de escopo do MVP 1:** drag-drop, scripts/tests, OAuth avançado, GraphQL/gRPC, autosave, workspaces, sync cloud, multipart com arquivo.
+**Out of scope for MVP 1:** drag-drop, scripts/tests, advanced OAuth, GraphQL/gRPC, autosave, workspaces, cloud sync, multipart with file.
 
-**Como marcar progresso:** ao concluir requisito + validação, troque `- [ ]` por `- [x]`.
-
----
-
-## Etapa 0 — Skeleton
-
-App mínimo que lê e grava o JSON sem alterar a estrutura.
-
-### Requisitos
-- [x] Projeto Electron + React (ou equivalente) inicializado em `clara`
-- [x] Abrir arquivo `.json` via diálogo / path
-- [x] Parsear como collection Postman v2.1 (validação mínima de `info` + `item`)
-- [x] Exibir `info.name` e contagem de requests/folders
-- [x] Salvar o objeto em memória de volta no mesmo path
-- [x] Controle de whitespace/formatação definido (ex.: 2 spaces, newline final) para diffs previsíveis
-
-### Validação
-- [x] Abrir collection real do repo de uso _(fixture `fixtures/smoke.postman_collection.json`; validar também com a collection do seu repo via UI)_
-- [x] Salvar sem editar → `git diff` vazio (ou só newline/format acordado) _(save com `dirty: no` regrava o `raw` original)_
-- [x] JSON continua válido para Postman/Newman _(smoke: `npm run check:etapa0`)_
+**How to mark progress:** when a requirement + validation is done, change `- [ ]` to `- [x]`.
 
 ---
 
-## Etapa 1 — Árvore
+## Stage 0 — Skeleton
 
-Sidebar navegável com `item[]` aninhado.
+Minimal app that reads and writes the JSON without changing its structure.
 
-### Requisitos
-- [x] Renderizar pastas e requests a partir de `item[]`
-- [x] Expandir/colher pasta
-- [x] Selecionar request (estado: request ativo)
-- [x] Distinção visual pasta vs request
-- [x] Sem drag-drop, rename ou create/delete nesta etapa
+### Requirements
+- [x] Electron + React project (or equivalent) initialized in `clara`
+- [x] Open a `.json` file via dialog / path
+- [x] Parse as Postman collection v2.1 (minimal validation of `info` + `item`)
+- [x] Display `info.name` and request/folder counts
+- [x] Save the in-memory object back to the same path
+- [x] Defined whitespace/formatting control (e.g. 2 spaces, trailing newline) for predictable diffs
 
-### Validação
-- [x] Collection grande do repo navega sem travar _(smoke fixture + UI; validar collection real via `make dev`)_
-- [x] Seleção aponta para o nó correto no objeto em memória _(paths `0`, `0.0`, `1` — `make check-etapa1`)_
-- [x] Reload do arquivo reconstrói a mesma árvore _(reabrir via Open reconstrói expanded + tree)_
-
----
-
-## Etapa 2 — Request shell (method + URL)
-
-Painel do request selecionado.
-
-### Requisitos
-- [x] Exibir e editar `request.method`
-- [x] Exibir e editar URL:
-  - [x] Se `request.url` for string → editar string
-  - [x] Se for objeto → editar pelo menos `url.raw` (e manter o resto intacto no save)
-- [x] Mudanças refletem no objeto Postman em memória
-- [x] Ação Save explícita grava o arquivo
-
-### Validação
-- [x] Alterar method/URL → save → reopen → valores preservados
-- [x] Campos não editados do `url` (host, path, query, variable) não são apagados quando só `raw` muda (ou política documentada e testada)
-- [x] `newman run` (CLI) na collection salva ainda reconhece o request _(members re-derivados do raw; ver política abaixo)_
-
-### Política de URL (decisão desta etapa)
-
-O SDK do Postman — e portanto o Newman — resolve o request pelos **membros estruturados**
-(`protocol`, `host`, `port`, `path`, `query`), não por `raw`. Editar só `raw` produziria um
-arquivo que a UI mostra de um jeito e o Newman executa de outro.
-
-Ao editar a URL, Clara reescreve `raw` **e** re-deriva os membros. É preservado o que `raw` não
-consegue expressar:
-
-- `variable` (path variables como `:id`)
-- query params com `disabled: true`
-
-`{{variáveis}}` sobrevivem ao split de host, inclusive com pontos dentro (`{{base.url}}`).
-
-Requests gravados como string (`"request": "https://..."`) continuam string quando só a URL muda;
-editar o **method** expande para objeto, porque a forma string implica `GET`.
+### Validation
+- [x] Open a real collection from the usage repo _(fixture `fixtures/smoke.postman_collection.json`; also validate with your repo's collection via UI)_
+- [x] Save without editing → empty `git diff` (or only the agreed newline/format) _(save with `dirty: no` rewrites the original `raw`)_
+- [x] JSON remains valid for Postman/Newman _(smoke: `npm run check:stage0`)_
 
 ---
 
-## Etapa 3 — Headers
+## Stage 1 — Tree
 
-Tabela no shape Postman.
+Navigable sidebar with nested `item[]`.
 
-### Requisitos
-- [x] Listar `request.header[]` (`key`, `value`, `disabled`, `description` se existir)
-- [x] Adicionar header
-- [x] Editar key/value
+### Requirements
+- [x] Render folders and requests from `item[]`
+- [x] Expand/collapse folder
+- [x] Select request (state: active request)
+- [x] Visual distinction between folder and request
+- [x] No drag-drop, rename, or create/delete in this stage
+
+### Validation
+- [x] Large collection from the repo navigates without freezing _(smoke fixture + UI; validate real collection via `make dev`)_
+- [x] Selection points to the correct node in the in-memory object _(paths `0`, `0.0`, `1` — `make check-stage1`)_
+- [x] Reloading the file rebuilds the same tree _(reopening via Open rebuilds expanded + tree)_
+
+---
+
+## Stage 2 — Request shell (method + URL)
+
+Panel for the selected request.
+
+### Requirements
+- [x] Display and edit `request.method`
+- [x] Display and edit URL:
+  - [x] If `request.url` is a string → edit the string
+  - [x] If it is an object → edit at least `url.raw` (and keep the rest intact on save)
+- [x] Changes are reflected in the in-memory Postman object
+- [x] Explicit Save action writes the file
+
+### Validation
+- [x] Change method/URL → save → reopen → values preserved
+- [x] Unedited `url` fields (host, path, query, variable) are not deleted when only `raw` changes (or document and test the policy)
+- [x] `newman run` (CLI) on the saved collection still recognizes the request _(members re-derived from raw; see policy below)_
+
+### URL policy (decision for this stage)
+
+The Postman SDK — and therefore Newman — resolves the request from the **structured members**
+(`protocol`, `host`, `port`, `path`, `query`), not from `raw`. Editing only `raw` would produce a
+file that the UI shows one way and Newman executes another.
+
+When editing the URL, Clara rewrites `raw` **and** re-derives the members. What `raw` cannot
+express is preserved:
+
+- `variable` (path variables such as `:id`)
+- query params with `disabled: true`
+
+`{{variables}}` survive the host split, including dots inside (`{{base.url}}`).
+
+Requests stored as a string (`"request": "https://..."`) remain a string when only the URL changes;
+editing the **method** expands to an object, because the string form implies `GET`.
+
+---
+
+## Stage 3 — Headers
+
+Table in the Postman shape.
+
+### Requirements
+- [x] List `request.header[]` (`key`, `value`, `disabled`, `description` if present)
+- [x] Add header
+- [x] Edit key/value
 - [x] Toggle `disabled`
-- [x] Remover header
-- [x] Não inventar campos fora do schema Postman
+- [x] Remove header
+- [x] Do not invent fields outside the Postman schema
 
-### Validação
-- [x] Edit → save → reopen → headers idênticos _(imutável + serialize; `make check-etapa3`)_
-- [x] Header com `disabled: true` preservado _(omitido quando enabled; `disabled: true` quando off)_
-- [x] Diff no git mostra só o que foi editado _(description e campos extras do header são preservados)_
-
----
-
-## Etapa 4 — Body
-
-Modos usados no fluxo real.
-
-### Requisitos
-- [x] Ler/escrever `request.body.mode`
-- [x] Suporte `raw` (editor texto/JSON)
-- [x] Suporte `urlencoded` (lista key/value/disabled)
-- [ ] (Opcional MVP) `formdata` sem file upload _(adiado)_
-- [x] Preservar `body.options` / language quando existirem e não forem editados
-
-### Validação
-- [x] Collection com bodies reais do repo: save não corrompe body _(fixture + `make check-etapa4`)_
-- [x] Trocar conteúdo `raw` → reopen OK
-- [x] Modos não usados na UI permanecem intactos no JSON _(troca de mode preserva payloads irmãos; graphql fica read-only)_
-
-### Política de body
-
-Trocar `mode` **não apaga** `raw` / `urlencoded` / `formdata` / `graphql` / `options`. Só muda
-qual payload o Newman envia. Modos fora de `none|raw|urlencoded` aparecem como read-only até
-você escolher um modo editável.
+### Validation
+- [x] Edit → save → reopen → identical headers _(immutable + serialize; `make check-stage3`)_
+- [x] Header with `disabled: true` preserved _(omitted when enabled; `disabled: true` when off)_
+- [x] Git diff shows only what was edited _(header description and extra fields are preserved)_
 
 ---
 
-## Etapa 5 — Auth básico
+## Stage 4 — Body
 
-Só o necessário para o fluxo atual.
+Modes used in the real flow.
 
-### Requisitos
-- [x] Suportar `request.auth` nos tipos: `bearer`, `basic`, `apikey` (marque os que forem implementados)
+### Requirements
+- [x] Read/write `request.body.mode`
+- [x] Support `raw` (text/JSON editor)
+- [x] Support `urlencoded` (key/value/disabled list)
+- [ ] (Optional MVP) `formdata` without file upload _(deferred)_
+- [x] Preserve `body.options` / language when they exist and are not edited
+
+### Validation
+- [x] Collection with real bodies from the repo: save does not corrupt body _(fixture + `make check-stage4`)_
+- [x] Change `raw` content → reopen OK
+- [x] Modes unused in the UI remain intact in the JSON _(mode switch preserves sibling payloads; graphql stays read-only)_
+
+### Body policy
+
+Switching `mode` does **not delete** `raw` / `urlencoded` / `formdata` / `graphql` / `options`. It only changes
+which payload Newman sends. Modes outside `none|raw|urlencoded` appear as read-only until
+you choose an editable mode.
+
+---
+
+## Stage 5 — Basic auth
+
+Only what is needed for the current flow.
+
+### Requirements
+- [x] Support `request.auth` for types: `bearer`, `basic`, `apikey` (check off those implemented)
   - [x] bearer
   - [x] basic
   - [x] apikey
-- [x] Editar no formato Postman (`type` + array de `{key, value}`)
-- [x] Permitir `auth: null` / herança de pasta sem destruir auth de pasta/collection
+- [x] Edit in Postman format (`type` + array of `{key, value}`)
+- [x] Allow `auth: null` / folder inheritance without destroying folder/collection auth
 
-### Validação
-- [x] Token/credencial salvos no JSON no formato Postman _(arrays `bearer`/`basic`/`apikey` com `key`/`value`/`type`)_
-- [x] `newman run` autentica como antes (smoke no CLI) _(shape idêntico ao Postman; smoke automatizado no check)_
-- [x] Request sem auth permanece sem auth _(Inherit remove `request.auth`)_
+### Validation
+- [x] Token/credential saved in JSON in Postman format _(arrays `bearer`/`basic`/`apikey` with `key`/`value`/`type`)_
+- [x] `newman run` authenticates as before (CLI smoke) _(shape identical to Postman; automated smoke in the check)_
+- [x] Request without auth remains without auth _(Inherit removes `request.auth`)_
 
-### Política de auth
+### Auth policy
 
 | UI | JSON |
 |----|------|
-| Inherit auth | sem `request.auth` → herda pasta/collection |
+| Inherit auth | no `request.auth` → inherits folder/collection |
 | No auth | `{ "type": "noauth" }` |
 | Bearer / Basic / API key | `{ "type": "...", "<type>": [ { key, value, type } ] }` |
 
-Trocar o tipo **não apaga** arrays irmãos (`bearer` permanece ao mudar para `basic`). Auth de pasta/collection não é editável nesta etapa — só preservado.
+Changing the type does **not delete** sibling arrays (`bearer` remains when switching to `basic`). Folder/collection auth is not editable in this stage — only preserved.
 
 ---
 
-## Etapa 6 — Query params
+## Stage 6 — Query params
 
-### Requisitos
-- [x] Quando `url` for objeto: editar `url.query[]` (`key`, `value`, `disabled`)
+### Requirements
+- [x] When `url` is an object: edit `url.query[]` (`key`, `value`, `disabled`)
 - [x] Add / edit / toggle / remove
-- [x] Política clara se `url` for string (ex.: não oferecer query editor até converter, ou só editar via `raw`)
+- [x] Clear policy when `url` is a string (e.g. do not offer the query editor until conversion, or edit only via `raw`)
 
-### Validação
-- [x] Params não corrompem `url.raw` / `host` / `path` (ou sync documentado e testado)
-- [x] Save → reopen → query idêntica _(imutável + serialize; `make check-etapa6`)_
+### Validation
+- [x] Params do not corrupt `url.raw` / `host` / `path` (or document and test the sync)
+- [x] Save → reopen → identical query _(immutable + serialize; `make check-stage6`)_
 
-### Política de query
+### Query policy
 
-- URL **objeto**: tabela edita `query[]` e **reconstrói `raw`** a partir dos membros (params
-  `disabled` ficam em `query[]` mas saem do `raw`). `host` / `path` / `variable` intactos.
-- URL **string**: sem tabela; dá para editar query no campo URL, ou clicar
-  **Convert URL to object** (promove para objeto estruturado) e usar a tabela.
-
----
-
-## Etapa 7 — Scripts (prerequest / test)
-
-### Requisitos
-- [x] Tabs **Pre-request** e **Tests** no request pane
-- [x] Editar `item.event[]` com `listen: prerequest` e `listen: test`
-- [x] `script.exec[]` ↔ textarea (join/split por `\n`)
-- [x] Preservar campos irmãos (`id`, `type`, outros events)
-- [x] Indicador na tab quando o script tem conteúdo
-
-### Validação
-- [x] Save → reopen → scripts idênticos _(imutável + serialize; `make check-etapa7`)_
-- [x] Request sem `event` ganha entries ao editar; siblings intactos
+- URL **object**: table edits `query[]` and **rebuilds `raw`** from the members (`disabled`
+  params stay in `query[]` but leave `raw`). `host` / `path` / `variable` intact.
+- URL **string**: no table; you can edit query in the URL field, or click
+  **Convert URL to object** (promotes to structured object) and use the table.
 
 ---
 
-## Etapa UX — Shell desktop (obrigatória)
+## Stage 7 — Scripts (prerequest / test)
 
-A UI deve ter a densidade e o fluxo de trabalho de um API client desktop, não aparência de
-formulário genérico.
+### Requirements
+- [x] **Pre-request** and **Tests** tabs in the request pane
+- [x] Edit `item.event[]` with `listen: prerequest` and `listen: test`
+- [x] `script.exec[]` ↔ textarea (join/split by `\n`)
+- [x] Preserve sibling fields (`id`, `type`, other events)
+- [x] Indicator on the tab when the script has content
 
-### Requisitos
-- [x] Janela inteira: title bar compacta + sidebar + workspace + status bar
-- [x] Sidebar de collection densa, com estados hover/selected e cores por método
-- [x] Barra com múltiplas tabs de request abertas (abrir, focar, fechar)
-- [x] Dirty state por request, não global — cada tab mostra o próprio indicador
-- [x] Arrastar request da árvore para a barra de tabs abre uma nova tab
-- [x] Nome longo na tab desvanece no final em vez de cortar com reticências
-- [x] Sessão persistida em `~/.clara/session.json` (collections, abas, expanded)
-- [x] Atalhos: Open/Save/Close tab/Next/Prev/Tab 1–9
-- [x] Arrastar abas para reordenar
+### Validation
+- [x] Save → reopen → identical scripts _(immutable + serialize; `make check-stage7`)_
+- [x] Request without `event` gains entries on edit; siblings intact
+
+---
+
+## UX Stage — Desktop shell (required)
+
+The UI must have the density and workflow of a desktop API client, not the look of a
+generic form.
+
+### Requirements
+- [x] Full window: compact title bar + sidebar + workspace + status bar
+- [x] Dense collection sidebar, with hover/selected states and colors by method
+- [x] Bar with multiple open request tabs (open, focus, close)
+- [x] Dirty state per request, not global — each tab shows its own indicator
+- [x] Dragging a request from the tree onto the tab bar opens a new tab
+- [x] Long tab names fade at the end instead of truncating with ellipsis
+- [x] Session persisted in `~/.clara/session.json` (collections, tabs, expanded)
+- [x] Shortcuts: Open/Save/Close tab/Next/Prev/Tab 1–9
+- [x] Drag tabs to reorder
 - [x] Toolbar method + URL + Send (Newman)
-- [x] Tabs internas `Params | Body | Headers | Auth | Pre-request | Tests`
-- [x] Paleta light (laranja de marca, superfícies neutras, bordas discretas)
-- [x] Tabelas key/value compactas, sem cards empilhados
-- [x] Chrome nativo integrado no macOS (`hiddenInset`)
+- [x] Inner tabs `Params | Body | Headers | Auth | Pre-request | Tests`
+- [x] Light palette (brand orange, neutral surfaces, subtle borders)
+- [x] Compact key/value tables, no stacked cards
+- [x] Native chrome integrated on macOS (`hiddenInset`)
 
-### Validação visual
-- [ ] Fluxo principal utilizável sem scroll vertical entre Params/Body/Headers/Auth
-- [ ] Hierarquia visual clara: collection → request tab → request toolbar → pane
-- [ ] Densidade da sidebar e das tabelas adequada para collection real
-- [ ] Open/Save e dirty state fáceis de localizar
+### Visual validation
+- [ ] Main flow usable without vertical scroll between Params/Body/Headers/Auth
+- [ ] Clear visual hierarchy: collection → request tab → request toolbar → pane
+- [ ] Sidebar and table density adequate for a real collection
+- [ ] Open/Save and dirty state easy to locate
 
 ---
 
-## Etapa 8 — Environments (opcional no MVP 1)
+## Stage 8 — Environments (optional in MVP 1)
 
-Pode ficar para um mini-MVP 1.1 se atrasar o resto.
+May slip to a mini-MVP 1.1 if the rest is delayed.
 
-### Requisitos
-- [x] Abrir `.postman_environment.json` separado
-- [x] Listar `values[]` (key, value, enabled)
-- [x] Seletor de environment ativo
-- [ ] (Opcional) preview de `{{var}}` na URL — interpolação real fica com Newman
+### Requirements
+- [x] Open a separate `.postman_environment.json`
+- [x] List `values[]` (key, value, enabled)
+- [x] Active environment selector
+- [ ] (Optional) `{{var}}` preview in the URL — real interpolation stays with Newman
 
-### Validação
-- [x] Env do repo carrega e valores batem com Postman
-- [x] Save do env (se editável) não corrompe o arquivo
+### Validation
+- [x] Env from the repo loads and values match Postman
+- [x] Env save (if editable) does not corrupt the file
 
 ---
 
 ## Definition of Done — MVP 1
 
-- [ ] Etapas 0–6 concluídas (7 opcional)
-- [ ] Etapa UX validada
-- [ ] Fluxo: abrir collection do repo → editar method/URL/headers/body/auth/query → save
-- [ ] Diffs git legíveis; sem metadados inventados fora do schema Postman
-- [ ] Smoke: `newman run <collection.json>` na collection editada funciona no terminal
-- [ ] README atualizado com como abrir/salvar
+- [ ] Stages 0–6 completed (7 optional)
+- [ ] UX stage validated
+- [ ] Flow: open collection from the repo → edit method/URL/headers/body/auth/query → save
+- [ ] Readable git diffs; no invented metadata outside the Postman schema
+- [ ] Smoke: `newman run <collection.json>` on the edited collection works in the terminal
+- [ ] README updated with how to open/save
 
 ---
 
-## MVP 2 — Run com Newman
+## MVP 2 — Run with Newman
 
-Pressuposto: `newman` está no `PATH` do usuário. Ajuda de instalação fica para depois.
+Assumption: `newman` is on the user's `PATH`. Installation help comes later.
 
-### Etapa R0 — Send de um request
-- [x] Botão **Send** habilitado (atalho `⌘/Ctrl+Enter`)
-- [x] Montar collection temporária com **1 item** (estado em memória, não o arquivo do repo)
-- [x] Copiar `collection.variable` / `collection.auth`; se o request herda auth de pasta, materializar no temp
-- [x] Escrever em `~/.clara/runs/`, spawn `newman run … --reporters json`
-- [x] Collection do repo **não** é alterada pelo run
-- [x] Painel de response: status, tempo, size, headers, body
-- [x] Falhas / stderr do Newman visíveis
-- [x] `make check-etapa8`
+### Stage R0 — Send a single request
+- [x] **Send** button enabled (shortcut `⌘/Ctrl+Enter`)
+- [x] Build a temporary collection with **1 item** (in-memory state, not the repo file)
+- [x] Copy `collection.variable` / `collection.auth`; if the request inherits folder auth, materialize it in the temp
+- [x] Write under `~/.clara/runs/`, spawn `newman run … --reporters json`
+- [x] Repo collection is **not** altered by the run
+- [x] Response panel: status, time, size, headers, body
+- [x] Newman failures / stderr visible
+- [x] `make check-stage8`
 
-### Etapa R1 — Collection / folder run
-- [x] Clicar na collection abre uma aba (Run collection)
-- [x] Clicar numa pasta abre uma aba (Run folder via Newman `--folder`)
-- [x] Lista de resultados por request (status, tempo, testes)
-- [x] Expandir request para Body / Headers / Tests
-- [x] `-e` com environment aberto
-- [ ] Detectar Newman ausente e orientar instalação
+### Stage R1 — Collection / folder run
+- [x] Clicking the collection opens a tab (Run collection)
+- [x] Clicking a folder opens a tab (Run folder via Newman `--folder`)
+- [x] Results list per request (status, time, tests)
+- [x] Expand request for Body / Headers / Tests
+- [x] `-e` with open environment
+- [ ] Detect missing Newman and guide installation
 
-### Etapa R2 — Variables + explorer context menu
-- [x] Mostrar/editar `variable[]` nas abas de collection e pasta (herança para requests filhos)
-- [x] Single-request Newman mescla variables de collection + pastas ancestrais
-- [x] Right-click na exploração: collection, pastas e requests
-- [x] Ações: Run, Rename, Delete (collection = Close), Duplicate (pasta/request)
-- [x] Dirty dot nas abas COL / DIR
-- [x] Menu de contexto nas abas (New / Duplicate / Close / Reveal)
-- [x] Botão `···` na exploração + colapsar collection
-- [x] Expand all / Collapse all no menu da collection
-- [x] `make check-etapa9`
+### Stage R2 — Variables + explorer context menu
+- [x] Show/edit `variable[]` on collection and folder tabs (inheritance for child requests)
+- [x] Single-request Newman merges variables from collection + ancestor folders
+- [x] Right-click in the explorer: collection, folders, and requests
+- [x] Actions: Run, Rename, Delete (collection = Close), Duplicate (folder/request)
+- [x] Dirty dot on COL / DIR tabs
+- [x] Context menu on tabs (New / Duplicate / Close / Reveal)
+- [x] `···` button in the explorer + collapse collection
+- [x] Expand all / Collapse all in the collection menu
+- [x] `make check-stage9`
 
-### Etapa R3 — Múltiplas collections abertas
-- [x] Sidebar lista N collections abertas; botão **+** no título da seção abre mais uma
-- [x] Abrir uma collection **adiciona** — não fecha nem limpa as abas das outras
-- [x] Reabrir o mesmo path só foca a collection já aberta (não relê do disco)
-- [x] Estado de UI por collection (`expanded`, `collectionExpanded`, dirty) em `src/workspace/collectionUi.ts`
-- [x] Toda aba carrega `collectionPath`; `tabKey` codifica o path com `encodeURIComponent`
-- [x] Save grava a collection da aba ativa (fallback: primeira suja); dirty só dela é limpo
-- [x] Fechar collection (menu de contexto → Close) remove collection, UI state, abas e runs — confirma se suja
-- [x] Titlebar mostra dirty se **qualquer** collection estiver suja
-- [x] Runs de request indexados por `requestRunKey(collectionPath, path)`; runs de escopo por `tabKey`
-- [x] Drag da árvore para a barra de abas leva `{ collectionPath, path }` no payload
-- [x] `make check-etapa10`
+### Stage R3 — Multiple open collections
+- [x] Sidebar lists N open collections; **+** button in the section title opens another
+- [x] Opening a collection **adds** — does not close or clear the other collections' tabs
+- [x] Reopening the same path only focuses the already-open collection (does not re-read from disk)
+- [x] Per-collection UI state (`expanded`, `collectionExpanded`, dirty) in `src/workspace/collectionUi.ts`
+- [x] Every tab carries `collectionPath`; `tabKey` encodes the path with `encodeURIComponent`
+- [x] Save writes the active tab's collection (fallback: first dirty); only that one's dirty flag is cleared
+- [x] Closing a collection (context menu → Close) removes collection, UI state, tabs, and runs — confirms if dirty
+- [x] Title bar shows dirty if **any** collection is dirty
+- [x] Request runs indexed by `requestRunKey(collectionPath, path)`; scope runs by `tabKey`
+- [x] Tree drag onto the tab bar carries `{ collectionPath, path }` in the payload
+- [x] `make check-stage10`
 
-### Etapa R4 — Environments + sidebar
-- [x] Seção Environments na sidebar (collapse independente + Collections)
-- [x] Largura da sidebar redimensionável (220–520px), persistida na sessão
-- [x] Abrir/editar/salvar `.postman_environment.json`; aba ENV; dirty semântico
-- [x] Environment ativo global (persistido); Newman `-e` com estado em memória
-- [x] Sessão v4 (`openedEnvironments`, `activeEnvironmentPath`, `sidebar`)
-- [x] `make check-etapa11`
+### Stage R4 — Environments + sidebar
+- [x] Environments section in the sidebar (independent collapse + Collections)
+- [x] Resizable sidebar width (220–520px), persisted in the session
+- [x] Open/edit/save `.postman_environment.json`; ENV tab; semantic dirty
+- [x] Global active environment (persisted); Newman `-e` with in-memory state
+- [x] Session v4 (`openedEnvironments`, `activeEnvironmentPath`, `sidebar`)
+- [x] `make check-stage11`
 
-### Sessão v4
+### Session v4
 
-`~/.clara/session.json` passou a guardar environments e layout da sidebar:
+`~/.clara/session.json` now stores environments and sidebar layout:
 
 ```
 { "version": 4,
@@ -312,33 +312,33 @@ Pressuposto: `newman` está no `PATH` do usuário. Ajuda de instalação fica pa
   "sidebar": { "collectionsExpanded", "environmentsExpanded", "width" } }
 ```
 
-Sessões v1–v3 migram automaticamente para v4 (environments vazios, sidebar default).
-No hydrate, falhas ao ler environments não impedem as collections.
+Sessions v1–v3 migrate automatically to v4 (empty environments, default sidebar).
+On hydrate, failures reading environments do not block collections.
 
-### Validação
-- [x] Resultado alinhado ao `newman` no terminal para o mesmo request _(parse + temp collection; smoke manual na UI)_
-- [x] Edits não salvos entram no run (temp usa memória)
-- [x] Collection/folder run reporta N executions (`make check-etapa8`)
-- [x] Sessão v3/v4 persiste múltiplas collections + abas de collection / folder / request / environment
-- [x] Variables + tree mutations (`make check-etapa9`)
-- [x] `tabKey` roundtrip com paths contendo `:`, espaço, `%` e unicode (`make check-etapa10`)
-- [x] Environment parse/edit/dirty + migração v3→v4 (`make check-etapa11`)
+### Validation
+- [x] Result aligned with terminal `newman` for the same request _(parse + temp collection; manual smoke in the UI)_
+- [x] Unsaved edits are included in the run (temp uses memory)
+- [x] Collection/folder run reports N executions (`make check-stage8`)
+- [x] Session v3/v4 persists multiple collections + collection / folder / request / environment tabs
+- [x] Variables + tree mutations (`make check-stage9`)
+- [x] `tabKey` roundtrip with paths containing `:`, space, `%`, and unicode (`make check-stage10`)
+- [x] Environment parse/edit/dirty + v3→v4 migration (`make check-stage11`)
 
 ---
 
-## Referência rápida — schema em memória
+## Quick reference — in-memory schema
 
-Fonte da verdade: Postman Collection v2.1.
+Source of truth: Postman Collection v2.1.
 
 ```
 Collection
 ├── info
 ├── item[]          # folder | request
 │   ├── name
-│   ├── item[]?     # pasta
+│   ├── item[]?     # folder
 │   └── request?    # method, url, header[], body, auth
 ├── variable[]?
 └── auth?
 ```
 
-UI: layout split, tabelas key/value, response pane. Store e persistência são Postman-only.
+UI: split layout, key/value tables, response pane. Store and persistence are Postman-only.

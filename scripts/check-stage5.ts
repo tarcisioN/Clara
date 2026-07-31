@@ -101,4 +101,4 @@ assert.deepEqual(serialized.item[1].request.auth, {
 });
 assert.equal(serialized.item[0].item[0].request.auth, undefined);
 
-console.log('etapa5 checks passed');
+console.log('stage5 checks passed');

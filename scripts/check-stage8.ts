@@ -118,4 +118,4 @@ assert.equal(multi.executions.length, 2);
 assert.equal(multi.execution?.name, 'A');
 assert.equal(multi.executions[1]?.method, 'POST');
 
-console.log('etapa8 checks passed');
+console.log('stage8 checks passed');

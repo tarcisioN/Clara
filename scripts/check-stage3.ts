@@ -93,4 +93,4 @@ assert.deepEqual(Object.keys(savedHeaders[0]).sort(), ['description', 'key', 'va
 assert.deepEqual(Object.keys(savedHeaders[1]).sort(), ['disabled', 'key', 'value']);
 assert.equal(savedHeaders[1].disabled, true);
 
-console.log('etapa3 checks passed');
+console.log('stage3 checks passed');

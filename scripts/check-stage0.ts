@@ -20,7 +20,7 @@ assert.equal(collection.info?.name, 'Clara Smoke Collection');
 assert.equal(counts.folders, 1);
 assert.equal(counts.requests, 3);
 
-const dir = mkdtempSync(path.join(tmpdir(), 'clara-etapa0-'));
+const dir = mkdtempSync(path.join(tmpdir(), 'clara-stage0-'));
 const copyPath = path.join(dir, 'smoke.postman_collection.json');
 writeFileSync(copyPath, raw, 'utf8');
 
@@ -36,4 +36,4 @@ writeFileSync(copyPath, serialized, 'utf8');
 assert.equal(readFileSync(copyPath, 'utf8'), serialized);
 
 rmSync(dir, { recursive: true, force: true });
-console.log('etapa0 checks passed');
+console.log('stage0 checks passed');

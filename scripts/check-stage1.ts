@@ -44,4 +44,4 @@ const folders = collectFolderPaths(collection.item);
 assert.equal(folders.has('0'), true);
 assert.equal(folders.has('0.0'), false);
 
-console.log('etapa1 checks passed');
+console.log('stage1 checks passed');

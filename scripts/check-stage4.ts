@@ -121,4 +121,4 @@ assert.throws(
   /out of range/
 );
 
-console.log('etapa4 checks passed');
+console.log('stage4 checks passed');

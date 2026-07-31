@@ -81,7 +81,7 @@ assert.deepEqual(parseTabKey(tabKey(envTab)), envTab);
 assert.deepEqual(fromSessionTab(toSessionTab(envTab)), envTab);
 
 // Session v3 → v4 migration
-const home = mkdtempSync(path.join(tmpdir(), 'clara-etapa11-'));
+const home = mkdtempSync(path.join(tmpdir(), 'clara-stage11-'));
 const previousHome = process.env.HOME;
 process.env.HOME = home;
 try {
@@ -154,4 +154,4 @@ try {
   rmSync(home, { recursive: true, force: true });
 }
 
-console.log('etapa11 checks passed');
+console.log('stage11 checks passed');

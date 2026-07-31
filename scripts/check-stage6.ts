@@ -104,4 +104,4 @@ assert.deepEqual(serialized.item[0].item[0].request.url.query[0], { key: 'v', va
 assert.equal(serialized.item[0].item[0].request.url.query[1].disabled, true);
 assert.equal(serialized.item[0].item[0].request.url.raw, 'https://example.com/ping?v=9');
 
-console.log('etapa6 checks passed');
+console.log('stage6 checks passed');
