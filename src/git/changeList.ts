@@ -150,10 +150,11 @@ export function changeListCounts(entries: ChangeListEntry[]): {
 export function folderLabelForEntry(
   entry: ChangeListEntry,
   collection: PostmanCollection
-): string {
+): string | null {
   const parentPath = entry.parentPath;
   if (!parentPath) {
-    return 'Collection root';
+    // Root-level changes sit at the top of the list without a group header.
+    return null;
   }
   // Resolve folder names along the path for a breadcrumb-ish label.
   const parts = parentPath.split('.');

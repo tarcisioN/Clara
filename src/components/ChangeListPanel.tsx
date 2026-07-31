@@ -397,8 +397,10 @@ export default function ChangeListPanel({
             <ul className="change-list">
               {entries.map((entry) => {
                 const group = folderLabelForEntry(entry, collection);
-                const showGroup = group !== lastGroup;
-                lastGroup = group;
+                const showGroup = group !== null && group !== lastGroup;
+                if (group !== null) {
+                  lastGroup = group;
+                }
                 const selected = entry.key === activeKey;
                 return (
                   <li key={entry.key}>
