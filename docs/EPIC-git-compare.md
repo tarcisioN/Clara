@@ -83,7 +83,7 @@ When a changed request is open, show field-level differences vs the base version
 ### Policy (this stage)
 - Resolve base via the same kind+name pairing as G1 (`findPairedBaseItem`), not raw path indexes alone.
 - Section badges are amber `~` (distinct from content dots and unsaved dirty dots).
-- Inline body/script line diffs are deferred; equality is per-section snapshot for now.
+- Inline body/script line diffs are in G6 (`RequestDiffPane`); equality here remains per-section snapshot.
 - Removed requests stay ghost-only until G3.
 
 ---
@@ -159,9 +159,33 @@ Act on the comparison.
 
 ---
 
+## Stage G6 — Request Diff pane
+
+Read-only field-level comparison when opening a change from the Changes list.
+
+### Requirements
+- [x] Click a changed request in Changes → open request in **Diff** mode (replaces Edit)
+- [x] Toggle **Edit | Diff** on the request pane
+- [x] Method + URL: stacked base (red) / current (green) bars
+- [x] Params / headers / auth: paired keyed rows (added / removed / modified)
+- [x] Body (raw) and scripts: unified line diff
+- [x] Body mode change: explicit mode-change block
+- [x] Restore section / request from Diff
+- [x] Tree click opens **Edit** (default)
+
+### Validation
+- [x] `make check-stage19` — textDiff + requestFieldDiff fixtures
+
+### Policy (this stage)
+- Diff is read-only; editing stays in RequestPane.
+- No third-party diff dependency (local LCS line diff).
+- View mode is ephemeral (not persisted in session).
+
+---
+
 ## Definition of Done — Epic
 
-- [x] Stages G0–G5 complete
+- [x] Stages G0–G6 complete
 - [x] Large real collection: find changed requests without reading raw `git diff`
 - [x] Default base works on repos whose default branch is `main` or `master`
 - [x] No accidental writes to git index/working tree from compare features
@@ -178,6 +202,8 @@ Working tree file  ←→  LoadedCollection (may be dirty vs originalRaw)
    Base ref blob   ←── git show <ref>:<relPath>
         ↓
  StructuralDiff (tree markers) + SemanticDiff (per request fields)
+        ↓
+ RequestFieldDiff → Diff pane (stacked / keyed / unified)
 ```
 
 Identity for matching nodes across versions (G1+): prefer `item` path when trees align; when reordered/renamed, fall back to heuristics documented in the stage that introduces matching.

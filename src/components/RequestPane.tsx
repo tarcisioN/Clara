@@ -30,6 +30,7 @@ type RequestPaneProps = {
   compareBaseRef?: string | null;
   onRestoreRequest?: (() => void) | null;
   onRestoreSection?: ((section: RequestSectionKey) => void) | null;
+  onSwitchToDiff?: (() => void) | null;
   onRename?: (name: string) => void;
   onChangeMethod: (method: string) => void;
   onChangeUrl: (raw: string) => void;
@@ -69,6 +70,7 @@ export default function RequestPane({
   compareBaseRef = null,
   onRestoreRequest = null,
   onRestoreSection = null,
+  onSwitchToDiff = null,
   onRename,
   onChangeMethod,
   onChangeUrl,
@@ -194,40 +196,52 @@ export default function RequestPane({
   return (
     <div className="request-pane">
       <div className="request-title">
-        {renaming && onRename ? (
-          <input
-            ref={renameInputRef}
-            className="request-title-input"
-            type="text"
-            value={draftName}
-            spellCheck={false}
-            autoComplete="off"
-            aria-label="Request name"
-            onChange={(event) => setDraftName(event.target.value)}
-            onBlur={commitRename}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                commitRename();
-              } else if (event.key === 'Escape') {
-                event.preventDefault();
-                cancelRename();
-              }
-            }}
-          />
-        ) : onRename ? (
-          <button
-            type="button"
-            className="request-title-button"
-            title="Click to rename"
-            onClick={startRename}
-          >
-            {displayName}
-          </button>
-        ) : (
-          <h2>{displayName}</h2>
-        )}
-        <span className="request-path">{path}</span>
+        <div className="request-title-main">
+          {renaming && onRename ? (
+            <input
+              ref={renameInputRef}
+              className="request-title-input"
+              type="text"
+              value={draftName}
+              spellCheck={false}
+              autoComplete="off"
+              aria-label="Request name"
+              onChange={(event) => setDraftName(event.target.value)}
+              onBlur={commitRename}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  commitRename();
+                } else if (event.key === 'Escape') {
+                  event.preventDefault();
+                  cancelRename();
+                }
+              }}
+            />
+          ) : onRename ? (
+            <button
+              type="button"
+              className="request-title-button"
+              title="Click to rename"
+              onClick={startRename}
+            >
+              {displayName}
+            </button>
+          ) : (
+            <h2>{displayName}</h2>
+          )}
+          <span className="request-path">{path}</span>
+        </div>
+        {onSwitchToDiff ? (
+          <div className="request-view-mode" role="group" aria-label="Request view">
+            <button type="button" className="active" disabled>
+              Edit
+            </button>
+            <button type="button" onClick={onSwitchToDiff}>
+              Diff
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {semanticDiff?.isAdded ? (

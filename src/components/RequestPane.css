@@ -7,10 +7,46 @@
 
 .request-title {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   padding: 18px 24px 12px;
+}
+
+.request-title-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.request-view-mode {
+  display: inline-flex;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.request-view-mode button {
+  border: 0;
+  background: transparent;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  color: var(--text-muted, #6b7280);
+}
+
+.request-view-mode button.active {
+  background: var(--bg-elevated, #f3f4f6);
+  color: var(--text, #111);
+  font-weight: 600;
+  cursor: default;
+}
+
+.request-view-mode button:not(.active):hover {
+  background: #f9fafb;
+  color: var(--text, #111);
 }
 
 .request-title h2,

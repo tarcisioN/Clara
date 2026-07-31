@@ -6,6 +6,7 @@ import CollectionRunPane from './components/CollectionRunPane.tsx';
 import ContextMenu, { type ContextMenuItem } from './components/ContextMenu.tsx';
 import EnvironmentPane from './components/EnvironmentPane.tsx';
 import RequestPane from './components/RequestPane.tsx';
+import RequestDiffPane from './components/RequestDiffPane.tsx';
 import RequestTabs, { type WorkspaceTabView } from './components/RequestTabs.tsx';
 import PromptDialog, { type PromptRequest } from './components/PromptDialog.tsx';
 import ResponsePane from './components/ResponsePane.tsx';
@@ -122,6 +123,7 @@ import {
 } from './git/structuralDiff.ts';
 import { findPairedBaseItem, resolveBaseRequestItem } from './git/resolveBaseItem.ts';
 import { computeSemanticDiff, type RequestSectionKey } from './git/semanticDiff.ts';
+import { computeRequestFieldDiff } from './git/requestFieldDiff.ts';
 import {
   flattenStructuralChanges,
   type ChangeListEntry
@@ -260,6 +262,10 @@ export default function App() {
     Record<string, EnvironmentCompareState | null>
   >({});
   const [focusedChangeKey, setFocusedChangeKey] = useState<string | null>(null);
+  /** Per-request edit vs read-only diff pane (ephemeral; not in session). */
+  const [requestViewModeByKey, setRequestViewModeByKey] = useState<
+    Record<string, 'edit' | 'diff'>
+  >({});
   const [compareBases, setCompareBases] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [openTabs, setOpenTabs] = useState<WorkspaceTab[]>([]);
@@ -455,6 +461,30 @@ export default function App() {
     }
     return computeSemanticDiff(selectedItem, resolution.item);
   }, [activeCollection, activeCompare, activeRequestPath, selectedItem]);
+
+  const requestFieldDiff = useMemo(() => {
+    if (!activeCollection || !activeRequestPath || !selectedItem || !activeCompare) {
+      return null;
+    }
+    const resolution = resolveBaseRequestItem(
+      activeCompare.diff,
+      activeCollection.collection,
+      activeCompare.baseCollection,
+      activeRequestPath
+    );
+    if (resolution.kind === 'none') {
+      return null;
+    }
+    if (resolution.kind === 'added' || resolution.kind === 'missing') {
+      return computeRequestFieldDiff(selectedItem, null);
+    }
+    return computeRequestFieldDiff(selectedItem, resolution.item);
+  }, [activeCollection, activeCompare, activeRequestPath, selectedItem]);
+
+  const activeRequestViewMode =
+    activeTab?.kind === 'request'
+      ? (requestViewModeByKey[tabKey(activeTab)] ?? 'edit')
+      : 'edit';
 
   const activeEnvCompare =
     activeTab?.kind === 'environment'
@@ -1508,7 +1538,11 @@ export default function App() {
   }, [activeEnvironmentJson]);
 
   const openRequestTab = useCallback(
-    (collectionPath: string, path: ItemPath, options?: OpenTabOptions) => {
+    (
+      collectionPath: string,
+      path: ItemPath,
+      options?: OpenTabOptions & { viewMode?: 'edit' | 'diff' }
+    ) => {
       const entry = collectionsRef.current.find(
         (candidate) => candidate.filePath === collectionPath
       );
@@ -1520,6 +1554,11 @@ export default function App() {
         return;
       }
       openTab({ kind: 'request', collectionPath, path }, options);
+      const key = tabKey({ kind: 'request', collectionPath, path });
+      const viewMode = options?.viewMode ?? 'edit';
+      setRequestViewModeByKey((current) =>
+        current[key] === viewMode ? current : { ...current, [key]: viewMode }
+      );
     },
     [openTab]
   );
@@ -2380,7 +2419,7 @@ export default function App() {
 
       if (entry.type === 'current') {
         if (entry.nodeKind === 'request') {
-          openRequestTab(collectionPath, entry.path);
+          openRequestTab(collectionPath, entry.path, { viewMode: 'diff' });
           revealInSidebar(
             { kind: 'request', collectionPath, path: entry.path },
             { activate: false }
@@ -3608,6 +3647,43 @@ export default function App() {
                 selectedRequest && (
                   <div className="detail-split">
                     <div className="detail-request">
+                      {activeRequestViewMode === 'diff' &&
+                      requestFieldDiff &&
+                      activeCompare ? (
+                        <RequestDiffPane
+                          key={`diff:${tabKey(activeTab)}`}
+                          name={selectedItem.name?.trim() || 'Untitled request'}
+                          path={activeRequestPath}
+                          baseRef={activeCompare.baseRef}
+                          fieldDiff={requestFieldDiff}
+                          onSwitchToEdit={() =>
+                            setRequestViewModeByKey((current) => ({
+                              ...current,
+                              [tabKey(activeTab)]: 'edit'
+                            }))
+                          }
+                          onRestoreRequest={
+                            !requestFieldDiff.semantic.isAdded &&
+                            requestFieldDiff.semantic.hasChanges
+                              ? () =>
+                                  restoreRequestFromBase(
+                                    activeTab.collectionPath,
+                                    activeRequestPath
+                                  )
+                              : null
+                          }
+                          onRestoreSection={
+                            !requestFieldDiff.semantic.isAdded
+                              ? (section) =>
+                                  restoreRequestSection(
+                                    activeTab.collectionPath,
+                                    activeRequestPath,
+                                    section
+                                  )
+                              : null
+                          }
+                        />
+                      ) : (
                       <RequestPane
                         key={tabKey(activeTab)}
                         item={selectedItem}
@@ -3615,6 +3691,17 @@ export default function App() {
                         path={activeRequestPath}
                         semanticDiff={requestSemanticDiff}
                         compareBaseRef={activeCompare?.baseRef ?? null}
+                        onSwitchToDiff={
+                          requestFieldDiff &&
+                          (requestFieldDiff.semantic.hasChanges ||
+                            requestFieldDiff.semantic.isAdded)
+                            ? () =>
+                                setRequestViewModeByKey((current) => ({
+                                  ...current,
+                                  [tabKey(activeTab)]: 'diff'
+                                }))
+                            : null
+                        }
                         onRestoreRequest={
                           activeCompare &&
                           requestSemanticDiff &&
@@ -3722,6 +3809,7 @@ export default function App() {
                         onSend={() => void sendRequest()}
                         sending={sending}
                       />
+                      )}
                     </div>
                     <div className="detail-response">
                       <ResponsePane

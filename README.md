@@ -56,6 +56,7 @@ GUI picks up PATH changes on macOS.
 | `make check-stage16` | Git compare base selector / session bases |
 | `make check-stage17` | Git restore from base + env/variable keyed diff |
 | `make check-stage18` | External file changes (watcher / reload decisions) |
+| `make check-stage19` | Request field diff view (text / keyed / stacked) |
 
 ## Usage (Send / Newman)
 
@@ -102,10 +103,12 @@ the file as-is. The ↻ button in **Changes** reloads both the file and the base
 When a collection lives in a git repo, Clara compares the open tree against a base
 ref (`main`/`master` by default, or any branch/tag/SHA you pick). Markers show
 added / removed / modified requests; open a request to see which sections differ.
-You can restore a request, section, or folder from the base as an **unsaved edit**
-(Save writes the collection file — compare never runs `git checkout`). Environments
-get the same key-based value markers. Files that do not exist at the base ref (new or
-untracked) simply show no comparison.
+Click a row in **Changes** to open the request in a read-only **Diff** view
+(stacked URL, paired headers/params/auth, unified body/script diffs). Toggle
+**Edit** to return to the editor. You can restore a request, section, or folder
+from the base as an **unsaved edit** (Save writes the collection file — compare
+never runs `git checkout`). Environments get the same key-based value markers.
+Files that do not exist at the base ref (new or untracked) simply show no comparison.
 
 See [docs/EPIC-git-compare.md](./docs/EPIC-git-compare.md).
 
