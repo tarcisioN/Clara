@@ -1,5 +1,10 @@
 export type DiffLineKind = 'equal' | 'insert' | 'delete';
 
+export type DiffSegment = {
+  kind: DiffLineKind;
+  text: string;
+};
+
 export type DiffLine = {
   kind: DiffLineKind;
   text: string;
@@ -7,7 +12,12 @@ export type DiffLine = {
   baseLine: number | null;
   /** 1-based line number in the current text, when present. */
   currentLine: number | null;
+  /** Intra-line segments when paired with a counterpart for char highlight. */
+  segments?: DiffSegment[];
 };
+
+/** Skip char LCS when the product of lengths would be too expensive. */
+const CHAR_DIFF_COST_LIMIT = 250_000;
 
 /**
  * Myers-inspired LCS line diff. Good enough for request bodies/scripts without a dependency.
@@ -16,10 +26,112 @@ export type DiffLine = {
 export function diffLines(baseText: string, currentText: string): DiffLine[] {
   const base = splitLines(baseText);
   const current = splitLines(currentText);
+  const raw = lcsDiff(base, current).map((entry) => ({
+    kind: entry.kind,
+    text: entry.text,
+    baseLine: null as number | null,
+    currentLine: null as number | null
+  }));
+
+  let baseLine = 1;
+  let currentLine = 1;
+  for (const line of raw) {
+    if (line.kind === 'equal') {
+      line.baseLine = baseLine;
+      line.currentLine = currentLine;
+      baseLine += 1;
+      currentLine += 1;
+    } else if (line.kind === 'delete') {
+      line.baseLine = baseLine;
+      baseLine += 1;
+    } else {
+      line.currentLine = currentLine;
+      currentLine += 1;
+    }
+  }
+
+  return enrichLineDiffWithChars(raw);
+}
+
+/**
+ * Character-level LCS diff. Prefer `highlightPair` for dual-rail UI.
+ */
+export function diffChars(baseText: string, currentText: string): DiffSegment[] {
+  if (baseText === currentText) {
+    return baseText.length === 0 ? [] : [{ kind: 'equal', text: baseText }];
+  }
+  if (baseText.length * currentText.length > CHAR_DIFF_COST_LIMIT) {
+    const segments: DiffSegment[] = [];
+    if (baseText) segments.push({ kind: 'delete', text: baseText });
+    if (currentText) segments.push({ kind: 'insert', text: currentText });
+    return segments;
+  }
+  return lcsDiff(Array.from(baseText), Array.from(currentText)).map((entry) => ({
+    kind: entry.kind,
+    text: entry.text
+  }));
+}
+
+/** Split a char diff into the base rail (equal+delete) and current rail (equal+insert). */
+export function highlightPair(
+  baseText: string,
+  currentText: string
+): { base: DiffSegment[]; current: DiffSegment[] } {
+  if (!baseText && !currentText) {
+    return { base: [], current: [] };
+  }
+  if (baseText === currentText) {
+    const equal = baseText ? [{ kind: 'equal' as const, text: baseText }] : [];
+    return { base: equal, current: equal };
+  }
+  const segments = diffChars(baseText, currentText);
+  return {
+    base: mergeAdjacent(segments.filter((segment) => segment.kind !== 'insert')),
+    current: mergeAdjacent(segments.filter((segment) => segment.kind !== 'delete'))
+  };
+}
+
+export function hasTextChanges(lines: DiffLine[]): boolean {
+  return lines.some((line) => line.kind !== 'equal');
+}
+
+/**
+ * Pair consecutive delete/insert runs and attach char-level segments for highlight.
+ */
+export function enrichLineDiffWithChars(lines: DiffLine[]): DiffLine[] {
+  const result = lines.map((line) => ({ ...line }));
+  let index = 0;
+  while (index < result.length) {
+    if (result[index]!.kind !== 'delete') {
+      index += 1;
+      continue;
+    }
+    let deleteEnd = index;
+    while (deleteEnd < result.length && result[deleteEnd]!.kind === 'delete') {
+      deleteEnd += 1;
+    }
+    let insertEnd = deleteEnd;
+    while (insertEnd < result.length && result[insertEnd]!.kind === 'insert') {
+      insertEnd += 1;
+    }
+    const paired = Math.min(deleteEnd - index, insertEnd - deleteEnd);
+    for (let offset = 0; offset < paired; offset += 1) {
+      const deleteLine = result[index + offset]!;
+      const insertLine = result[deleteEnd + offset]!;
+      const pair = highlightPair(deleteLine.text, insertLine.text);
+      deleteLine.segments = pair.base;
+      insertLine.segments = pair.current;
+    }
+    index = insertEnd > deleteEnd ? insertEnd : deleteEnd;
+  }
+  return result;
+}
+
+type TokenDiff = { kind: DiffLineKind; text: string };
+
+function lcsDiff(base: string[], current: string[]): TokenDiff[] {
   const n = base.length;
   const m = current.length;
-
-  // dp[i][j] = LCS length of base[i..] and current[j..]
   const dp: number[][] = Array.from({ length: n + 1 }, () =>
     Array.from({ length: m + 1 }, () => 0)
   );
@@ -33,65 +145,48 @@ export function diffLines(baseText: string, currentText: string): DiffLine[] {
     }
   }
 
-  const lines: DiffLine[] = [];
+  const raw: TokenDiff[] = [];
   let i = 0;
   let j = 0;
-  let baseLine = 1;
-  let currentLine = 1;
   while (i < n && j < m) {
     if (base[i] === current[j]) {
-      lines.push({
-        kind: 'equal',
-        text: base[i]!,
-        baseLine,
-        currentLine
-      });
+      raw.push({ kind: 'equal', text: base[i]! });
       i += 1;
       j += 1;
-      baseLine += 1;
-      currentLine += 1;
     } else if (dp[i + 1]![j]! >= dp[i]![j + 1]!) {
-      lines.push({
-        kind: 'delete',
-        text: base[i]!,
-        baseLine,
-        currentLine: null
-      });
+      raw.push({ kind: 'delete', text: base[i]! });
       i += 1;
-      baseLine += 1;
     } else {
-      lines.push({
-        kind: 'insert',
-        text: current[j]!,
-        baseLine: null,
-        currentLine
-      });
+      raw.push({ kind: 'insert', text: current[j]! });
       j += 1;
-      currentLine += 1;
     }
   }
   while (i < n) {
-    lines.push({
-      kind: 'delete',
-      text: base[i]!,
-      baseLine,
-      currentLine: null
-    });
+    raw.push({ kind: 'delete', text: base[i]! });
     i += 1;
-    baseLine += 1;
   }
   while (j < m) {
-    lines.push({
-      kind: 'insert',
-      text: current[j]!,
-      baseLine: null,
-      currentLine
-    });
+    raw.push({ kind: 'insert', text: current[j]! });
     j += 1;
-    currentLine += 1;
   }
+  return mergeAdjacent(raw);
+}
 
-  return lines;
+function mergeAdjacent(segments: TokenDiff[]): TokenDiff[] {
+  if (segments.length === 0) {
+    return [];
+  }
+  const merged: TokenDiff[] = [{ ...segments[0]! }];
+  for (let index = 1; index < segments.length; index += 1) {
+    const segment = segments[index]!;
+    const last = merged[merged.length - 1]!;
+    if (last.kind === segment.kind) {
+      last.text += segment.text;
+    } else {
+      merged.push({ ...segment });
+    }
+  }
+  return merged;
 }
 
 /** Split preserving empty trailing line semantics of a final newline. */
@@ -99,11 +194,5 @@ function splitLines(text: string): string[] {
   if (text.length === 0) {
     return [];
   }
-  const parts = text.split('\n');
-  // "a\n" → ["a", ""] so the trailing empty line is visible in the diff.
-  return parts;
-}
-
-export function hasTextChanges(lines: DiffLine[]): boolean {
-  return lines.some((line) => line.kind !== 'equal');
+  return text.split('\n');
 }

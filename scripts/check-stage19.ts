@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { computeRequestFieldDiff } from '../src/git/requestFieldDiff.ts';
 import { findRemovedBaseItem } from '../src/git/resolveBaseItem.ts';
 import { computeStructuralDiff } from '../src/git/structuralDiff.ts';
-import { diffLines, hasTextChanges } from '../src/git/textDiff.ts';
+import { diffLines, hasTextChanges, highlightPair, diffChars } from '../src/git/textDiff.ts';
 import { updateRequestHeader, setRequestUrl, setRequestBodyRaw } from '../src/postman/edit.ts';
 import type { PostmanCollection, PostmanItem } from '../src/postman/types.ts';
 
@@ -31,6 +31,32 @@ assert.deepEqual(
   removedOnly.map((line) => line.kind),
   ['delete']
 );
+
+// Char-level highlight
+const pair = highlightPair('https://example.com/ping', 'https://example.com/pingx');
+assert.ok(pair.base.some((segment) => segment.kind === 'equal'));
+assert.ok(pair.current.some((segment) => segment.kind === 'insert'));
+assert.equal(
+  pair.base.filter((segment) => segment.kind === 'delete').map((segment) => segment.text).join(''),
+  ''
+);
+assert.equal(
+  pair.current.filter((segment) => segment.kind === 'insert').map((segment) => segment.text).join(''),
+  'x'
+);
+
+const chars = diffChars('abc', 'axc');
+assert.deepEqual(
+  chars.map((segment) => `${segment.kind}:${segment.text}`),
+  ['equal:a', 'delete:b', 'insert:x', 'equal:c']
+);
+
+// Line diff attaches char segments on paired delete/insert
+const withChars = diffLines('hello world\n', 'hello clara\n');
+const deleted = withChars.find((line) => line.kind === 'delete');
+const inserted = withChars.find((line) => line.kind === 'insert');
+assert.ok(deleted?.segments?.some((segment) => segment.kind === 'delete'));
+assert.ok(inserted?.segments?.some((segment) => segment.kind === 'insert'));
 
 // --- requestFieldDiff ---
 const baseRequest: PostmanItem = {

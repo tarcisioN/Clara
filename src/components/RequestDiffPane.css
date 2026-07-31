@@ -173,12 +173,22 @@
 
 .request-diff-bar-base .request-diff-bar-text {
   color: #7f1d1d;
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
 }
 
 .request-diff-bar-current .request-diff-bar-text {
   color: #14532d;
+}
+
+.request-diff-char-delete {
+  background: #fecaca;
+  border-radius: 2px;
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.request-diff-char-insert {
+  background: #bbf7d0;
+  border-radius: 2px;
 }
 
 .request-diff-keyed {
@@ -340,6 +350,24 @@ code.request-diff-value-current {
 
 .request-diff-line-equal {
   color: #374151;
+}
+
+.request-diff-line .request-diff-char-delete {
+  background: #fecaca;
+}
+
+.request-diff-line .request-diff-char-insert {
+  background: #bbf7d0;
+}
+
+.request-diff-value code .request-diff-char-delete {
+  background: #fecaca;
+  color: #7f1d1d;
+}
+
+.request-diff-value code .request-diff-char-insert {
+  background: #bbf7d0;
+  color: #14532d;
 }
 
 .request-diff-gutter {

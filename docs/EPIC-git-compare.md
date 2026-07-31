@@ -175,6 +175,7 @@ Read-only field-level comparison when opening a change from the Changes list.
 - [x] Removed request from Changes → base-only Diff (no Edit)
 - [x] **Show unchanged** toggle for keyed rows
 - [x] Next/prev change keeps Diff mode
+- [x] Character-level highlight inside modified URL/values and paired body/script lines
 
 ### Validation
 - [x] `make check-stage19` — textDiff + requestFieldDiff fixtures

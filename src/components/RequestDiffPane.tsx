@@ -8,6 +8,7 @@ import type {
   DiffTextBlock,
   RequestFieldDiff
 } from '../git/requestFieldDiff.ts';
+import { highlightPair, type DiffSegment } from '../git/textDiff.ts';
 import './RequestDiffPane.css';
 
 type RequestDiffPaneProps = {
@@ -39,6 +40,34 @@ function ChangeMark({ change }: { change: DiffKeyedRow['change'] | DiffScalar['k
   return <span className={`request-diff-mark request-diff-mark-${change}`}>{label}</span>;
 }
 
+function Segments({
+  segments,
+  fallback,
+  emptyLabel = '(empty)'
+}: {
+  segments: DiffSegment[];
+  fallback: string;
+  emptyLabel?: string;
+}) {
+  if (segments.length === 0) {
+    return <>{fallback || emptyLabel}</>;
+  }
+  return (
+    <>
+      {segments.map((segment, index) => (
+        <span
+          key={index}
+          className={
+            segment.kind === 'equal' ? undefined : `request-diff-char request-diff-char-${segment.kind}`
+          }
+        >
+          {segment.text || (segment.kind === 'equal' ? '' : '')}
+        </span>
+      ))}
+    </>
+  );
+}
+
 function StackedBars({
   label,
   base,
@@ -52,16 +81,52 @@ function StackedBars({
   baseMethod?: string;
   currentMethod?: string;
 }) {
+  const pair = useMemo(() => highlightPair(base, current), [base, current]);
   return (
     <div className="request-diff-stacked">
       <div className="request-diff-bar request-diff-bar-base" title={`Base (${label})`}>
         {baseMethod ? <span className="request-diff-method">{baseMethod}</span> : null}
-        <span className="request-diff-bar-text">{base || '(empty)'}</span>
+        <span className="request-diff-bar-text">
+          <Segments segments={pair.base} fallback={base} />
+        </span>
       </div>
       <div className="request-diff-bar request-diff-bar-current" title={`Current (${label})`}>
         {currentMethod ? <span className="request-diff-method">{currentMethod}</span> : null}
-        <span className="request-diff-bar-text">{current || '(empty)'}</span>
+        <span className="request-diff-bar-text">
+          <Segments segments={pair.current} fallback={current} />
+        </span>
       </div>
+    </div>
+  );
+}
+
+function KeyedValue({
+  side,
+  baseValue,
+  currentValue,
+  disabled,
+  change
+}: {
+  side: 'base' | 'current';
+  baseValue: string;
+  currentValue: string;
+  disabled: boolean;
+  change: DiffKeyedRow['change'];
+}) {
+  const pair = useMemo(
+    () => (change === 'modified' ? highlightPair(baseValue, currentValue) : null),
+    [change, baseValue, currentValue]
+  );
+  const value = side === 'base' ? baseValue : currentValue;
+  const segments = pair ? (side === 'base' ? pair.base : pair.current) : null;
+
+  return (
+    <div className={`request-diff-value request-diff-value-${side}`}>
+      <span className="request-diff-value-label">{side}</span>
+      <code>
+        {segments ? <Segments segments={segments} fallback={value} /> : value}
+        {disabled ? <em> · disabled</em> : null}
+      </code>
     </div>
   );
 }
@@ -91,22 +156,22 @@ function KeyedRows({
           <span className="request-diff-keyed-key">{row.key}</span>
           <div className="request-diff-keyed-values">
             {row.change !== 'added' ? (
-              <div className="request-diff-value request-diff-value-base">
-                <span className="request-diff-value-label">base</span>
-                <code>
-                  {row.baseValue ?? ''}
-                  {row.baseDisabled ? <em> · disabled</em> : null}
-                </code>
-              </div>
+              <KeyedValue
+                side="base"
+                baseValue={row.baseValue ?? ''}
+                currentValue={row.currentValue ?? ''}
+                disabled={row.baseDisabled}
+                change={row.change}
+              />
             ) : null}
             {row.change !== 'removed' ? (
-              <div className="request-diff-value request-diff-value-current">
-                <span className="request-diff-value-label">current</span>
-                <code>
-                  {row.currentValue ?? ''}
-                  {row.currentDisabled ? <em> · disabled</em> : null}
-                </code>
-              </div>
+              <KeyedValue
+                side="current"
+                baseValue={row.baseValue ?? ''}
+                currentValue={row.currentValue ?? ''}
+                disabled={row.currentDisabled}
+                change={row.change}
+              />
             ) : null}
           </div>
         </li>
@@ -134,7 +199,13 @@ function TextDiffView({ block }: { block: DiffTextBlock }) {
             <span>{line.baseLine ?? ''}</span>
             <span>{line.currentLine ?? ''}</span>
           </span>
-          <span className="request-diff-line-text">{line.text || ' '}</span>
+          <span className="request-diff-line-text">
+            {line.segments && line.segments.length > 0 ? (
+              <Segments segments={line.segments} fallback={line.text || ' '} />
+            ) : (
+              line.text || ' '
+            )}
+          </span>
         </div>
       ))}
     </pre>
