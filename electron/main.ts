@@ -31,7 +31,7 @@ let mainWindow: BrowserWindow | null = null;
 
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 
-/** Display name in menus / About; dock still shows Electron until a packaged .app. */
+/** Menu bar / About name (dock label may still say Electron until the app is packaged). */
 app.setName('Clara');
 
 function resolveAppIconPath(): string | null {
