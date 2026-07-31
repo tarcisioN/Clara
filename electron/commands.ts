@@ -1,5 +1,6 @@
 export type AppCommand =
   | { type: 'open' }
+  | { type: 'new-collection' }
   | { type: 'open-environment' }
   | { type: 'save' }
   | { type: 'send' }

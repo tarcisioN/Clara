@@ -6,7 +6,9 @@ import { fileURLToPath } from 'node:url';
 import {
   assertPostmanCollection,
   countItems,
-  serializeCollection
+  createEmptyCollection,
+  serializeCollection,
+  suggestCollectionFileName
 } from '../src/postman/types.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -34,6 +36,17 @@ assert.match(serialized, /\n$/);
 assert.ok(serialized.includes('\n  "info"'));
 writeFileSync(copyPath, serialized, 'utf8');
 assert.equal(readFileSync(copyPath, 'utf8'), serialized);
+
+const blank = createEmptyCollection('Demo APIs');
+assert.equal(blank.info?.name, 'Demo APIs');
+assert.equal(blank.info?.schema?.includes('v2.1.0'), true);
+assert.deepEqual(blank.item, []);
+assert.equal(suggestCollectionFileName('Demo APIs'), 'Demo APIs.postman_collection.json');
+assert.equal(suggestCollectionFileName('a/b:c*'), 'a-b-c-.postman_collection.json');
+assert.equal(
+  suggestCollectionFileName('Mine.postman_collection.json'),
+  'Mine.postman_collection.json'
+);
 
 rmSync(dir, { recursive: true, force: true });
 console.log('stage0 checks passed');

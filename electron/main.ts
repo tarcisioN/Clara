@@ -20,6 +20,11 @@ import {
 } from './session.ts';
 import { runNewmanCollection, type NewmanRunRequest } from './newman.ts';
 import { discoverGit, readCollectionAtRef } from './git.ts';
+import {
+  createEmptyCollection,
+  serializeCollection,
+  suggestCollectionFileName
+} from '../src/postman/types.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -72,6 +77,11 @@ function buildMenu() {
     {
       label: 'File',
       submenu: [
+        {
+          label: 'New Collection…',
+          accelerator: 'CmdOrCtrl+N',
+          click: () => sendCommand({ type: 'new-collection' })
+        },
         {
           label: 'Open Collections…',
           accelerator: 'CmdOrCtrl+O',
@@ -251,6 +261,43 @@ ipcMain.handle('collection:open', async () => {
     files
   };
 });
+
+ipcMain.handle(
+  'collection:create',
+  async (_event, payload: { name?: string } | undefined) => {
+    const name =
+      typeof payload?.name === 'string' && payload.name.trim()
+        ? payload.name.trim()
+        : 'New Collection';
+    const suggested = suggestCollectionFileName(name);
+    const result = await dialog.showSaveDialog(mainWindow!, {
+      title: 'Create Postman collection',
+      defaultPath: suggested,
+      filters: [
+        { name: 'Postman Collection', extensions: ['json'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+
+    if (result.canceled || !result.filePath) {
+      return { canceled: true as const };
+    }
+
+    let filePath = result.filePath;
+    if (!/\.json$/i.test(filePath)) {
+      filePath = `${filePath}.postman_collection.json`;
+    }
+
+    const collection = createEmptyCollection(name);
+    const raw = serializeCollection(collection);
+    await writeFile(filePath, raw, 'utf8');
+    return {
+      canceled: false as const,
+      filePath,
+      raw
+    };
+  }
+);
 
 ipcMain.handle('collection:read', async (_event, filePath: string) => {
   if (!filePath || typeof filePath !== 'string') {

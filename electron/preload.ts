@@ -10,6 +10,10 @@ export type OpenCollectionResult =
   | { canceled: true }
   | { canceled: false; files: Array<{ filePath: string; raw: string }> };
 
+export type CreateCollectionResult =
+  | { canceled: true }
+  | { canceled: false; filePath: string; raw: string };
+
 export type OpenEnvironmentResult =
   | { canceled: true }
   | { canceled: false; files: Array<{ filePath: string; raw: string }> };
@@ -25,6 +29,8 @@ export type SaveEnvironmentResult = { ok: true; filePath: string };
 const clara = {
   openCollection: (): Promise<OpenCollectionResult> =>
     ipcRenderer.invoke('collection:open'),
+  createCollection: (name: string): Promise<CreateCollectionResult> =>
+    ipcRenderer.invoke('collection:create', { name }),
   readCollection: (filePath: string): Promise<ReadCollectionResult> =>
     ipcRenderer.invoke('collection:read', filePath),
   saveCollection: (filePath: string, contents: string): Promise<SaveCollectionResult> =>

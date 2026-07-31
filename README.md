@@ -65,6 +65,7 @@ on-disk collection JSON does.
 
 | Shortcut | Action |
 |--------|------|
+| `⌘/Ctrl+N` | New collection |
 | `⌘/Ctrl+O` | Open collection |
 | `⌘/Ctrl+S` | Save |
 | `⌘/Ctrl+W` | Close active tab |

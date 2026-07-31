@@ -15,6 +15,7 @@ type CollectionRunPaneProps = {
   result: NewmanRunView | null;
   running: boolean;
   onRun: () => void;
+  onNewRequest?: () => void;
   variablesSlot?: ReactNode;
 };
 
@@ -140,6 +141,7 @@ export default function CollectionRunPane({
   result,
   running,
   onRun,
+  onNewRequest,
   variablesSlot
 }: CollectionRunPaneProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
@@ -168,15 +170,27 @@ export default function CollectionRunPane({
           <h2>{title}</h2>
           <p>{subtitle}</p>
         </div>
-        <button
-          type="button"
-          className="collection-run-button"
-          disabled={running || requestCount === 0}
-          onClick={onRun}
-          title={runLabel}
-        >
-          {running ? 'Running…' : runLabel}
-        </button>
+        <div className="collection-run-actions">
+          {onNewRequest ? (
+            <button
+              type="button"
+              className="collection-run-button secondary"
+              onClick={onNewRequest}
+              title="New Request"
+            >
+              New Request
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="collection-run-button"
+            disabled={running || requestCount === 0}
+            onClick={onRun}
+            title={runLabel}
+          >
+            {running ? 'Running…' : runLabel}
+          </button>
+        </div>
       </header>
 
       {variablesSlot}

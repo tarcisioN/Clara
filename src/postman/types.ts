@@ -139,3 +139,32 @@ export function countItems(items: PostmanItem[] | undefined): CollectionCounts {
 export function serializeCollection(collection: PostmanCollection): string {
   return `${JSON.stringify(collection, null, 2)}\n`;
 }
+
+/** Empty Postman Collection v2.1 used when creating a new file. */
+export function createEmptyCollection(name: string): PostmanCollection {
+  const trimmed = name.trim() || 'New Collection';
+  return {
+    info: {
+      name: trimmed,
+      schema: POSTMAN_V21_SCHEMA
+    },
+    item: []
+  };
+}
+
+/** Suggest a filesystem-safe collection filename from a display name. */
+export function suggestCollectionFileName(name: string): string {
+  let base =
+    name
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, '-')
+      .replace(/\s+/g, ' ')
+      .replace(/\.+$/g, '')
+      .slice(0, 80)
+      .trim() || 'New Collection';
+  base = base
+    .replace(/\.postman_collection\.json$/i, '')
+    .replace(/\.json$/i, '')
+    .trim() || 'New Collection';
+  return `${base}.postman_collection.json`;
+}

@@ -7,6 +7,7 @@ import ContextMenu, { type ContextMenuItem } from './components/ContextMenu.tsx'
 import EnvironmentPane from './components/EnvironmentPane.tsx';
 import RequestPane from './components/RequestPane.tsx';
 import RequestTabs, { type WorkspaceTabView } from './components/RequestTabs.tsx';
+import PromptDialog, { type PromptRequest } from './components/PromptDialog.tsx';
 import ResponsePane from './components/ResponsePane.tsx';
 import VariablesPane from './components/VariablesPane.tsx';
 import { buildSingleRequestCollection } from './newman/buildRunCollection.ts';
@@ -276,6 +277,9 @@ export default function App() {
     y: number;
     target: ContextTarget;
   } | null>(null);
+  const [prompt, setPrompt] = useState<
+    (PromptRequest & { resolve: (value: string | null) => void }) | null
+  >(null);
 
   const collectionsRef = useRef(collections);
   const environmentsRef = useRef(environments);
@@ -756,6 +760,14 @@ export default function App() {
     []
   );
 
+  const askText = useCallback(
+    (request: PromptRequest): Promise<string | null> =>
+      new Promise((resolve) => {
+        setPrompt({ ...request, resolve });
+      }),
+    []
+  );
+
   const applyCollectionUpdate = useCallback(
     (collectionPath: string, collection: PostmanCollection) => {
       const entry = collectionsRef.current.find(
@@ -821,6 +833,43 @@ export default function App() {
     return serializeEnvironment(entry.environment);
   }, []);
 
+  const mountCollectionFile = useCallback(
+    (filePath: string, raw: string, options?: { forceNewTab?: boolean }) => {
+      const collection = parseCollection(raw);
+      const existing = collectionsRef.current.find((entry) => entry.filePath === filePath);
+      if (existing) {
+        openTab(
+          { kind: 'collection', collectionPath: filePath },
+          options?.forceNewTab ? { forceNew: true } : undefined
+        );
+        return collection.info?.name?.trim() || fileName(filePath);
+      }
+
+      setCollections((list) => [...list, { filePath, originalRaw: raw, collection }]);
+      setUiByPath((current) => ({
+        ...current,
+        [filePath]: createCollectionUiState(collectFolderPaths(collection.item), true)
+      }));
+      setCompareByPath((current) => {
+        const next = { ...current };
+        delete next[filePath];
+        return next;
+      });
+      {
+        const cleared = { ...compareByPathRef.current };
+        delete cleared[filePath];
+        compareByPathRef.current = cleared;
+      }
+      openTab(
+        { kind: 'collection', collectionPath: filePath },
+        { forceNew: true }
+      );
+      void refreshCompare(filePath, collection);
+      return collection.info?.name?.trim() || fileName(filePath);
+    },
+    [openTab, refreshCompare]
+  );
+
   const openCollection = useCallback(async () => {
     setStatus({ kind: 'idle' });
     try {
@@ -845,29 +894,9 @@ export default function App() {
         }
 
         try {
-          const collection = parseCollection(file.raw);
-          setCollections((list) => [
-            ...list,
-            { filePath: file.filePath, originalRaw: file.raw, collection }
-          ]);
-          setUiByPath((current) => ({
-            ...current,
-            [file.filePath]: createCollectionUiState(collectFolderPaths(collection.item), true)
-          }));
-          setCompareByPath((current) => {
-            const next = { ...current };
-            delete next[file.filePath];
-            return next;
-          });
-          {
-            const cleared = { ...compareByPathRef.current };
-            delete cleared[file.filePath];
-            compareByPathRef.current = cleared;
-          }
-          openTab({ kind: 'collection', collectionPath: file.filePath }, { forceNew: true });
-          opened.push(collection.info?.name ?? fileName(file.filePath));
+          const label = mountCollectionFile(file.filePath, file.raw);
+          opened.push(label);
           focusPath = file.filePath;
-          void refreshCompare(file.filePath, collection);
         } catch (error) {
           failed.push(`${fileName(file.filePath)}: ${errorMessage(error)}`);
         }
@@ -904,7 +933,30 @@ export default function App() {
     } catch (error) {
       setStatus({ kind: 'error', message: errorMessage(error) });
     }
-  }, [openTab, refreshCompare]);
+  }, [mountCollectionFile, openTab]);
+
+  const createNewCollection = useCallback(async () => {
+    setStatus({ kind: 'idle' });
+    const name = await askText({
+      title: 'New collection',
+      label: 'Collection name',
+      defaultValue: 'New Collection',
+      confirmLabel: 'Choose location…'
+    });
+    if (name == null) {
+      return;
+    }
+    try {
+      const result = await window.clara.createCollection(name);
+      if (result.canceled) {
+        return;
+      }
+      const label = mountCollectionFile(result.filePath, result.raw);
+      setStatus({ kind: 'ok', message: `Created ${label}` });
+    } catch (error) {
+      setStatus({ kind: 'error', message: errorMessage(error) });
+    }
+  }, [askText, mountCollectionFile]);
 
   const openEnvironment = useCallback(async () => {
     setStatus({ kind: 'idle' });
@@ -1693,27 +1745,23 @@ export default function App() {
         after = tab.path;
       }
       const result = insertItem(entry.collection, parent, createRequestItem(), after);
-      setCollections((list) =>
-        list.map((candidate) =>
-          candidate.filePath === entry.filePath
-            ? { ...candidate, collection: result.collection }
-            : candidate
-        )
-      );
-      syncDirty(entry.filePath, result.collection, entry.originalRaw);
+      applyCollectionUpdate(entry.filePath, result.collection);
       const parentPath = parent;
       updateUi(entry.filePath, (ui) => ({
         ...ui,
         expanded: parentPath ? new Set(ui.expanded).add(parentPath) : ui.expanded,
         collectionExpanded: true
       }));
-      openTab({
-        kind: 'request',
-        collectionPath: entry.filePath,
-        path: result.newPath
-      });
+      openTab(
+        {
+          kind: 'request',
+          collectionPath: entry.filePath,
+          path: result.newPath
+        },
+        { forceNew: true }
+      );
     },
-    [openTab, syncDirty, updateUi]
+    [applyCollectionUpdate, openTab, updateUi]
   );
 
   useEffect(() => {
@@ -1721,6 +1769,9 @@ export default function App() {
       switch (command.type) {
         case 'open':
           void openCollection();
+          break;
+        case 'new-collection':
+          void createNewCollection();
           break;
         case 'open-environment':
           void openEnvironment();
@@ -1768,6 +1819,7 @@ export default function App() {
     });
   }, [
     openCollection,
+    createNewCollection,
     openEnvironment,
     saveActiveResource,
     sendRequest,
@@ -1826,7 +1878,7 @@ export default function App() {
     setActiveTab((active) => (active ? remap(active) : active));
   };
 
-  const renameTarget = (target: TreeTarget | CollectionTarget) => {
+  const renameTarget = async (target: TreeTarget | CollectionTarget) => {
     const entry = collections.find(
       (candidate) => candidate.filePath === target.collectionPath
     );
@@ -1835,14 +1887,16 @@ export default function App() {
     }
     if (target.kind === 'collection') {
       const current = entry.collection.info?.name ?? '';
-      const next = window.prompt('Rename collection', current);
-      if (next == null || next.trim() === '' || next === current) {
+      const next = await askText({
+        title: 'Rename collection',
+        label: 'Name',
+        defaultValue: current,
+        confirmLabel: 'Rename'
+      });
+      if (next == null || next === current) {
         return;
       }
-      applyCollectionUpdate(
-        entry.filePath,
-        renameCollection(entry.collection, next.trim())
-      );
+      applyCollectionUpdate(entry.filePath, renameCollection(entry.collection, next));
       return;
     }
     const item = getItemByPath(entry.collection.item, target.path);
@@ -1850,11 +1904,13 @@ export default function App() {
       return;
     }
     const current = item.name ?? '';
-    const next = window.prompt(
-      target.kind === 'folder' ? 'Rename folder' : 'Rename request',
-      current
-    );
-    if (next == null || next.trim() === '' || next === current) {
+    const next = await askText({
+      title: target.kind === 'folder' ? 'Rename folder' : 'Rename request',
+      label: 'Name',
+      defaultValue: current,
+      confirmLabel: 'Rename'
+    });
+    if (next == null || next === current) {
       return;
     }
     applyCollectionUpdate(
@@ -1976,6 +2032,7 @@ export default function App() {
     }
     if (target.kind === 'collection') {
       return [
+        { id: 'new-request', label: 'New Request', shortcut: `${shortcutMod} T` },
         { id: 'run', label: 'Run collection' },
         { id: 'rename', label: 'Rename' },
         { id: 'expand-all', label: 'Expand all', separatorBefore: true },
@@ -1996,6 +2053,9 @@ export default function App() {
       (status === 'modified' || status === 'unchanged') &&
       (target.kind === 'request' || target.kind === 'folder');
     return [
+      ...(target.kind === 'folder'
+        ? [{ id: 'new-request', label: 'New Request', shortcut: `${shortcutMod} T` }]
+        : []),
       { id: 'run', label: target.kind === 'folder' ? 'Run folder' : 'Run' },
       { id: 'rename', label: 'Rename' },
       { id: 'duplicate', label: 'Duplicate' },
@@ -2314,17 +2374,22 @@ export default function App() {
     [applyCollectionUpdate]
   );
 
-  const renameEnvironmentTarget = (environmentPath: string) => {
+  const renameEnvironmentTarget = async (environmentPath: string) => {
     const entry = environments.find((candidate) => candidate.filePath === environmentPath);
     if (!entry) {
       return;
     }
     const current = entry.environment.name ?? '';
-    const next = window.prompt('Rename environment', current);
-    if (next == null || next.trim() === '' || next === current) {
+    const next = await askText({
+      title: 'Rename environment',
+      label: 'Name',
+      defaultValue: current,
+      confirmLabel: 'Rename'
+    });
+    if (next == null || next === current) {
       return;
     }
-    applyEnvironmentUpdate(environmentPath, renameEnvironment(entry.environment, next.trim()));
+    applyEnvironmentUpdate(environmentPath, renameEnvironment(entry.environment, next));
   };
 
   const handleContextAction = (id: string) => {
@@ -2362,7 +2427,7 @@ export default function App() {
       } else if (id === 'clear-active-environment') {
         setActiveEnvironmentPath(null);
       } else if (id === 'rename') {
-        renameEnvironmentTarget(target.environmentPath);
+        void renameEnvironmentTarget(target.environmentPath);
       } else if (id === 'delete') {
         closeEnvironment(target.environmentPath);
       }
@@ -2370,8 +2435,21 @@ export default function App() {
     }
     if (id === 'run') {
       runTarget(target);
+    } else if (id === 'new-request') {
+      if (target.kind === 'collection') {
+        createNewRequestNear({
+          kind: 'collection',
+          collectionPath: target.collectionPath
+        });
+      } else if (target.kind === 'folder') {
+        createNewRequestNear({
+          kind: 'folder',
+          collectionPath: target.collectionPath,
+          path: target.path
+        });
+      }
     } else if (id === 'rename') {
-      renameTarget(target);
+      void renameTarget(target);
     } else if (id === 'delete') {
       deleteTarget(target);
     } else if (id === 'duplicate' && target.kind !== 'collection') {
@@ -2526,6 +2604,9 @@ export default function App() {
           {anyDirty ? <span className="dirty-dot" title="Unsaved changes" /> : null}
         </span>
         <div className="titlebar-actions">
+          <button type="button" onClick={() => void createNewCollection()} title="⌘N / Ctrl+N">
+            New
+          </button>
           <button type="button" onClick={() => void openCollection()} title="⌘O / Ctrl+O">
             Open
           </button>
@@ -2549,7 +2630,10 @@ export default function App() {
           <h1>Open a Postman collection</h1>
           <p>Edit the JSON in your repository directly. No import or export cycle.</p>
           <div className="welcome-actions">
-            <button type="button" className="primary" onClick={() => void openCollection()}>
+            <button type="button" className="primary" onClick={() => void createNewCollection()}>
+              New collection
+            </button>
+            <button type="button" onClick={() => void openCollection()}>
               Open collection
             </button>
             <button type="button" onClick={() => void openEnvironment()}>
@@ -2676,11 +2760,20 @@ export default function App() {
                 <button
                   type="button"
                   className="sidebar-add"
+                  aria-label="New collection"
+                  title="New collection"
+                  onClick={() => void createNewCollection()}
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  className="sidebar-add"
                   aria-label="Open collection"
                   title="Open collection"
                   onClick={() => void openCollection()}
                 >
-                  +
+                  ↗
                 </button>
               </div>
 
@@ -3179,6 +3272,7 @@ export default function App() {
                   result={scopeRuns[tabKey(activeTab)] ?? null}
                   running={runningKey === tabKey(activeTab)}
                   onRun={() => void runScope(activeTab)}
+                  onNewRequest={() => createNewRequestNear(activeTab)}
                   variablesSlot={
                     <VariablesPane
                       scopeLabel="collection"
@@ -3214,6 +3308,7 @@ export default function App() {
                   result={scopeRuns[tabKey(activeTab)] ?? null}
                   running={runningKey === tabKey(activeTab)}
                   onRun={() => void runScope(activeTab)}
+                  onNewRequest={() => createNewRequestNear(activeTab)}
                   variablesSlot={
                     <VariablesPane
                       scopeLabel="folder"
@@ -3436,6 +3531,23 @@ export default function App() {
           items={contextMenuItems}
           onSelect={handleContextAction}
           onClose={() => setContextMenu(null)}
+        />
+      ) : null}
+      {prompt ? (
+        <PromptDialog
+          title={prompt.title}
+          label={prompt.label}
+          defaultValue={prompt.defaultValue}
+          confirmLabel={prompt.confirmLabel}
+          placeholder={prompt.placeholder}
+          onConfirm={(value) => {
+            prompt.resolve(value);
+            setPrompt(null);
+          }}
+          onCancel={() => {
+            prompt.resolve(null);
+            setPrompt(null);
+          }}
         />
       ) : null}
     </div>

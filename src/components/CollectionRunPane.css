@@ -28,6 +28,13 @@
   font-size: 0.75rem;
 }
 
+.collection-run-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .collection-run-button {
   flex: 0 0 auto;
   height: 34px;
@@ -39,6 +46,12 @@
   font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
+}
+
+.collection-run-button.secondary {
+  border-color: var(--border-1);
+  background: var(--bg);
+  color: var(--text);
 }
 
 .collection-run-button:hover:not(:disabled) {
