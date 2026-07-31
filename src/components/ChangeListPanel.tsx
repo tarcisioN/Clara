@@ -1,3 +1,4 @@
+import { useEffect, useId, useMemo, useState, type KeyboardEvent } from 'react';
 import type { ChangeListEntry } from '../git/changeList.ts';
 import { folderLabelForEntry } from '../git/changeList.ts';
 import type { PostmanCollection } from '../postman/types.ts';
@@ -28,6 +29,136 @@ function ChangeBadge({ kind }: { kind: ChangeListEntry['changeKind'] }) {
   );
 }
 
+function BranchSuggestionBox({
+  baseRef,
+  branches,
+  onChangeBase
+}: {
+  baseRef: string;
+  branches: string[];
+  onChangeBase: (baseRef: string) => void;
+}) {
+  const listboxId = useId();
+  const [query, setQuery] = useState(baseRef);
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    setQuery(baseRef);
+  }, [baseRef]);
+
+  const suggestions = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return [...new Set(branches)]
+      .filter((branch) => branch !== baseRef || normalized !== baseRef.toLowerCase())
+      .filter((branch) => !normalized || branch.toLowerCase().includes(normalized))
+      .sort((left, right) => {
+        const leftStarts = left.toLowerCase().startsWith(normalized);
+        const rightStarts = right.toLowerCase().startsWith(normalized);
+        if (leftStarts !== rightStarts) {
+          return leftStarts ? -1 : 1;
+        }
+        return left.localeCompare(right);
+      })
+      .slice(0, 3);
+  }, [baseRef, branches, query]);
+
+  useEffect(() => {
+    setActiveIndex(0);
+  }, [query]);
+
+  const choose = (ref: string) => {
+    const trimmed = ref.trim();
+    if (!trimmed) {
+      setQuery(baseRef);
+      setOpen(false);
+      return;
+    }
+    setQuery(trimmed);
+    setOpen(false);
+    if (trimmed !== baseRef) {
+      onChangeBase(trimmed);
+    }
+  };
+
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown' && suggestions.length > 0) {
+      event.preventDefault();
+      setOpen(true);
+      setActiveIndex((current) => Math.min(current + 1, suggestions.length - 1));
+    } else if (event.key === 'ArrowUp' && suggestions.length > 0) {
+      event.preventDefault();
+      setOpen(true);
+      setActiveIndex((current) => Math.max(current - 1, 0));
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      choose(open && suggestions[activeIndex] ? suggestions[activeIndex] : query);
+    } else if (event.key === 'Escape') {
+      setQuery(baseRef);
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div
+      className="change-list-base"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setQuery(baseRef);
+          setOpen(false);
+        }
+      }}
+    >
+      <span className="visually-hidden">Compare base</span>
+      <input
+        type="text"
+        role="combobox"
+        value={query}
+        aria-label="Compare base branch or ref"
+        aria-autocomplete="list"
+        aria-controls={listboxId}
+        aria-expanded={open && suggestions.length > 0}
+        aria-activedescendant={
+          open && suggestions[activeIndex]
+            ? `${listboxId}-${activeIndex}`
+            : undefined
+        }
+        title="Type a branch, tag, or commit SHA"
+        spellCheck={false}
+        autoComplete="off"
+        onFocus={() => setOpen(true)}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setOpen(true);
+        }}
+        onKeyDown={onKeyDown}
+      />
+      {open && suggestions.length > 0 ? (
+        <ul id={listboxId} className="branch-suggestions" role="listbox">
+          {suggestions.map((branch, index) => (
+            <li
+              id={`${listboxId}-${index}`}
+              key={branch}
+              role="option"
+              aria-selected={index === activeIndex}
+            >
+              <button
+                type="button"
+                className={index === activeIndex ? 'active' : ''}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => choose(branch)}
+                onMouseEnter={() => setActiveIndex(index)}
+              >
+                {branch}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
 export default function ChangeListPanel({
   baseRef,
   branches,
@@ -46,11 +177,6 @@ export default function ChangeListPanel({
   const added = entries.filter((entry) => entry.changeKind === 'added').length;
   const modified = entries.filter((entry) => entry.changeKind === 'modified').length;
   const removed = entries.filter((entry) => entry.changeKind === 'removed').length;
-
-  const branchOptions = [...branches];
-  if (baseRef && !branchOptions.includes(baseRef)) {
-    branchOptions.unshift(baseRef);
-  }
 
   let lastGroup: string | null = null;
 
@@ -99,21 +225,11 @@ export default function ChangeListPanel({
       </div>
 
       <div className="change-list-controls">
-        <label className="change-list-base">
-          <span className="visually-hidden">Compare base</span>
-          <select
-            value={baseRef}
-            aria-label="Compare base branch"
-            title="Base ref to compare against"
-            onChange={(event) => onChangeBase(event.target.value)}
-          >
-            {branchOptions.map((branch) => (
-              <option key={branch} value={branch}>
-                vs {branch}
-              </option>
-            ))}
-          </select>
-        </label>
+        <BranchSuggestionBox
+          baseRef={baseRef}
+          branches={branches}
+          onChangeBase={onChangeBase}
+        />
         <label className="change-list-source">
           <span className="visually-hidden">Compare source</span>
           <select
