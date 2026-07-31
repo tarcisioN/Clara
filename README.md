@@ -2,13 +2,9 @@
 
 Editor leve de collections Postman versionadas no repositório.
 
-- Schema em memória = JSON Postman (v2.1), sem conversão Bruno↔Postman
+- Schema em memória = JSON Postman (v2.1), sem conversão para outro formato
 - Persistência no mesmo arquivo da collection
-- UI inspirada no Bruno (referência visual), projeto do zero
 - Execução via Newman (`Send` / `⌘Enter`; assume `newman` no PATH)
-
-A referência visual e sua licença estão registradas em
-[THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
 
 ## Setup
 
