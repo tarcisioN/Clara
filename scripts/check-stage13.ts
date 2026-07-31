@@ -73,11 +73,11 @@ assert.equal(diff.statusByPath.get('0.0'), 'unchanged'); // Keep
 assert.equal(diff.statusByPath.get('0.1'), 'modified'); // Edit Me
 assert.equal(diff.statusByPath.get('0.2'), 'added'); // Added
 assert.equal(diff.statusByPath.get('1'), 'unchanged'); // Root Ping
-assert.equal(diff.statusByPath.get('0'), 'modified'); // Folder A has nested changes
+assert.equal(diff.statusByPath.get('0'), 'unchanged'); // Folder A: nested-only, meta intact
 
 assert.equal(diff.added, 1);
 assert.equal(diff.removedCount, 1);
-assert.equal(diff.modified, 1); // Edit Me only (folder nested-only does not bump modified counter twice)
+assert.equal(diff.modified, 1); // Edit Me only
 assert.equal(diff.changedCount, 3);
 
 const removedInFolder = removedUnderParent(diff.removed, '0');
@@ -111,5 +111,31 @@ const expand = collectChangedFolderPaths(
   diff.descendantChangeCount
 );
 assert.ok(expand.has('0'));
+
+// Folder whose own meta changes (variables) is modified even without child edits.
+const baseMeta: PostmanCollection = {
+  info: base.info,
+  item: [
+    {
+      name: 'Vars',
+      variable: [{ key: 'a', value: '1' }],
+      item: [{ name: 'Ping', request: { method: 'GET', url: 'https://example.com' } }]
+    }
+  ]
+};
+const currentMeta: PostmanCollection = {
+  info: base.info,
+  item: [
+    {
+      name: 'Vars',
+      variable: [{ key: 'a', value: '2' }],
+      item: [{ name: 'Ping', request: { method: 'GET', url: 'https://example.com' } }]
+    }
+  ]
+};
+const metaDiff = computeStructuralDiff(currentMeta, baseMeta);
+assert.equal(metaDiff.statusByPath.get('0'), 'modified');
+assert.equal(metaDiff.statusByPath.get('0.0'), 'unchanged');
+assert.equal(metaDiff.modified, 1);
 
 console.log('stage13 checks passed');

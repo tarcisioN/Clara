@@ -194,6 +194,9 @@ function TreeNode({
   const isSelected = selectedPath === path;
   const changeKind = structuralDiff?.statusByPath.get(path) ?? 'unchanged';
   const nestedCount = structuralDiff?.descendantChangeCount.get(path) ?? 0;
+  // Nested-only folders stay status=unchanged but still show a descendant badge.
+  const treeChangeKind: ChangeKind =
+    changeKind === 'unchanged' && nestedCount > 0 ? 'modified' : changeKind;
 
   if (folder) {
     const ghosts = structuralDiff
@@ -204,7 +207,7 @@ function TreeNode({
         <div
           className={`tree-row folder ${isExpanded ? 'expanded' : ''} ${
             isSelected ? 'selected' : ''
-          } ${changeKind !== 'unchanged' ? `change-${changeKind}` : ''}`}
+          } ${treeChangeKind !== 'unchanged' ? `change-${treeChangeKind}` : ''}`}
           style={{ paddingLeft: 10 + depth * 14 }}
           onContextMenu={(event) => {
             event.preventDefault();
@@ -236,7 +239,7 @@ function TreeNode({
             <span className="tree-label">{name}</span>
           </button>
           <ChangeMarker
-            kind={changeKind}
+            kind={treeChangeKind}
             count={nestedCount > 0 ? nestedCount : undefined}
           />
           <MoreButton

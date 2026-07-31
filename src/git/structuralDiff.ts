@@ -243,15 +243,14 @@ export function computeStructuralDiff(
       if (isFolder(node) && isFolder(original)) {
         const metaChanged = stable(folderMeta(node)) !== stable(folderMeta(original));
         walk(node.item, original.item, path);
-        const nested = descendantChangeCount.get(path) ?? 0;
         if (metaChanged) {
           statusByPath.set(path, 'modified');
           modified += 1;
           bumpContainingFolders(parentOf(path), 1);
-        } else if (nested > 0) {
-          // Folder shell unchanged, but children changed — still "has changes".
-          statusByPath.set(path, 'modified');
         } else {
+          // Nested-only changes stay on the folder via descendantChangeCount
+          // (tree badges / Changed only). The Changes list should not list the
+          // folder itself unless name / variables / auth / events changed.
           statusByPath.set(path, 'unchanged');
         }
         continue;

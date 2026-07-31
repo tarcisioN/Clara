@@ -68,12 +68,12 @@ const entries = flattenStructuralChanges(current, diff);
 
 assert.deepEqual(
   entries.map((entry) => `${entry.changeKind}:${entry.name}`),
-  ['modified:Folder A', 'modified:Edit Me', 'added:Added', 'removed:Remove Me']
+  ['modified:Edit Me', 'added:Added', 'removed:Remove Me']
 );
 
 const counts = changeListCounts(entries);
 assert.equal(counts.added, 1);
-assert.equal(counts.modified, 2);
+assert.equal(counts.modified, 1);
 assert.equal(counts.removed, 1);
 
 console.log('stage15 checks passed');

@@ -53,7 +53,7 @@ Show structural change status in the collection explorer against the selected ba
 ### Validation
 - [x] Fixture: added request, removed request, edited method/URL → correct markers
 - [x] Unchanged siblings hidden when Changed only is on
-- [x] Folder with only nested changes still shows as modified/has-changes
+- [x] Folder with only nested changes still shows as has-changes in the tree (descendant badge); Changes list omits the folder unless its own meta changed
 - [x] `make check-stage13`
 
 ### Policy (this stage)
@@ -94,6 +94,7 @@ A navigable index of all collection changes.
 
 ### Requirements
 - [x] Panel or section listing changed requests/folders (grouped by folder path)
+- [x] Folders appear in the list only when the folder itself changed (name / variables / auth / events); nested-only folders are group headers, not rows
 - [x] Click → open/focus that node and show its diff (G2)
 - [x] Shortcuts: next / previous change
 - [x] Counts: added / removed / modified
