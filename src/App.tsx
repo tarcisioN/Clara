@@ -1037,6 +1037,29 @@ export default function App() {
     [refreshCompare, syncDirty, updateUi]
   );
 
+  /** Writes the collection to disk so the edit lands clean instead of pending a Save. */
+  const persistCollection = useCallback(
+    async (collectionPath: string, collection: PostmanCollection) => {
+      const contents = serializeCollection(collection);
+      await window.clara.saveCollection(collectionPath, contents);
+      setCollections((list) =>
+        list.map((candidate) =>
+          candidate.filePath === collectionPath
+            ? { ...candidate, collection, originalRaw: contents }
+            : candidate
+        )
+      );
+      setUiByPath((current) => ({
+        ...current,
+        [collectionPath]: clearCollectionDirty(
+          current[collectionPath] ?? createCollectionUiState()
+        )
+      }));
+      await refreshCompare(collectionPath, collection);
+    },
+    [refreshCompare]
+  );
+
   const isTabDirty = useCallback((tab: WorkspaceTab): boolean => {
     if (tab.kind === 'environment') {
       const entry = environmentsRef.current.find(
@@ -2588,8 +2611,25 @@ export default function App() {
     void refreshEnvCompare(environmentPath, environment);
   };
 
+  /** Writes the environment to disk so the edit lands clean instead of pending a Save. */
+  const persistEnvironment = async (
+    environmentPath: string,
+    environment: PostmanEnvironment
+  ) => {
+    const contents = serializeEnvironment(environment);
+    await window.clara.saveEnvironment(environmentPath, contents);
+    setEnvironments((list) =>
+      list.map((entry) =>
+        entry.filePath === environmentPath
+          ? { ...entry, environment, originalRaw: contents }
+          : entry
+      )
+    );
+    await refreshEnvCompare(environmentPath, environment);
+  };
+
   const restoreRequestFromBase = useCallback(
-    (collectionPath: string, path: ItemPath) => {
+    async (collectionPath: string, path: ItemPath) => {
       const entry = collectionsRef.current.find(
         (candidate) => candidate.filePath === collectionPath
       );
@@ -2600,26 +2640,26 @@ export default function App() {
       const label = getItemByPath(entry.collection.item, path)?.name?.trim() || path;
       if (
         !window.confirm(
-          `Restore “${label}” from ${compare.baseRef}? This creates an unsaved edit (Save writes the file; git is not modified).`
+          `Restore “${label}” from ${compare.baseRef}? This writes the file (git is not modified).`
         )
       ) {
         return;
       }
       try {
-        applyCollectionUpdate(
+        await persistCollection(
           collectionPath,
           restoreItemFromBase(entry.collection, path, compare.baseCollection)
         );
-        setStatus({ kind: 'ok', message: `Restored from ${compare.baseRef}` });
+        setStatus({ kind: 'ok', message: `Restored from ${compare.baseRef} · saved` });
       } catch (error) {
         setStatus({ kind: 'error', message: errorMessage(error) });
       }
     },
-    [applyCollectionUpdate]
+    [persistCollection]
   );
 
   const restoreRequestSection = useCallback(
-    (collectionPath: string, path: ItemPath, section: RequestSectionKey) => {
+    async (collectionPath: string, path: ItemPath, section: RequestSectionKey) => {
       const entry = collectionsRef.current.find(
         (candidate) => candidate.filePath === collectionPath
       );
@@ -2637,32 +2677,30 @@ export default function App() {
         return;
       }
       if (
-        !window.confirm(
-          `Restore ${section} from ${compare.baseRef}? This creates an unsaved edit.`
-        )
+        !window.confirm(`Restore ${section} from ${compare.baseRef}? This writes the file.`)
       ) {
         return;
       }
       try {
-        applyCollectionUpdate(
-          collectionPath,
-          {
-            ...entry.collection,
-            item: updateItemByPath(entry.collection.item, path, () =>
-              restoreRequestSectionFromBase(current, base, section)
-            )
-          }
-        );
-        setStatus({ kind: 'ok', message: `Restored ${section} from ${compare.baseRef}` });
+        await persistCollection(collectionPath, {
+          ...entry.collection,
+          item: updateItemByPath(entry.collection.item, path, () =>
+            restoreRequestSectionFromBase(current, base, section)
+          )
+        });
+        setStatus({
+          kind: 'ok',
+          message: `Restored ${section} from ${compare.baseRef} · saved`
+        });
       } catch (error) {
         setStatus({ kind: 'error', message: errorMessage(error) });
       }
     },
-    [applyCollectionUpdate]
+    [persistCollection]
   );
 
   const restoreFolderFromBase = useCallback(
-    (collectionPath: string, path: ItemPath) => {
+    async (collectionPath: string, path: ItemPath) => {
       const entry = collectionsRef.current.find(
         (candidate) => candidate.filePath === collectionPath
       );
@@ -2673,22 +2711,22 @@ export default function App() {
       const label = getItemByPath(entry.collection.item, path)?.name?.trim() || path;
       if (
         !window.confirm(
-          `Restore folder “${label}” (including nested items) from ${compare.baseRef}? This creates an unsaved edit.`
+          `Restore folder “${label}” (including nested items) from ${compare.baseRef}? This writes the file.`
         )
       ) {
         return;
       }
       try {
-        applyCollectionUpdate(
+        await persistCollection(
           collectionPath,
           restoreFolderSubtreeFromBase(entry.collection, path, compare.baseCollection)
         );
-        setStatus({ kind: 'ok', message: `Restored folder from ${compare.baseRef}` });
+        setStatus({ kind: 'ok', message: `Restored folder from ${compare.baseRef} · saved` });
       } catch (error) {
         setStatus({ kind: 'error', message: errorMessage(error) });
       }
     },
-    [applyCollectionUpdate]
+    [persistCollection]
   );
 
   const renameEnvironmentTarget = async (environmentPath: string) => {
@@ -3498,36 +3536,44 @@ export default function App() {
                   removedKeys={activeEnvCompare?.diff.removed ?? null}
                   onRestoreAll={
                     activeEnvCompare
-                      ? () => {
+                      ? async () => {
                           if (
                             !window.confirm(
-                              `Restore all environment values from ${activeEnvCompare.baseRef}? This creates an unsaved edit.`
-                            )
-                          ) {
-                            return;
-                          }
-                          applyEnvironmentUpdate(
-                            activeEnvironment.filePath,
-                            restoreAllEnvironmentValuesFromBase(
-                              activeEnvironment.environment,
-                              activeEnvCompare.baseEnvironment
-                            )
-                          );
-                        }
-                      : null
-                  }
-                  onRestoreKey={
-                    activeEnvCompare
-                      ? (key) => {
-                          if (
-                            !window.confirm(
-                              `Restore “${key}” from ${activeEnvCompare.baseRef}? This creates an unsaved edit.`
+                              `Restore all environment values from ${activeEnvCompare.baseRef}? This writes the file.`
                             )
                           ) {
                             return;
                           }
                           try {
-                            applyEnvironmentUpdate(
+                            await persistEnvironment(
+                              activeEnvironment.filePath,
+                              restoreAllEnvironmentValuesFromBase(
+                                activeEnvironment.environment,
+                                activeEnvCompare.baseEnvironment
+                              )
+                            );
+                            setStatus({
+                              kind: 'ok',
+                              message: `Restored from ${activeEnvCompare.baseRef} · saved`
+                            });
+                          } catch (error) {
+                            setStatus({ kind: 'error', message: errorMessage(error) });
+                          }
+                        }
+                      : null
+                  }
+                  onRestoreKey={
+                    activeEnvCompare
+                      ? async (key) => {
+                          if (
+                            !window.confirm(
+                              `Restore “${key}” from ${activeEnvCompare.baseRef}? This writes the file.`
+                            )
+                          ) {
+                            return;
+                          }
+                          try {
+                            await persistEnvironment(
                               activeEnvironment.filePath,
                               restoreEnvironmentValueFromBase(
                                 activeEnvironment.environment,
@@ -3535,6 +3581,10 @@ export default function App() {
                                 key
                               )
                             );
+                            setStatus({
+                              kind: 'ok',
+                              message: `Restored “${key}” from ${activeEnvCompare.baseRef} · saved`
+                            });
                           } catch (error) {
                             setStatus({ kind: 'error', message: errorMessage(error) });
                           }
