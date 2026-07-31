@@ -186,11 +186,10 @@ button.primary {
 .collection-heading {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   margin: 0 6px;
-  padding: 10px 12px 7px;
+  padding: 6px 6px 6px 4px;
   border-radius: 6px;
-  cursor: pointer;
 }
 
 .collection-heading:hover {
@@ -201,18 +200,58 @@ button.primary {
   background: var(--surface-1);
 }
 
+.collection-chevron-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.collection-chevron-button:hover {
+  background: var(--surface-1);
+  color: var(--text);
+}
+
+.collection-chevron {
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+.collection-heading-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  padding: 4px 4px 4px 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 .collection-icon {
   color: var(--brand-text);
   font-size: 1rem;
 }
 
-.collection-heading > div {
+.collection-heading-select > div {
   min-width: 0;
   display: flex;
   flex-direction: column;
 }
 
-.collection-heading strong {
+.collection-heading-select strong {
   overflow: hidden;
   font-size: 0.75rem;
   font-weight: 500;
@@ -220,10 +259,44 @@ button.primary {
   white-space: nowrap;
 }
 
-.collection-heading span:last-child {
+.collection-heading-select span:last-child {
   margin-top: 2px;
   color: var(--text-faint);
   font-size: 0.625rem;
+}
+
+.collection-more {
+  opacity: 0;
+}
+
+.collection-heading:hover .collection-more,
+.collection-heading:focus-within .collection-more,
+.collection-more:focus-visible {
+  opacity: 1;
+}
+
+.tree-more {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 0.875rem;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.tree-more:hover {
+  background: var(--surface-1);
+  color: var(--text);
 }
 
 .main-workspace {

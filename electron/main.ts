@@ -98,9 +98,19 @@ function buildMenu() {
       label: 'Tabs',
       submenu: [
         {
+          label: 'New Request',
+          accelerator: 'CmdOrCtrl+T',
+          click: () => sendCommand({ type: 'new-request' })
+        },
+        {
           label: 'Close Tab',
           accelerator: 'CmdOrCtrl+W',
           click: () => sendCommand({ type: 'close-tab' })
+        },
+        {
+          label: 'Force Close Tab',
+          accelerator: 'Alt+CmdOrCtrl+W',
+          click: () => sendCommand({ type: 'force-close-tab' })
         },
         {
           label: 'Next Tab',

@@ -22,6 +22,7 @@ export type PostmanUrl = string | PostmanUrlObject;
 import type { PostmanBody } from './body.ts';
 import type { PostmanAuth } from './auth.ts';
 import type { PostmanEvent } from './scripts.ts';
+import type { PostmanVariable } from './variables.ts';
 
 export type PostmanHeader = {
   key?: string;
@@ -44,6 +45,7 @@ export type PostmanItem = {
   item?: PostmanItem[];
   request?: PostmanRequest | string;
   event?: PostmanEvent[];
+  variable?: PostmanVariable[];
   [key: string]: unknown;
 };
 
@@ -56,7 +58,7 @@ export type PostmanCollection = {
     [key: string]: unknown;
   };
   item?: PostmanItem[];
-  variable?: unknown[];
+  variable?: PostmanVariable[];
   auth?: Record<string, unknown>;
   [key: string]: unknown;
 };

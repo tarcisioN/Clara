@@ -266,11 +266,23 @@ Pressuposto: `newman` está no `PATH` do usuário. Ajuda de instalação fica pa
 - [ ] `-e` com environment aberto
 - [ ] Detectar Newman ausente e orientar instalação
 
+### Etapa R2 — Variables + explorer context menu
+- [x] Mostrar/editar `variable[]` nas abas de collection e pasta (herança para requests filhos)
+- [x] Single-request Newman mescla variables de collection + pastas ancestrais
+- [x] Right-click na exploração: collection, pastas e requests
+- [x] Ações: Run, Rename, Delete (collection = Close), Duplicate (pasta/request)
+- [x] Dirty dot nas abas COL / DIR
+- [x] Menu de contexto nas abas (New / Duplicate / Close / Reveal)
+- [x] Botão `···` na exploração + colapsar collection
+- [x] Expand all / Collapse all no menu da collection
+- [x] `make check-etapa9`
+
 ### Validação
 - [x] Resultado alinhado ao `newman` no terminal para o mesmo request _(parse + temp collection; smoke manual na UI)_
 - [x] Edits não salvos entram no run (temp usa memória)
 - [x] Collection/folder run reporta N executions (`make check-etapa8`)
 - [x] Sessão v2 persiste abas de collection / folder / request
+- [x] Variables + tree mutations (`make check-etapa9`)
 
 ---
 

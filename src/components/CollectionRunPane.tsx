@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   executionStatusTone,
   type NewmanExecutionView,
@@ -14,6 +14,7 @@ type CollectionRunPaneProps = {
   result: NewmanRunView | null;
   running: boolean;
   onRun: () => void;
+  variablesSlot?: ReactNode;
 };
 
 type DetailSection = 'body' | 'headers' | 'tests';
@@ -137,7 +138,8 @@ export default function CollectionRunPane({
   requestCount,
   result,
   running,
-  onRun
+  onRun,
+  variablesSlot
 }: CollectionRunPaneProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const executions = result?.executions ?? [];
@@ -175,6 +177,8 @@ export default function CollectionRunPane({
           {running ? 'Running…' : runLabel}
         </button>
       </header>
+
+      {variablesSlot}
 
       {running && (
         <div className="collection-run-banner running">Calling Newman…</div>

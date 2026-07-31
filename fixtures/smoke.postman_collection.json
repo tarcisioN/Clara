@@ -4,9 +4,33 @@
     "name": "Clara Smoke Collection",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://example.com",
+      "type": "string"
+    },
+    {
+      "key": "env",
+      "value": "smoke",
+      "type": "string"
+    }
+  ],
   "item": [
     {
       "name": "Health",
+      "variable": [
+        {
+          "key": "healthToken",
+          "value": "folder-health",
+          "type": "string"
+        },
+        {
+          "key": "env",
+          "value": "health-folder",
+          "type": "string"
+        }
+      ],
       "auth": {
         "type": "apikey",
         "apikey": [

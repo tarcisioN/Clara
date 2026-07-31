@@ -1,3 +1,4 @@
+import type { MouseEvent } from 'react';
 import type { PostmanItem } from '../postman/types.ts';
 import {
   childPath,
@@ -8,6 +9,10 @@ import {
 import { ITEM_PATH_MIME } from './dnd.ts';
 import './CollectionTree.css';
 
+export type TreeTarget =
+  | { kind: 'folder'; path: ItemPath }
+  | { kind: 'request'; path: ItemPath };
+
 type CollectionTreeProps = {
   items: PostmanItem[] | undefined;
   expanded: Set<ItemPath>;
@@ -15,6 +20,7 @@ type CollectionTreeProps = {
   onToggleFolder: (path: ItemPath) => void;
   onSelectFolder: (path: ItemPath) => void;
   onSelectRequest: (path: ItemPath) => void;
+  onContextMenu: (event: MouseEvent, target: TreeTarget) => void;
 };
 
 type TreeNodeProps = {
@@ -26,7 +32,32 @@ type TreeNodeProps = {
   onToggleFolder: (path: ItemPath) => void;
   onSelectFolder: (path: ItemPath) => void;
   onSelectRequest: (path: ItemPath) => void;
+  onContextMenu: (event: MouseEvent, target: TreeTarget) => void;
 };
+
+function MoreButton({
+  label,
+  onOpen
+}: {
+  label: string;
+  onOpen: (event: MouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="tree-more"
+      aria-label={label}
+      title={label}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onOpen(event);
+      }}
+    >
+      ···
+    </button>
+  );
+}
 
 function TreeNode({
   item,
@@ -36,7 +67,8 @@ function TreeNode({
   selectedPath,
   onToggleFolder,
   onSelectFolder,
-  onSelectRequest
+  onSelectRequest,
+  onContextMenu
 }: TreeNodeProps) {
   const folder = isFolder(item);
   const request = isRequest(item);
@@ -52,6 +84,10 @@ function TreeNode({
             isSelected ? 'selected' : ''
           }`}
           style={{ paddingLeft: 10 + depth * 14 }}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            onContextMenu(event, { kind: 'folder', path });
+          }}
         >
           <button
             type="button"
@@ -76,6 +112,10 @@ function TreeNode({
             <span className="tree-icon" aria-hidden />
             <span className="tree-label">{name}</span>
           </button>
+          <MoreButton
+            label={`Folder actions for ${name}`}
+            onOpen={(event) => onContextMenu(event, { kind: 'folder', path })}
+          />
         </div>
         {isExpanded && (
           <ul className="tree-children">
@@ -90,6 +130,7 @@ function TreeNode({
                 onToggleFolder={onToggleFolder}
                 onSelectFolder={onSelectFolder}
                 onSelectRequest={onSelectRequest}
+                onContextMenu={onContextMenu}
               />
             ))}
           </ul>
@@ -109,23 +150,35 @@ function TreeNode({
 
   return (
     <li className="tree-node">
-      <button
-        type="button"
+      <div
         className={`tree-row request ${isSelected ? 'selected' : ''}`}
         style={{ paddingLeft: 10 + depth * 14 }}
-        onClick={() => onSelectRequest(path)}
-        aria-current={isSelected ? 'true' : undefined}
-        draggable
-        onDragStart={(event) => {
-          event.dataTransfer.setData(ITEM_PATH_MIME, path);
-          event.dataTransfer.setData('text/plain', name);
-          event.dataTransfer.effectAllowed = 'copy';
+        onContextMenu={(event) => {
+          event.preventDefault();
+          onContextMenu(event, { kind: 'request', path });
         }}
       >
-        <span className="tree-chevron spacer" aria-hidden />
-        <span className={`tree-method method-${method.toLowerCase()}`}>{method}</span>
-        <span className="tree-label">{name}</span>
-      </button>
+        <button
+          type="button"
+          className="tree-request-select"
+          onClick={() => onSelectRequest(path)}
+          aria-current={isSelected ? 'true' : undefined}
+          draggable
+          onDragStart={(event) => {
+            event.dataTransfer.setData(ITEM_PATH_MIME, path);
+            event.dataTransfer.setData('text/plain', name);
+            event.dataTransfer.effectAllowed = 'copy';
+          }}
+        >
+          <span className="tree-chevron spacer" aria-hidden />
+          <span className={`tree-method method-${method.toLowerCase()}`}>{method}</span>
+          <span className="tree-label">{name}</span>
+        </button>
+        <MoreButton
+          label={`Request actions for ${name}`}
+          onOpen={(event) => onContextMenu(event, { kind: 'request', path })}
+        />
+      </div>
     </li>
   );
 }
@@ -136,7 +189,8 @@ export default function CollectionTree({
   selectedPath,
   onToggleFolder,
   onSelectFolder,
-  onSelectRequest
+  onSelectRequest,
+  onContextMenu
 }: CollectionTreeProps) {
   if (!items || items.length === 0) {
     return <p className="tree-empty">Collection has no items.</p>;
@@ -155,6 +209,7 @@ export default function CollectionTree({
           onToggleFolder={onToggleFolder}
           onSelectFolder={onSelectFolder}
           onSelectRequest={onSelectRequest}
+          onContextMenu={onContextMenu}
         />
       ))}
     </ul>

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type DragEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type DragEvent, type MouseEvent } from 'react';
 import type { WorkspaceTab } from '../workspace/tabs.ts';
 import { sameTab, tabKey } from '../workspace/tabs.ts';
 import { ITEM_PATH_MIME, TAB_PATH_MIME } from './dnd.ts';
@@ -19,6 +19,7 @@ type RequestTabsProps = {
   onClose: (tab: WorkspaceTab) => void;
   onDropRequest: (path: string) => void;
   onReorder: (from: WorkspaceTab, to: WorkspaceTab, place: 'before' | 'after') => void;
+  onContextMenu: (event: MouseEvent, tab: WorkspaceTab) => void;
 };
 
 function TabLabel({ children }: { children: string }) {
@@ -59,7 +60,8 @@ export default function RequestTabs({
   onSelect,
   onClose,
   onDropRequest,
-  onReorder
+  onReorder,
+  onContextMenu
 }: RequestTabsProps) {
   const [treeDropTarget, setTreeDropTarget] = useState(false);
   const [reorderOver, setReorderOver] = useState<{
@@ -144,6 +146,10 @@ export default function RequestTabs({
                 event.preventDefault();
                 onClose(entry.tab);
               }
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              onContextMenu(event, entry.tab);
             }}
             onDragStart={(event) => {
               event.dataTransfer.setData(TAB_PATH_MIME, key);

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppCommand } from '../electron/commands.ts';
-import CollectionTree from './components/CollectionTree.tsx';
+import CollectionTree, { type TreeTarget } from './components/CollectionTree.tsx';
 import CollectionRunPane from './components/CollectionRunPane.tsx';
+import ContextMenu, { type ContextMenuItem } from './components/ContextMenu.tsx';
 import RequestPane from './components/RequestPane.tsx';
 import RequestTabs, { type WorkspaceTabView } from './components/RequestTabs.tsx';
 import ResponsePane from './components/ResponsePane.tsx';
+import VariablesPane from './components/VariablesPane.tsx';
 import { buildSingleRequestCollection } from './newman/buildRunCollection.ts';
 import type { NewmanRunView } from './newman/parseResult.ts';
 import {
@@ -21,16 +23,39 @@ import {
   getRequestByPath,
   isFolder,
   isRequest,
+  updateItemByPath,
   type ItemPath
 } from './postman/tree.ts';
+import {
+  createRequestItem,
+  deleteItem,
+  duplicateItem,
+  insertItem,
+  parentPathOf,
+  remapPathAfterDelete,
+  remapPathAfterDuplicate,
+  renameCollection,
+  renameItem
+} from './postman/structure.ts';
+import {
+  addVariable,
+  removeVariable,
+  setVariableDisabled,
+  updateVariable,
+  type PostmanVariable
+} from './postman/variables.ts';
 import {
   addRequestHeader,
   addRequestQueryParam,
   addRequestUrlEncodedParam,
+  getCollectionVariables,
+  getItemVariables,
   promoteRequestUrlToObject,
   removeRequestHeader,
   removeRequestQueryParam,
   removeRequestUrlEncodedParam,
+  setCollectionVariables,
+  setItemVariables,
   setRequestApiKeyAuth,
   setRequestAuthType,
   setRequestBasicAuth,
@@ -56,6 +81,7 @@ import {
   toSessionTab,
   type WorkspaceTab
 } from './workspace/tabs.ts';
+import { computeDirtyState } from './workspace/dirty.ts';
 import './App.css';
 
 type LoadedCollection = {
@@ -97,23 +123,45 @@ export default function App() {
   const [openTabs, setOpenTabs] = useState<WorkspaceTab[]>([]);
   const [activeTab, setActiveTab] = useState<WorkspaceTab | null>(null);
   const [dirtyPaths, setDirtyPaths] = useState<Set<ItemPath>>(new Set());
+  const [dirtyFolderPaths, setDirtyFolderPaths] = useState<Set<ItemPath>>(new Set());
+  const [collectionDirty, setCollectionDirty] = useState(false);
+  const [structureDirty, setStructureDirty] = useState(false);
+  const [collectionExpanded, setCollectionExpanded] = useState(true);
   const [sessionHydrated, setSessionHydrated] = useState(false);
   const [sessionHome, setSessionHome] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [requestRuns, setRequestRuns] = useState<Record<string, NewmanRunView>>({});
   const [scopeRuns, setScopeRuns] = useState<Record<string, NewmanRunView>>({});
   const [runningKey, setRunningKey] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    target:
+      | TreeTarget
+      | { kind: 'collection' }
+      | { kind: 'tab'; tab: WorkspaceTab };
+  } | null>(null);
 
-  const dirty = dirtyPaths.size > 0;
+  const dirty =
+    dirtyPaths.size > 0 ||
+    dirtyFolderPaths.size > 0 ||
+    collectionDirty ||
+    structureDirty;
 
   const loadedRef = useRef(loaded);
   const openTabsRef = useRef(openTabs);
   const activeTabRef = useRef(activeTab);
   const dirtyPathsRef = useRef(dirtyPaths);
+  const dirtyFolderPathsRef = useRef(dirtyFolderPaths);
+  const collectionDirtyRef = useRef(collectionDirty);
+  const structureDirtyRef = useRef(structureDirty);
   loadedRef.current = loaded;
   openTabsRef.current = openTabs;
   activeTabRef.current = activeTab;
   dirtyPathsRef.current = dirtyPaths;
+  dirtyFolderPathsRef.current = dirtyFolderPaths;
+  collectionDirtyRef.current = collectionDirty;
+  structureDirtyRef.current = structureDirty;
 
   const counts = useMemo(
     () => (loaded ? countItems(loaded.collection.item) : null),
@@ -132,7 +180,7 @@ export default function App() {
             name: loaded.collection.info?.name?.trim() || 'Collection',
             badge: 'COL',
             badgeClass: 'badge-collection',
-            dirty: false
+            dirty: collectionDirty || structureDirty
           }
         ];
       }
@@ -150,7 +198,7 @@ export default function App() {
             name: item.name?.trim() || 'Folder',
             badge: 'DIR',
             badgeClass: 'badge-folder',
-            dirty: false
+            dirty: dirtyFolderPaths.has(tab.path)
           }
         ];
       }
@@ -168,7 +216,7 @@ export default function App() {
         }
       ];
     });
-  }, [loaded, openTabs, dirtyPaths]);
+  }, [loaded, openTabs, dirtyPaths, dirtyFolderPaths, collectionDirty, structureDirty]);
 
   const activeRequestPath =
     activeTab?.kind === 'request' ? activeTab.path : null;
@@ -196,9 +244,13 @@ export default function App() {
     setOpenTabs([]);
     setActiveTab(null);
     setDirtyPaths(new Set());
+    setDirtyFolderPaths(new Set());
+    setCollectionDirty(false);
+    setStructureDirty(false);
     setRequestRuns({});
     setScopeRuns({});
     setRunningKey(null);
+    setContextMenu(null);
   };
 
   const openTab = useCallback((tab: WorkspaceTab) => {
@@ -255,7 +307,11 @@ export default function App() {
 
     setStatus({ kind: 'idle' });
     try {
-      const hasDirty = dirtyPathsRef.current.size > 0;
+      const hasDirty =
+        dirtyPathsRef.current.size > 0 ||
+        dirtyFolderPathsRef.current.size > 0 ||
+        collectionDirtyRef.current ||
+        structureDirtyRef.current;
       const contents = hasDirty
         ? serializeCollection(current.collection)
         : current.originalRaw;
@@ -263,6 +319,9 @@ export default function App() {
       await window.clara.saveCollection(current.filePath, contents);
       setLoaded({ ...current, originalRaw: contents });
       setDirtyPaths(new Set());
+      setDirtyFolderPaths(new Set());
+      setCollectionDirty(false);
+      setStructureDirty(false);
       setStatus({ kind: 'ok', message: `Saved ${current.filePath}` });
     } catch (error) {
       setStatus({
@@ -411,7 +470,19 @@ export default function App() {
     openTab({ kind: 'collection' });
   }, [openTab]);
 
-  const closeTab = useCallback((tab: WorkspaceTab) => {
+  const closeTab = useCallback((tab: WorkspaceTab, options?: { force?: boolean }) => {
+    const force = options?.force ?? false;
+    const isDirty =
+      tab.kind === 'collection'
+        ? collectionDirtyRef.current || structureDirtyRef.current
+        : tab.kind === 'folder'
+          ? dirtyFolderPathsRef.current.has(tab.path)
+          : dirtyPathsRef.current.has(tab.path);
+    if (!force && isDirty) {
+      if (!window.confirm('This tab has unsaved changes. Close anyway?')) {
+        return;
+      }
+    }
     setOpenTabs((current) => {
       const index = current.findIndex((entry) => sameTab(entry, tab));
       if (index === -1) {
@@ -425,6 +496,50 @@ export default function App() {
       );
       return next;
     });
+  }, []);
+
+  const closeOtherTabs = useCallback(
+    (keep: WorkspaceTab, options?: { force?: boolean }) => {
+      const force = options?.force ?? false;
+      const others = openTabsRef.current.filter((tab) => !sameTab(tab, keep));
+      if (
+        !force &&
+        others.some((tab) => {
+          if (tab.kind === 'collection') {
+            return collectionDirtyRef.current || structureDirtyRef.current;
+          }
+          if (tab.kind === 'folder') {
+            return dirtyFolderPathsRef.current.has(tab.path);
+          }
+          return dirtyPathsRef.current.has(tab.path);
+        })
+      ) {
+        if (!window.confirm('Some tabs have unsaved changes. Close them anyway?')) {
+          return;
+        }
+      }
+      setOpenTabs([keep]);
+      setActiveTab(keep);
+    },
+    []
+  );
+
+  const closeAllTabs = useCallback((options?: { force?: boolean }) => {
+    const force = options?.force ?? false;
+    if (
+      !force &&
+      (dirtyPathsRef.current.size > 0 ||
+        dirtyFolderPathsRef.current.size > 0 ||
+        collectionDirtyRef.current ||
+        structureDirtyRef.current) &&
+      openTabsRef.current.length > 0
+    ) {
+      if (!window.confirm('Some tabs have unsaved changes. Close all anyway?')) {
+        return;
+      }
+    }
+    setOpenTabs([]);
+    setActiveTab(null);
   }, []);
 
   const cycleTab = useCallback((delta: number) => {
@@ -578,6 +693,46 @@ export default function App() {
     return () => window.clearTimeout(handle);
   }, [sessionHydrated, loaded?.filePath, openTabs, activeTab, expanded]);
 
+  const syncDirty = useCallback((collection: PostmanCollection, originalRaw: string) => {
+    try {
+      const baseline = assertPostmanCollection(JSON.parse(originalRaw));
+      const snap = computeDirtyState(collection, baseline);
+      setDirtyPaths(snap.dirtyPaths);
+      setDirtyFolderPaths(snap.dirtyFolderPaths);
+      setCollectionDirty(snap.collectionDirty);
+      setStructureDirty(snap.structureDirty);
+    } catch {
+      setStructureDirty(true);
+    }
+  }, []);
+
+  const createNewRequestNear = useCallback(
+    (tab: WorkspaceTab) => {
+      const current = loadedRef.current;
+      if (!current) {
+        return;
+      }
+      let parent: ItemPath | null = null;
+      let after: ItemPath | null | undefined;
+      if (tab.kind === 'folder') {
+        parent = tab.path;
+        after = undefined;
+      } else if (tab.kind === 'request') {
+        parent = parentPathOf(tab.path);
+        after = tab.path;
+      }
+      const result = insertItem(current.collection, parent, createRequestItem(), after);
+      setLoaded((prev) => (prev ? { ...prev, collection: result.collection } : prev));
+      syncDirty(result.collection, current.originalRaw);
+      if (parent) {
+        setExpanded((paths) => new Set(paths).add(parent!));
+      }
+      setCollectionExpanded(true);
+      openTab({ kind: 'request', path: result.newPath });
+    },
+    [openTab, syncDirty]
+  );
+
   useEffect(() => {
     return window.clara.onCommand((command: AppCommand) => {
       switch (command.type) {
@@ -595,6 +750,18 @@ export default function App() {
             closeTab(activeTabRef.current);
           }
           break;
+        case 'force-close-tab':
+          if (activeTabRef.current) {
+            closeTab(activeTabRef.current, { force: true });
+          }
+          break;
+        case 'new-request':
+          if (activeTabRef.current) {
+            createNewRequestNear(activeTabRef.current);
+          } else if (loadedRef.current) {
+            createNewRequestNear({ kind: 'collection' });
+          }
+          break;
         case 'next-tab':
           cycleTab(1);
           break;
@@ -606,7 +773,15 @@ export default function App() {
           break;
       }
     });
-  }, [openCollection, saveCollection, sendRequest, closeTab, cycleTab, selectTabAt]);
+  }, [
+    openCollection,
+    saveCollection,
+    sendRequest,
+    closeTab,
+    createNewRequestNear,
+    cycleTab,
+    selectTabAt
+  ]);
 
   const editSelectedItem = (updater: (item: PostmanItem) => PostmanItem) => {
     if (!loaded || !activeRequestPath) {
@@ -616,13 +791,326 @@ export default function App() {
     try {
       const collection = updateCollectionItem(loaded.collection, activeRequestPath, updater);
       setLoaded({ ...loaded, collection });
-      setDirtyPaths((current) => new Set(current).add(activeRequestPath));
+      syncDirty(collection, loaded.originalRaw);
     } catch (error) {
       setStatus({
         kind: 'error',
         message: error instanceof Error ? error.message : String(error)
       });
     }
+  };
+
+  const applyCollectionUpdate = (collection: PostmanCollection) => {
+    const originalRaw = loadedRef.current?.originalRaw;
+    setLoaded((current) => (current ? { ...current, collection } : current));
+    if (originalRaw) {
+      syncDirty(collection, originalRaw);
+    } else {
+      setStructureDirty(true);
+    }
+  };
+
+  const remapTabsAfterDelete = (deleted: ItemPath) => {
+    setOpenTabs((tabs) =>
+      tabs.flatMap((tab) => {
+        if (tab.kind === 'collection') {
+          return [tab];
+        }
+        const nextPath = remapPathAfterDelete(tab.path, deleted);
+        if (nextPath == null) {
+          return [];
+        }
+        return [{ ...tab, path: nextPath } as WorkspaceTab];
+      })
+    );
+    setActiveTab((active) => {
+      if (!active || active.kind === 'collection') {
+        return active;
+      }
+      const nextPath = remapPathAfterDelete(active.path, deleted);
+      if (nextPath == null) {
+        return null;
+      }
+      return { ...active, path: nextPath } as WorkspaceTab;
+    });
+  };
+
+  const remapTabsAfterDuplicate = (original: ItemPath, created: ItemPath) => {
+    setOpenTabs((tabs) =>
+      tabs.map((tab) => {
+        if (tab.kind === 'collection') {
+          return tab;
+        }
+        return {
+          ...tab,
+          path: remapPathAfterDuplicate(tab.path, original, created)
+        } as WorkspaceTab;
+      })
+    );
+    setActiveTab((active) => {
+      if (!active || active.kind === 'collection') {
+        return active;
+      }
+      return {
+        ...active,
+        path: remapPathAfterDuplicate(active.path, original, created)
+      } as WorkspaceTab;
+    });
+  };
+
+  const renameTarget = (target: TreeTarget | { kind: 'collection' }) => {
+    if (!loaded) {
+      return;
+    }
+    if (target.kind === 'collection') {
+      const current = loaded.collection.info?.name ?? '';
+      const next = window.prompt('Rename collection', current);
+      if (next == null || next.trim() === '' || next === current) {
+        return;
+      }
+      applyCollectionUpdate(renameCollection(loaded.collection, next.trim()));
+      return;
+    }
+    const item = getItemByPath(loaded.collection.item, target.path);
+    if (!item) {
+      return;
+    }
+    const current = item.name ?? '';
+    const next = window.prompt(
+      target.kind === 'folder' ? 'Rename folder' : 'Rename request',
+      current
+    );
+    if (next == null || next.trim() === '' || next === current) {
+      return;
+    }
+    applyCollectionUpdate(renameItem(loaded.collection, target.path, next.trim()));
+  };
+
+  const deleteTarget = (target: TreeTarget | { kind: 'collection' }) => {
+    if (!loaded) {
+      return;
+    }
+    if (target.kind === 'collection') {
+      if (!window.confirm('Close this collection? Unsaved changes will be lost.')) {
+        return;
+      }
+      setLoaded(null);
+      setExpanded(new Set());
+      resetWorkspace();
+      setStatus({ kind: 'ok', message: 'Collection closed' });
+      return;
+    }
+    const item = getItemByPath(loaded.collection.item, target.path);
+    const label = item?.name?.trim() || target.kind;
+    if (!window.confirm(`Delete "${label}"?`)) {
+      return;
+    }
+    applyCollectionUpdate(deleteItem(loaded.collection, target.path));
+    remapTabsAfterDelete(target.path);
+  };
+
+  const duplicateTarget = (target: TreeTarget) => {
+    if (!loaded) {
+      return;
+    }
+    const result = duplicateItem(loaded.collection, target.path);
+    applyCollectionUpdate(result.collection);
+    remapTabsAfterDuplicate(target.path, result.newPath);
+    openTab({ kind: target.kind, path: result.newPath });
+  };
+
+  const runTarget = (target: TreeTarget | { kind: 'collection' }) => {
+    if (target.kind === 'collection') {
+      openTab({ kind: 'collection' });
+      void runScope({ kind: 'collection' });
+      return;
+    }
+    if (target.kind === 'folder') {
+      openTab({ kind: 'folder', path: target.path });
+      void runScope({ kind: 'folder', path: target.path });
+      return;
+    }
+    openTab({ kind: 'request', path: target.path });
+    // send after tab is active — use direct call with path
+    void (async () => {
+      const current = loadedRef.current;
+      if (!current) {
+        return;
+      }
+      setActiveTab({ kind: 'request', path: target.path });
+      setSending(true);
+      setRunningKey(tabKey({ kind: 'request', path: target.path }));
+      try {
+        const runCollection = buildSingleRequestCollection(current.collection, target.path);
+        const result = await window.clara.runNewman(serializeCollection(runCollection));
+        setRequestRuns((runs) => ({ ...runs, [target.path]: result }));
+        setStatus({
+          kind: result.error && !result.execution ? 'error' : 'ok',
+          message: result.execution
+            ? `Newman ${result.execution.code ?? '—'} ${result.execution.status}`
+            : result.error ?? 'Newman finished'
+        });
+      } catch (error) {
+        setStatus({
+          kind: 'error',
+          message: error instanceof Error ? error.message : String(error)
+        });
+      } finally {
+        setSending(false);
+        setRunningKey(null);
+      }
+    })();
+  };
+
+  const openContextMenu = (
+    event: { clientX: number; clientY: number; preventDefault: () => void },
+    target: TreeTarget | { kind: 'collection' } | { kind: 'tab'; tab: WorkspaceTab }
+  ) => {
+    event.preventDefault();
+    setContextMenu({ x: event.clientX, y: event.clientY, target });
+  };
+
+  const shortcutMod = navigator.userAgent.includes('Mac') ? '⌘' : 'Ctrl';
+  const shortcutAlt = navigator.userAgent.includes('Mac') ? '⌥' : 'Alt';
+
+  const contextMenuItems = ((): ContextMenuItem[] => {
+    if (!contextMenu) {
+      return [];
+    }
+    const { target } = contextMenu;
+    if (target.kind === 'tab') {
+      return [
+        { id: 'new-request', label: 'New Request', shortcut: `${shortcutMod} T` },
+        {
+          id: 'duplicate-tab',
+          label: 'Duplicate Tab',
+          disabled: target.tab.kind === 'collection'
+        },
+        {
+          id: 'close-tab',
+          label: 'Close Tab',
+          shortcut: `${shortcutMod} W`,
+          separatorBefore: true
+        },
+        {
+          id: 'force-close-tab',
+          label: 'Force Close Tab',
+          shortcut: `${shortcutAlt} ${shortcutMod} W`
+        },
+        { id: 'close-other-tabs', label: 'Close Other Tabs' },
+        { id: 'close-all-tabs', label: 'Close All Tabs' },
+        { id: 'force-close-all-tabs', label: 'Force Close All Tabs' },
+        {
+          id: 'reveal-in-sidebar',
+          label: 'Reveal in Sidebar',
+          separatorBefore: true
+        }
+      ];
+    }
+    if (target.kind === 'collection') {
+      return [
+        { id: 'run', label: 'Run collection' },
+        { id: 'rename', label: 'Rename' },
+        { id: 'expand-all', label: 'Expand all', separatorBefore: true },
+        { id: 'collapse-all', label: 'Collapse all' },
+        { id: 'delete', label: 'Close', danger: true, separatorBefore: true }
+      ];
+    }
+    return [
+      { id: 'run', label: target.kind === 'folder' ? 'Run folder' : 'Run' },
+      { id: 'rename', label: 'Rename' },
+      { id: 'duplicate', label: 'Duplicate' },
+      { id: 'delete', label: 'Delete', danger: true, separatorBefore: true }
+    ];
+  })();
+
+  const revealInSidebar = (tab: WorkspaceTab) => {
+    if (tab.kind === 'collection') {
+      setCollectionExpanded(true);
+      setActiveTab(tab);
+      return;
+    }
+    setCollectionExpanded(true);
+    const indexes = tab.path.split('.');
+    setExpanded((current) => {
+      const next = new Set(current);
+      for (let depth = 1; depth < indexes.length; depth += 1) {
+        next.add(indexes.slice(0, depth).join('.'));
+      }
+      if (tab.kind === 'folder') {
+        next.add(tab.path);
+      }
+      return next;
+    });
+    setActiveTab(tab);
+  };
+
+  const handleContextAction = (id: string) => {
+    if (!contextMenu) {
+      return;
+    }
+    const { target } = contextMenu;
+    if (target.kind === 'tab') {
+      if (id === 'new-request') {
+        createNewRequestNear(target.tab);
+      } else if (id === 'duplicate-tab' && target.tab.kind !== 'collection') {
+        duplicateTarget(target.tab);
+      } else if (id === 'close-tab') {
+        closeTab(target.tab);
+      } else if (id === 'force-close-tab') {
+        closeTab(target.tab, { force: true });
+      } else if (id === 'close-other-tabs') {
+        closeOtherTabs(target.tab);
+      } else if (id === 'close-all-tabs') {
+        closeAllTabs();
+      } else if (id === 'force-close-all-tabs') {
+        closeAllTabs({ force: true });
+      } else if (id === 'reveal-in-sidebar') {
+        revealInSidebar(target.tab);
+      }
+      return;
+    }
+    if (id === 'run') {
+      runTarget(target);
+    } else if (id === 'rename') {
+      renameTarget(target);
+    } else if (id === 'delete') {
+      deleteTarget(target);
+    } else if (id === 'duplicate' && target.kind !== 'collection') {
+      duplicateTarget(target);
+    } else if (id === 'expand-all' && target.kind === 'collection' && loaded) {
+      setCollectionExpanded(true);
+      setExpanded(collectFolderPaths(loaded.collection.item));
+    } else if (id === 'collapse-all' && target.kind === 'collection') {
+      setExpanded(new Set());
+    }
+  };
+
+  const editCollectionVariables = (updater: (variables: PostmanVariable[]) => PostmanVariable[]) => {
+    if (!loaded) {
+      return;
+    }
+    const next = setCollectionVariables(
+      loaded.collection,
+      updater(getCollectionVariables(loaded.collection))
+    );
+    applyCollectionUpdate(next);
+  };
+
+  const editFolderVariables = (
+    path: ItemPath,
+    updater: (variables: PostmanVariable[]) => PostmanVariable[]
+  ) => {
+    if (!loaded) {
+      return;
+    }
+    const next = {
+      ...loaded.collection,
+      item: updateItemByPath(loaded.collection.item, path, (item) =>
+        setItemVariables(item, updater(getItemVariables(item)))
+      )
+    };
+    applyCollectionUpdate(next);
   };
 
   const toggleFolder = (path: ItemPath) => {
@@ -699,35 +1187,63 @@ export default function App() {
             <div
               className={`collection-heading ${
                 activeTab?.kind === 'collection' ? 'selected' : ''
-              }`}
-              role="button"
-              tabIndex={0}
-              onClick={openCollectionTab}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  openCollectionTab();
-                }
-              }}
+              } ${collectionExpanded ? 'expanded' : 'collapsed'}`}
+              onContextMenu={(event) => openContextMenu(event, { kind: 'collection' })}
             >
-              <span className="collection-icon" aria-hidden>
-                ◇
-              </span>
-              <div>
-                <strong>{loaded.collection.info?.name ?? 'Untitled collection'}</strong>
-                <span>
-                  {counts.folders} folders · {counts.requests} requests
+              <button
+                type="button"
+                className="collection-chevron-button"
+                aria-label={collectionExpanded ? 'Collapse collection' : 'Expand collection'}
+                aria-expanded={collectionExpanded}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setCollectionExpanded((current) => !current);
+                }}
+              >
+                <span className="collection-chevron" aria-hidden>
+                  {collectionExpanded ? '▾' : '▸'}
                 </span>
-              </div>
+              </button>
+              <button
+                type="button"
+                className="collection-heading-select"
+                onClick={openCollectionTab}
+              >
+                <span className="collection-icon" aria-hidden>
+                  ◇
+                </span>
+                <div>
+                  <strong>{loaded.collection.info?.name ?? 'Untitled collection'}</strong>
+                  <span>
+                    {counts.folders} folders · {counts.requests} requests
+                  </span>
+                </div>
+              </button>
+              <button
+                type="button"
+                className="tree-more collection-more"
+                aria-label="Collection actions"
+                title="Collection actions"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  openContextMenu(event, { kind: 'collection' });
+                }}
+              >
+                ···
+              </button>
             </div>
-            <CollectionTree
-              items={loaded.collection.item}
-              expanded={expanded}
-              selectedPath={treeSelectedPath}
-              onToggleFolder={toggleFolder}
-              onSelectFolder={openFolderTab}
-              onSelectRequest={openRequestTab}
-            />
+            {collectionExpanded ? (
+              <CollectionTree
+                items={loaded.collection.item}
+                expanded={expanded}
+                selectedPath={treeSelectedPath}
+                onToggleFolder={toggleFolder}
+                onSelectFolder={openFolderTab}
+                onSelectRequest={openRequestTab}
+                onContextMenu={(event, target) => openContextMenu(event, target)}
+              />
+            ) : null}
           </aside>
 
           <section className="main-workspace">
@@ -738,6 +1254,9 @@ export default function App() {
               onClose={closeTab}
               onDropRequest={openRequestTab}
               onReorder={reorderTabs}
+              onContextMenu={(event, tab) =>
+                openContextMenu(event, { kind: 'tab', tab })
+              }
             />
 
             <main className="detail">
@@ -762,6 +1281,24 @@ export default function App() {
                   result={scopeRuns[tabKey(activeTab)] ?? null}
                   running={runningKey === tabKey(activeTab)}
                   onRun={() => void runScope(activeTab)}
+                  variablesSlot={
+                    <VariablesPane
+                      scopeLabel="collection"
+                      variables={getCollectionVariables(loaded.collection)}
+                      onAdd={() => editCollectionVariables((vars) => addVariable(vars))}
+                      onChange={(index, patch) =>
+                        editCollectionVariables((vars) => updateVariable(vars, index, patch))
+                      }
+                      onToggleDisabled={(index, disabled) =>
+                        editCollectionVariables((vars) =>
+                          setVariableDisabled(vars, index, disabled)
+                        )
+                      }
+                      onRemove={(index) =>
+                        editCollectionVariables((vars) => removeVariable(vars, index))
+                      }
+                    />
+                  }
                 />
               )}
 
@@ -776,6 +1313,30 @@ export default function App() {
                   result={scopeRuns[tabKey(activeTab)] ?? null}
                   running={runningKey === tabKey(activeTab)}
                   onRun={() => void runScope(activeTab)}
+                  variablesSlot={
+                    <VariablesPane
+                      scopeLabel="folder"
+                      variables={getItemVariables(activeFolder)}
+                      onAdd={() =>
+                        editFolderVariables(activeTab.path, (vars) => addVariable(vars))
+                      }
+                      onChange={(index, patch) =>
+                        editFolderVariables(activeTab.path, (vars) =>
+                          updateVariable(vars, index, patch)
+                        )
+                      }
+                      onToggleDisabled={(index, disabled) =>
+                        editFolderVariables(activeTab.path, (vars) =>
+                          setVariableDisabled(vars, index, disabled)
+                        )
+                      }
+                      onRemove={(index) =>
+                        editFolderVariables(activeTab.path, (vars) =>
+                          removeVariable(vars, index)
+                        )
+                      }
+                    />
+                  }
                 />
               )}
 
@@ -901,9 +1462,7 @@ export default function App() {
           {status.kind === 'idle'
             ? loaded
               ? dirty
-                ? `Unsaved changes in ${dirtyPaths.size} request${
-                    dirtyPaths.size > 1 ? 's' : ''
-                  }`
+                ? 'Unsaved changes'
                 : 'Ready'
               : 'No collection open'
             : status.message}
@@ -916,6 +1475,15 @@ export default function App() {
           </>
         ) : null}
       </footer>
+      {contextMenu ? (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={contextMenuItems}
+          onSelect={handleContextAction}
+          onClose={() => setContextMenu(null)}
+        />
+      ) : null}
     </div>
   );
 }

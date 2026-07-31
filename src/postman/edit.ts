@@ -14,6 +14,10 @@ import {
   type PostmanEvent,
   type PostmanScriptListen
 } from './scripts.ts';
+import {
+  normalizeVariables,
+  type PostmanVariable
+} from './variables.ts';
 import { updateItemByPath, type ItemPath } from './tree.ts';
 import { ensureUrlObject, isUrlObject, setUrlQueryParams, setUrlRaw } from './url.ts';
 
@@ -482,4 +486,23 @@ export function setItemScriptSource(
   }
 
   return { ...item, event: events };
+}
+
+export function getCollectionVariables(collection: PostmanCollection): PostmanVariable[] {
+  return normalizeVariables(collection.variable);
+}
+
+export function setCollectionVariables(
+  collection: PostmanCollection,
+  variables: PostmanVariable[]
+): PostmanCollection {
+  return { ...collection, variable: variables };
+}
+
+export function getItemVariables(item: PostmanItem): PostmanVariable[] {
+  return normalizeVariables(item.variable);
+}
+
+export function setItemVariables(item: PostmanItem, variables: PostmanVariable[]): PostmanItem {
+  return { ...item, variable: variables };
 }

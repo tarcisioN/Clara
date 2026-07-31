@@ -18,7 +18,8 @@
     "check:etapa5": "node --experimental-strip-types scripts/check-etapa5.ts",
     "check:etapa6": "node --experimental-strip-types scripts/check-etapa6.ts",
     "check:etapa7": "node --experimental-strip-types scripts/check-etapa7.ts",
-    "check:etapa8": "node --experimental-strip-types scripts/check-etapa8.ts"
+    "check:etapa8": "node --experimental-strip-types scripts/check-etapa8.ts",
+    "check:etapa9": "node --experimental-strip-types scripts/check-etapa9.ts"
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.5",

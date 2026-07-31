@@ -1,0 +1,109 @@
+.variables-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 24px 18px;
+  border-bottom: 1px solid var(--border-0);
+}
+
+.variables-pane-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.variables-pane-title h3 {
+  margin: 0 0 2px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.variables-pane-title p {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 0.6875rem;
+}
+
+.variables-pane-title button {
+  flex: 0 0 auto;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-1);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.variables-empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.variables-rows {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-0);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.variables-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) minmax(0, 1.4fr) 32px;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-0);
+  background: var(--bg);
+}
+
+.variables-row:last-child {
+  border-bottom: 0;
+}
+
+.variables-row-head {
+  background: var(--crust);
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.variables-row.disabled input[type='text'] {
+  opacity: 0.55;
+}
+
+.variables-row input[type='text'] {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border-1);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.75rem;
+}
+
+.variables-col-enabled {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.variables-col-actions {
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.variables-col-actions:hover {
+  color: var(--text);
+}

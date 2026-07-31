@@ -1,12 +1,50 @@
 import type { PostmanAuth } from '../postman/auth.ts';
 import type { PostmanCollection, PostmanItem, PostmanRequest } from '../postman/types.ts';
 import { getItemByPath, isRequest, parseItemPath, type ItemPath } from '../postman/tree.ts';
+import {
+  normalizeVariables,
+  type PostmanVariable
+} from '../postman/variables.ts';
 
 const POSTMAN_V21_SCHEMA =
   'https://schema.getpostman.com/json/collection/v2.1.0/collection.json';
 
 function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+/**
+ * Flatten collection + ancestor folder variables for a single-request Newman run.
+ * Closer scopes overwrite earlier ones by `key` (collection → root folder → … → parent).
+ */
+export function resolveInheritedVariables(
+  collection: PostmanCollection,
+  path: ItemPath
+): PostmanVariable[] {
+  const byKey = new Map<string, PostmanVariable>();
+
+  const absorb = (variables: PostmanVariable[]) => {
+    for (const variable of variables) {
+      const key = variable.key?.trim();
+      if (!key) {
+        continue;
+      }
+      byKey.set(key, cloneJson(variable));
+    }
+  };
+
+  absorb(normalizeVariables(collection.variable));
+
+  const indexes = parseItemPath(path);
+  for (let depth = 1; depth < indexes.length; depth += 1) {
+    const parentPath = indexes.slice(0, depth).join('.');
+    const parent = getItemByPath(collection.item, parentPath);
+    if (parent) {
+      absorb(normalizeVariables(parent.variable));
+    }
+  }
+
+  return [...byKey.values()];
 }
 
 function requestAuth(item: PostmanItem): PostmanAuth | null | undefined {
@@ -94,8 +132,9 @@ export function buildSingleRequestCollection(
     item: [cloned]
   };
 
-  if (Array.isArray(collection.variable)) {
-    runCollection.variable = cloneJson(collection.variable);
+  const variables = resolveInheritedVariables(collection, path);
+  if (variables.length > 0) {
+    runCollection.variable = variables;
   }
 
   return runCollection;

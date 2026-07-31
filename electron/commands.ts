@@ -3,6 +3,8 @@ export type AppCommand =
   | { type: 'save' }
   | { type: 'send' }
   | { type: 'close-tab' }
+  | { type: 'force-close-tab' }
+  | { type: 'new-request' }
   | { type: 'next-tab' }
   | { type: 'prev-tab' }
   | { type: 'select-tab'; index: number };
