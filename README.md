@@ -31,6 +31,7 @@ make dev
 | `make check-stage8` | Newman run (temp collection / parse) |
 | `make check-stage12` | Git compare plumbing (discover / show at ref) |
 | `make check-stage13` | Git structural tree diff (markers / changed-only) |
+| `make check-stage14` | Git semantic request diff (section badges) |
 
 ## Usage (Send / Newman)
 

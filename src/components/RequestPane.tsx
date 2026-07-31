@@ -11,6 +11,7 @@ import type { ItemPath } from '../postman/tree.ts';
 import { getUrlRaw, isUrlObject } from '../postman/url.ts';
 import { getItemScriptSource } from '../postman/edit.ts';
 import { hasScriptContent } from '../postman/scripts.ts';
+import type { RequestSemanticDiff } from '../git/semanticDiff.ts';
 import HeaderTable from './HeaderTable.tsx';
 import BodyPane from './BodyPane.tsx';
 import AuthPane from './AuthPane.tsx';
@@ -25,6 +26,8 @@ type RequestPaneProps = {
   item: PostmanItem;
   request: PostmanRequest;
   path: ItemPath;
+  semanticDiff?: RequestSemanticDiff | null;
+  compareBaseRef?: string | null;
   onChangeMethod: (method: string) => void;
   onChangeUrl: (raw: string) => void;
   onPromoteUrlToObject: () => void;
@@ -59,6 +62,8 @@ export default function RequestPane({
   item,
   request,
   path,
+  semanticDiff = null,
+  compareBaseRef = null,
   onChangeMethod,
   onChangeUrl,
   onPromoteUrlToObject,
@@ -105,18 +110,30 @@ export default function RequestPane({
   const hasAuth = request.auth?.type && request.auth.type !== 'noauth';
   const prerequestSource = getItemScriptSource(item, 'prerequest');
   const testSource = getItemScriptSource(item, 'test');
+  const changed = semanticDiff?.active ? semanticDiff.sections : null;
   const sections: Array<{
     key: RequestSection;
     label: string;
     count?: number;
     active?: boolean;
+    changed?: boolean;
   }> = [
-    { key: 'params', label: 'Params', count: queryCount },
-    { key: 'body', label: 'Body', active: Boolean(hasBody) },
-    { key: 'headers', label: 'Headers', count: headerCount },
-    { key: 'auth', label: 'Auth', active: Boolean(hasAuth) },
-    { key: 'prerequest', label: 'Pre-request', active: hasScriptContent(prerequestSource) },
-    { key: 'tests', label: 'Tests', active: hasScriptContent(testSource) }
+    { key: 'params', label: 'Params', count: queryCount, changed: changed?.params },
+    { key: 'body', label: 'Body', active: Boolean(hasBody), changed: changed?.body },
+    { key: 'headers', label: 'Headers', count: headerCount, changed: changed?.headers },
+    { key: 'auth', label: 'Auth', active: Boolean(hasAuth), changed: changed?.auth },
+    {
+      key: 'prerequest',
+      label: 'Pre-request',
+      active: hasScriptContent(prerequestSource),
+      changed: changed?.prerequest
+    },
+    {
+      key: 'tests',
+      label: 'Tests',
+      active: hasScriptContent(testSource),
+      changed: changed?.tests
+    }
   ];
 
   return (
@@ -126,15 +143,24 @@ export default function RequestPane({
         <span className="request-path">{path}</span>
       </div>
 
+      {semanticDiff?.isAdded ? (
+        <div className="compare-banner compare-banner-added" role="status">
+          New request — not in {compareBaseRef ?? 'base'}
+        </div>
+      ) : null}
+
       <div className="request-line">
         <label className="visually-hidden" htmlFor="request-method">
           Method
         </label>
         <select
           id="request-method"
-          className={`method-select method-${method.toLowerCase()}`}
+          className={`method-select method-${method.toLowerCase()} ${
+            changed?.method ? 'compare-changed' : ''
+          }`}
           value={method}
           onChange={(event) => onChangeMethod(event.target.value)}
+          title={changed?.method ? `Method differs from ${compareBaseRef ?? 'base'}` : undefined}
         >
           {methods.map((candidate) => (
             <option key={candidate} value={candidate}>
@@ -148,13 +174,14 @@ export default function RequestPane({
         </label>
         <input
           id="request-url"
-          className="url-input"
+          className={`url-input ${changed?.url ? 'compare-changed' : ''}`}
           type="text"
           spellCheck={false}
           autoComplete="off"
           placeholder="https://example.com/path"
           value={urlRaw}
           onChange={(event) => onChangeUrl(event.target.value)}
+          title={changed?.url ? `URL differs from ${compareBaseRef ?? 'base'}` : undefined}
         />
         <button
           type="button"
@@ -181,6 +208,14 @@ export default function RequestPane({
             {section.count ? <span className="tab-count">{section.count}</span> : null}
             {section.active ? (
               <span className="tab-dot" title={`${section.label} has content`} />
+            ) : null}
+            {section.changed ? (
+              <span
+                className="tab-change"
+                title={`${section.label} differs from ${compareBaseRef ?? 'base'}`}
+              >
+                ~
+              </span>
             ) : null}
           </button>
         ))}

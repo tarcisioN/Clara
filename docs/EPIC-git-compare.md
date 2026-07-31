@@ -69,16 +69,22 @@ Show structural change status in the collection explorer against the selected ba
 When a changed request is open, show field-level differences vs the base version.
 
 ### Requirements
-- [ ] Load base request by stable identity (prefer path + name; document fallback)
-- [ ] Diff panes / indicators for: method, URL, query, headers, body, auth, scripts
-- [ ] Inner tabs (Params / Body / …) show a badge when that section differs
-- [ ] Unchanged sections remain readable (not a wall of red/green)
-- [ ] Body/scripts: structured or line diff only within that field
+- [x] Load base request by stable identity (prefer path + name; document fallback)
+- [x] Diff panes / indicators for: method, URL, query, headers, body, auth, scripts
+- [x] Inner tabs (Params / Body / …) show a badge when that section differs
+- [x] Unchanged sections remain readable (not a wall of red/green)
+- [x] Body/scripts: structured or line diff only within that field
 
 ### Validation
-- [ ] Edit only headers → Headers tab badged; Body not
-- [ ] Base missing request (added) → clear “new in current” empty state
+- [x] Edit only headers → Headers tab badged; Body not
+- [x] Base missing request (added) → clear “new in current” empty state
 - [ ] Request removed from current → reachable from change list (G3) as removed
+
+### Policy (this stage)
+- Resolve base via the same kind+name pairing as G1 (`findPairedBaseItem`), not raw path indexes alone.
+- Section badges are amber `~` (distinct from content dots and unsaved dirty dots).
+- Inline body/script line diffs are deferred; equality is per-section snapshot for now.
+- Removed requests stay ghost-only until G3.
 
 ---
 

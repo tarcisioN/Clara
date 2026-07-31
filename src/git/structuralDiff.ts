@@ -45,7 +45,7 @@ function itemKind(item: PostmanItem): 'folder' | 'request' | 'unknown' {
   return 'unknown';
 }
 
-function matchKey(item: PostmanItem): string {
+export function matchKey(item: PostmanItem): string {
   const name = item.name?.trim() || '';
   return `${itemKind(item)}:${name}`;
 }
@@ -67,7 +67,7 @@ function requestEqual(a: PostmanItem, b: PostmanItem): boolean {
  * Pair children by kind+name within a parent. Duplicate names match in order.
  * Index alignment alone is too brittle for typical PR reorders.
  */
-function pairChildren(
+export function pairChildren(
   current: PostmanItem[],
   base: PostmanItem[]
 ): Array<{

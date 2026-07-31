@@ -114,6 +114,8 @@ import {
   computeStructuralDiff,
   type StructuralDiff
 } from './git/structuralDiff.ts';
+import { resolveBaseRequestItem } from './git/resolveBaseItem.ts';
+import { computeSemanticDiff } from './git/semanticDiff.ts';
 import {
   clampSidebarWidth,
   DEFAULT_SIDEBAR,
@@ -379,6 +381,29 @@ export default function App() {
     }
     return getRequestByPath(activeCollection.collection.item, activeRequestPath) ?? null;
   }, [activeCollection, activeRequestPath]);
+
+  const activeCompare = activeCollection
+    ? (compareByPath[activeCollection.filePath] ?? null)
+    : null;
+
+  const requestSemanticDiff = useMemo(() => {
+    if (!activeCollection || !activeRequestPath || !selectedItem || !activeCompare) {
+      return null;
+    }
+    const resolution = resolveBaseRequestItem(
+      activeCompare.diff,
+      activeCollection.collection,
+      activeCompare.baseCollection,
+      activeRequestPath
+    );
+    if (resolution.kind === 'none') {
+      return null;
+    }
+    if (resolution.kind === 'added' || resolution.kind === 'missing') {
+      return computeSemanticDiff(selectedItem, null);
+    }
+    return computeSemanticDiff(selectedItem, resolution.item);
+  }, [activeCollection, activeCompare, activeRequestPath, selectedItem]);
 
   const activeFolder =
     activeTab?.kind === 'folder' && activeCollection
@@ -2635,6 +2660,8 @@ export default function App() {
                         item={selectedItem}
                         request={selectedRequest}
                         path={activeRequestPath}
+                        semanticDiff={requestSemanticDiff}
+                        compareBaseRef={activeCompare?.baseRef ?? null}
                         onChangeMethod={(method) =>
                           editSelectedItem((item) => setRequestMethod(item, method))
                         }
