@@ -1,6 +1,7 @@
 export type AppCommand =
   | { type: 'open' }
   | { type: 'save' }
+  | { type: 'send' }
   | { type: 'close-tab' }
   | { type: 'next-tab' }
   | { type: 'prev-tab' }

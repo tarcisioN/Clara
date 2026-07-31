@@ -5,7 +5,7 @@ Editor leve de collections Postman versionadas no repositório.
 - Schema em memória = JSON Postman (v2.1), sem conversão Bruno↔Postman
 - Persistência no mesmo arquivo da collection
 - UI inspirada no Bruno (referência visual), projeto do zero
-- Execução via Newman (fase posterior ao MVP de edição)
+- Execução via Newman (`Send` / `⌘Enter`; assume `newman` no PATH)
 
 A referência visual e sua licença estão registradas em
 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md).
@@ -32,13 +32,15 @@ make dev
 | `make check-etapa5` | Auth (bearer / basic / apikey) |
 | `make check-etapa6` | Query params (`url.query`) |
 | `make check-etapa7` | Scripts (`prerequest` / `test`) |
+| `make check-etapa8` | Newman run (temp collection / parse) |
 
-## Uso (Etapa 7)
+## Uso (Send / Newman)
 
-1. `make dev`
-2. Abrir um request → tabs **Pre-request** / **Tests**
-3. Editar o JS; Save grava em `item.event[].script.exec`
-4. **Ping** na fixture já traz exemplos de ambos
+1. `make dev` — requer `newman` no `PATH` (`npm i -g newman`)
+2. Abrir um request → **Send** ou `⌘/Ctrl+Enter`
+3. Clara grava uma collection temporária de 1 request em `~/.clara/runs/` e chama Newman
+4. O arquivo da collection no repo **não** é modificado pelo run
+5. Painel **Response**: status, tempo, size, Body / Headers / Test results
 
 ## Sessão (`~/.clara`)
 
@@ -55,6 +57,7 @@ JSON da collection no disco.
 | `⌘/Ctrl+W` | Fechar aba ativa |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Próxima / anterior aba |
 | `⌘/Ctrl+1…9` | Ir para a aba N |
+| `⌘/Ctrl+Enter` | Send (Newman) |
 | Arrastar aba | Reordenar |
 | Arrastar request da árvore → barra | Abrir aba |
 

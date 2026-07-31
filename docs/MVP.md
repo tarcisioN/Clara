@@ -203,7 +203,7 @@ formulário genérico.
 - [x] Sessão persistida em `~/.clara/session.json` (collection, abas, expanded)
 - [x] Atalhos: Open/Save/Close tab/Next/Prev/Tab 1–9
 - [x] Arrastar abas para reordenar
-- [x] Toolbar method + URL + Send (desabilitado até MVP 2)
+- [x] Toolbar method + URL + Send (Newman)
 - [x] Tabs internas `Params | Body | Headers | Auth | Pre-request | Tests`
 - [x] Paleta light inspirada no Bruno (laranja de marca, superfícies neutras, bordas discretas)
 - [x] Tabelas key/value compactas, sem cards empilhados
@@ -244,20 +244,28 @@ Pode ficar para um mini-MVP 1.1 se atrasar o resto.
 
 ---
 
-## MVP 2 — Run com Newman (depois)
+## MVP 2 — Run com Newman
 
-Não bloqueia o DoD do MVP 1.
+Pressuposto: `newman` está no `PATH` do usuário. Ajuda de instalação fica para depois.
 
-### Requisitos
-- [ ] Botão Run no request (ou collection)
-- [ ] Spawn `newman run collection.json` (+ `-e env.json` se houver)
-- [ ] Request único: collection temporária com 1 item **ou** equivalente documentado
-- [ ] Painel de response: status, headers, body
-- [ ] Erros do Newman visíveis na UI
+### Etapa R0 — Send de um request
+- [x] Botão **Send** habilitado (atalho `⌘/Ctrl+Enter`)
+- [x] Montar collection temporária com **1 item** (estado em memória, não o arquivo do repo)
+- [x] Copiar `collection.variable` / `collection.auth`; se o request herda auth de pasta, materializar no temp
+- [x] Escrever em `~/.clara/runs/`, spawn `newman run … --reporters json`
+- [x] Collection do repo **não** é alterada pelo run
+- [x] Painel de response: status, tempo, size, headers, body
+- [x] Falhas / stderr do Newman visíveis
+- [x] `make check-etapa8`
+
+### Etapa R1 — (depois) Environment + collection run
+- [ ] `-e` com environment aberto
+- [ ] Run da collection / folder inteira
+- [ ] Detectar Newman ausente e orientar instalação
 
 ### Validação
-- [ ] Resultado alinhado ao `newman` no terminal
-- [ ] Collection no disco não é alterada pelo run (exceto se scripts Postman mutarem — documentar)
+- [x] Resultado alinhado ao `newman` no terminal para o mesmo request _(parse + temp collection; smoke manual na UI)_
+- [x] Edits não salvos entram no run (temp usa memória)
 
 ---
 

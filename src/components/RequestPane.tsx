@@ -51,6 +51,8 @@ type RequestPaneProps = {
   onChangeApiKeyAuth: (patch: { key?: string; value?: string; in?: string }) => void;
   onChangePrerequestScript: (source: string) => void;
   onChangeTestScript: (source: string) => void;
+  onSend: () => void;
+  sending: boolean;
 };
 
 export default function RequestPane({
@@ -79,7 +81,9 @@ export default function RequestPane({
   onChangeBasicAuth,
   onChangeApiKeyAuth,
   onChangePrerequestScript,
-  onChangeTestScript
+  onChangeTestScript,
+  onSend,
+  sending
 }: RequestPaneProps) {
   const [activeSection, setActiveSection] = useState<RequestSection>('params');
   const method = (request.method ?? 'GET').toUpperCase();
@@ -155,10 +159,11 @@ export default function RequestPane({
         <button
           type="button"
           className="send-button"
-          disabled
-          title="Execution arrives in MVP 2 via Newman"
+          disabled={sending}
+          title="⌘/Ctrl+Enter — runs current (including unsaved) edits via Newman"
+          onClick={onSend}
         >
-          Send
+          {sending ? 'Sending…' : 'Send'}
         </button>
       </div>
 

@@ -18,6 +18,7 @@
   --method-post: hsl(280, 45%, 48%);
   --method-put: hsl(35, 85%, 42%);
   --method-delete: hsl(8, 60%, 52%);
+  --test-pass: hsl(211, 70%, 50%);
 }
 
 .app {
@@ -225,6 +226,19 @@ button.primary {
 
 .detail {
   flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.detail-split {
+  display: grid;
+  grid-template-rows: minmax(220px, 1fr) minmax(180px, 0.9fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.detail-request,
+.detail-response {
   min-height: 0;
   overflow: hidden;
 }

@@ -16,6 +16,7 @@ import {
   saveSession,
   type SessionState
 } from './session.ts';
+import { runNewmanCollection, type NewmanRunRequest } from './newman.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -66,6 +67,11 @@ function buildMenu() {
           label: 'Save',
           accelerator: 'CmdOrCtrl+S',
           click: () => sendCommand({ type: 'save' })
+        },
+        {
+          label: 'Send Request',
+          accelerator: 'CmdOrCtrl+Enter',
+          click: () => sendCommand({ type: 'send' })
         },
         { type: 'separator' },
         {
@@ -219,3 +225,7 @@ ipcMain.handle('session:load', async () => loadSession());
 ipcMain.handle('session:save', async (_event, state: SessionState) => saveSession(state));
 
 ipcMain.handle('session:home', async () => CLARA_HOME);
+
+ipcMain.handle('newman:run', async (_event, payload: NewmanRunRequest) =>
+  runNewmanCollection(payload)
+);

@@ -3,6 +3,9 @@ import type { AppCommand } from '../electron/commands.ts';
 import CollectionTree from './components/CollectionTree.tsx';
 import RequestPane from './components/RequestPane.tsx';
 import RequestTabs, { type RequestTab } from './components/RequestTabs.tsx';
+import ResponsePane from './components/ResponsePane.tsx';
+import { buildSingleRequestCollection } from './newman/buildRunCollection.ts';
+import type { NewmanRunView } from './newman/parseResult.ts';
 import {
   assertPostmanCollection,
   countItems,
@@ -117,6 +120,10 @@ export default function App() {
   const [dirtyPaths, setDirtyPaths] = useState<Set<ItemPath>>(new Set());
   const [sessionHydrated, setSessionHydrated] = useState(false);
   const [sessionHome, setSessionHome] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [lastRun, setLastRun] = useState<{ path: ItemPath; result: NewmanRunView } | null>(
+    null
+  );
 
   const dirty = dirtyPaths.size > 0;
 
@@ -228,6 +235,39 @@ export default function App() {
       });
     }
   }, []);
+
+  const sendRequest = useCallback(async () => {
+    const current = loadedRef.current;
+    const path = activePathRef.current;
+    if (!current || !path || sending) {
+      return;
+    }
+
+    setSending(true);
+    setStatus({ kind: 'idle' });
+    try {
+      const runCollection = buildSingleRequestCollection(current.collection, path);
+      const result = await window.clara.runNewman(serializeCollection(runCollection));
+      setLastRun({ path, result });
+      const code = result.execution?.code;
+      const unsaved = dirtyPathsRef.current.has(path);
+      setStatus({
+        kind: result.error && !result.execution ? 'error' : 'ok',
+        message: result.execution
+          ? `Newman ${code ?? '—'} ${result.execution.status}${
+              unsaved ? ' · unsaved edits' : ''
+            }`.trim()
+          : result.error ?? 'Newman finished'
+      });
+    } catch (error) {
+      setStatus({
+        kind: 'error',
+        message: error instanceof Error ? error.message : String(error)
+      });
+    } finally {
+      setSending(false);
+    }
+  }, [sending]);
 
   const closeRequestTab = useCallback((path: ItemPath) => {
     setOpenPaths((current) => {
@@ -392,6 +432,9 @@ export default function App() {
         case 'save':
           void saveCollection();
           break;
+        case 'send':
+          void sendRequest();
+          break;
         case 'close-tab':
           if (activePathRef.current) {
             closeRequestTab(activePathRef.current);
@@ -408,7 +451,7 @@ export default function App() {
           break;
       }
     });
-  }, [openCollection, saveCollection, closeRequestTab, cycleTab, selectTabAt]);
+  }, [openCollection, saveCollection, sendRequest, closeRequestTab, cycleTab, selectTabAt]);
 
   const editSelectedItem = (updater: (item: PostmanItem) => PostmanItem) => {
     if (!loaded || !activePath) {
@@ -534,77 +577,95 @@ export default function App() {
                 </div>
               )}
               {activePath && selectedItem && selectedRequest && (
-                <RequestPane
-                  key={activePath}
-                  item={selectedItem}
-                  request={selectedRequest}
-                  path={activePath}
-                  onChangeMethod={(method) =>
-                    editSelectedItem((item) => setRequestMethod(item, method))
-                  }
-                  onChangeUrl={(raw) => editSelectedItem((item) => setRequestUrl(item, raw))}
-                  onPromoteUrlToObject={() =>
-                    editSelectedItem((item) => promoteRequestUrlToObject(item))
-                  }
-                  onAddQueryParam={() => editSelectedItem((item) => addRequestQueryParam(item))}
-                  onChangeQueryParam={(index, patch) =>
-                    editSelectedItem((item) => updateRequestQueryParam(item, index, patch))
-                  }
-                  onToggleQueryParamDisabled={(index, disabled) =>
-                    editSelectedItem((item) => setRequestQueryParamDisabled(item, index, disabled))
-                  }
-                  onRemoveQueryParam={(index) =>
-                    editSelectedItem((item) => removeRequestQueryParam(item, index))
-                  }
-                  onAddHeader={() => editSelectedItem((item) => addRequestHeader(item))}
-                  onChangeHeader={(index, patch) =>
-                    editSelectedItem((item) => updateRequestHeader(item, index, patch))
-                  }
-                  onToggleHeaderDisabled={(index, disabled) =>
-                    editSelectedItem((item) => setRequestHeaderDisabled(item, index, disabled))
-                  }
-                  onRemoveHeader={(index) =>
-                    editSelectedItem((item) => removeRequestHeader(item, index))
-                  }
-                  onChangeBodyMode={(mode) =>
-                    editSelectedItem((item) => setRequestBodyMode(item, mode))
-                  }
-                  onChangeBodyRaw={(raw) =>
-                    editSelectedItem((item) => setRequestBodyRaw(item, raw))
-                  }
-                  onAddUrlEncoded={() =>
-                    editSelectedItem((item) => addRequestUrlEncodedParam(item))
-                  }
-                  onChangeUrlEncoded={(index, patch) =>
-                    editSelectedItem((item) => updateRequestUrlEncodedParam(item, index, patch))
-                  }
-                  onToggleUrlEncodedDisabled={(index, disabled) =>
-                    editSelectedItem((item) =>
-                      setRequestUrlEncodedParamDisabled(item, index, disabled)
-                    )
-                  }
-                  onRemoveUrlEncoded={(index) =>
-                    editSelectedItem((item) => removeRequestUrlEncodedParam(item, index))
-                  }
-                  onChangeAuthType={(type) =>
-                    editSelectedItem((item) => setRequestAuthType(item, type))
-                  }
-                  onChangeBearerToken={(token) =>
-                    editSelectedItem((item) => setRequestBearerToken(item, token))
-                  }
-                  onChangeBasicAuth={(patch) =>
-                    editSelectedItem((item) => setRequestBasicAuth(item, patch))
-                  }
-                  onChangeApiKeyAuth={(patch) =>
-                    editSelectedItem((item) => setRequestApiKeyAuth(item, patch))
-                  }
-                  onChangePrerequestScript={(source) =>
-                    editSelectedItem((item) => setItemScriptSource(item, 'prerequest', source))
-                  }
-                  onChangeTestScript={(source) =>
-                    editSelectedItem((item) => setItemScriptSource(item, 'test', source))
-                  }
-                />
+                <div className="detail-split">
+                  <div className="detail-request">
+                    <RequestPane
+                      key={activePath}
+                      item={selectedItem}
+                      request={selectedRequest}
+                      path={activePath}
+                      onChangeMethod={(method) =>
+                        editSelectedItem((item) => setRequestMethod(item, method))
+                      }
+                      onChangeUrl={(raw) => editSelectedItem((item) => setRequestUrl(item, raw))}
+                      onPromoteUrlToObject={() =>
+                        editSelectedItem((item) => promoteRequestUrlToObject(item))
+                      }
+                      onAddQueryParam={() =>
+                        editSelectedItem((item) => addRequestQueryParam(item))
+                      }
+                      onChangeQueryParam={(index, patch) =>
+                        editSelectedItem((item) => updateRequestQueryParam(item, index, patch))
+                      }
+                      onToggleQueryParamDisabled={(index, disabled) =>
+                        editSelectedItem((item) =>
+                          setRequestQueryParamDisabled(item, index, disabled)
+                        )
+                      }
+                      onRemoveQueryParam={(index) =>
+                        editSelectedItem((item) => removeRequestQueryParam(item, index))
+                      }
+                      onAddHeader={() => editSelectedItem((item) => addRequestHeader(item))}
+                      onChangeHeader={(index, patch) =>
+                        editSelectedItem((item) => updateRequestHeader(item, index, patch))
+                      }
+                      onToggleHeaderDisabled={(index, disabled) =>
+                        editSelectedItem((item) => setRequestHeaderDisabled(item, index, disabled))
+                      }
+                      onRemoveHeader={(index) =>
+                        editSelectedItem((item) => removeRequestHeader(item, index))
+                      }
+                      onChangeBodyMode={(mode) =>
+                        editSelectedItem((item) => setRequestBodyMode(item, mode))
+                      }
+                      onChangeBodyRaw={(raw) =>
+                        editSelectedItem((item) => setRequestBodyRaw(item, raw))
+                      }
+                      onAddUrlEncoded={() =>
+                        editSelectedItem((item) => addRequestUrlEncodedParam(item))
+                      }
+                      onChangeUrlEncoded={(index, patch) =>
+                        editSelectedItem((item) => updateRequestUrlEncodedParam(item, index, patch))
+                      }
+                      onToggleUrlEncodedDisabled={(index, disabled) =>
+                        editSelectedItem((item) =>
+                          setRequestUrlEncodedParamDisabled(item, index, disabled)
+                        )
+                      }
+                      onRemoveUrlEncoded={(index) =>
+                        editSelectedItem((item) => removeRequestUrlEncodedParam(item, index))
+                      }
+                      onChangeAuthType={(type) =>
+                        editSelectedItem((item) => setRequestAuthType(item, type))
+                      }
+                      onChangeBearerToken={(token) =>
+                        editSelectedItem((item) => setRequestBearerToken(item, token))
+                      }
+                      onChangeBasicAuth={(patch) =>
+                        editSelectedItem((item) => setRequestBasicAuth(item, patch))
+                      }
+                      onChangeApiKeyAuth={(patch) =>
+                        editSelectedItem((item) => setRequestApiKeyAuth(item, patch))
+                      }
+                      onChangePrerequestScript={(source) =>
+                        editSelectedItem((item) => setItemScriptSource(item, 'prerequest', source))
+                      }
+                      onChangeTestScript={(source) =>
+                        editSelectedItem((item) => setItemScriptSource(item, 'test', source))
+                      }
+                      onSend={() => void sendRequest()}
+                      sending={sending}
+                    />
+                  </div>
+                  <div className="detail-response">
+                    <ResponsePane
+                      result={
+                        lastRun && lastRun.path === activePath ? lastRun.result : null
+                      }
+                      running={sending}
+                    />
+                  </div>
+                </div>
               )}
             </main>
           </section>
