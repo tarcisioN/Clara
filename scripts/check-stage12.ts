@@ -84,10 +84,21 @@ try {
   const outside = await discoverGit(outsideFile);
   assert.equal(outside.inRepo, false);
 
-  // Missing path at ref
+  // Untracked at ref reports missing instead of throwing.
+  const absent = await readFileAtRef(repo, 'main', 'collections/does-not-exist.json');
+  assert.equal(absent.missing, true);
+  assert.equal(absent.raw, null);
+
+  // A file that exists on disk but was never committed behaves the same.
+  const untrackedPath = path.join(repo, 'collections', 'untracked.postman_collection.json');
+  writeFileSync(untrackedPath, fixtureRaw, 'utf8');
+  const untracked = await readCollectionAtRef(untrackedPath, 'main');
+  assert.equal(untracked.missing, true);
+
+  // A bad ref is still an error.
   await assert.rejects(
-    () => readFileAtRef(repo, 'main', 'collections/does-not-exist.json'),
-    /git show failed|does not exist|exists on disk/i
+    () => readFileAtRef(repo, 'no-such-ref', 'collections/smoke.postman_collection.json'),
+    /invalid object name|unknown revision|git show failed/i
   );
 
   console.log('stage12 checks passed');

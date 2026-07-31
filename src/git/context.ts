@@ -15,20 +15,29 @@ export async function discoverForCollection(
   return result.inRepo ? result : null;
 }
 
-/** Load and parse the collection blob at `ref` (no working-tree checkout). */
+/**
+ * Load and parse the collection blob at `ref` (no working-tree checkout).
+ * Returns null when the file is untracked at that ref, so there is nothing to compare.
+ */
 export async function loadCollectionAtRef(
   filePath: string,
   ref: string
-): Promise<PostmanCollection> {
-  const { raw } = await window.clara.readCollectionAtRef(filePath, ref);
-  return assertPostmanCollection(JSON.parse(raw));
+): Promise<PostmanCollection | null> {
+  const result = await window.clara.readCollectionAtRef(filePath, ref);
+  if (result.raw == null) {
+    return null;
+  }
+  return assertPostmanCollection(JSON.parse(result.raw));
 }
 
-/** Load and parse an environment blob at `ref` (no working-tree checkout). */
+/** Load and parse an environment blob at `ref`; null when untracked at that ref. */
 export async function loadEnvironmentAtRef(
   filePath: string,
   ref: string
-): Promise<PostmanEnvironment> {
-  const { raw } = await window.clara.readCollectionAtRef(filePath, ref);
-  return assertPostmanEnvironment(JSON.parse(raw));
+): Promise<PostmanEnvironment | null> {
+  const result = await window.clara.readCollectionAtRef(filePath, ref);
+  if (result.raw == null) {
+    return null;
+  }
+  return assertPostmanEnvironment(JSON.parse(result.raw));
 }

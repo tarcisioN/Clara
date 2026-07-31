@@ -609,7 +609,7 @@ export default function App() {
           existing?.baseRef ??
           git.defaultBase;
 
-        let baseCollection: PostmanCollection;
+        let baseCollection: PostmanCollection | null;
         let baseRef = preferred;
         try {
           baseCollection = await loadCollectionAtRef(collectionPath, preferred);
@@ -624,6 +624,17 @@ export default function App() {
           } else {
             throw error;
           }
+        }
+
+        if (!baseCollection) {
+          setCompareByPath((current) => ({ ...current, [collectionPath]: null }));
+          if (options?.baseRef || options?.forceReloadBase) {
+            setStatus({
+              kind: 'ok',
+              message: `${fileName(collectionPath)} is not in ${baseRef}; nothing to compare`
+            });
+          }
+          return;
         }
 
         const diff = computeStructuralDiff(currentForDiff, baseCollection);
@@ -717,7 +728,7 @@ export default function App() {
         const preferred =
           compareBasesRef.current[git.repoRoot] ?? existing?.baseRef ?? git.defaultBase;
 
-        let baseEnvironment: PostmanEnvironment;
+        let baseEnvironment: PostmanEnvironment | null;
         let baseRef = preferred;
         try {
           baseEnvironment = await loadEnvironmentAtRef(environmentPath, preferred);
@@ -732,6 +743,11 @@ export default function App() {
           } else {
             throw error;
           }
+        }
+
+        if (!baseEnvironment) {
+          setEnvCompareByPath((current) => ({ ...current, [environmentPath]: null }));
+          return;
         }
 
         const diff = computeEnvironmentDiff(environment, baseEnvironment);

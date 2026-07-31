@@ -57,7 +57,18 @@ export type GitDiscoverResult =
     }
   | { inRepo: false };
 
-export type GitReadAtRefResult = { raw: string };
+export type GitReadAtRefResult =
+  | { raw: string; missing?: false }
+  | { raw: null; missing: true };
+
+/** `git show ref:path` failing because the file is untracked at that ref, not a real error. */
+export function isPathMissingAtRef(stderr: string): boolean {
+  return (
+    /exists on disk, but not in/i.test(stderr) ||
+    /does not exist in ['"]?[^'"]*['"]?/i.test(stderr) ||
+    /path '.*' does not exist/i.test(stderr)
+  );
+}
 
 /** Walk parents for `.git`, then confirm with `rev-parse --show-toplevel`. */
 export async function findRepoRoot(startPath: string): Promise<string | null> {
@@ -170,6 +181,9 @@ export async function readFileAtRef(
   const gitPath = relPath.split(path.sep).join('/');
   const result = await runGit(repoRoot, ['show', `${ref}:${gitPath}`]);
   if (result.exitCode !== 0) {
+    if (isPathMissingAtRef(result.stderr)) {
+      return { raw: null, missing: true };
+    }
     throw new Error(
       result.stderr.trim() || `git show failed for ${ref}:${gitPath}`
     );

@@ -84,7 +84,8 @@ ref (`main`/`master` by default, or any branch/tag/SHA you pick). Markers show
 added / removed / modified requests; open a request to see which sections differ.
 You can restore a request, section, or folder from the base as an **unsaved edit**
 (Save writes the collection file — compare never runs `git checkout`). Environments
-get the same key-based value markers.
+get the same key-based value markers. Files that do not exist at the base ref (new or
+untracked) simply show no comparison.
 
 See [docs/EPIC-git-compare.md](./docs/EPIC-git-compare.md).
 
