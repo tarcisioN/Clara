@@ -39,7 +39,8 @@ import {
   updateCollectionItem,
   updateRequestHeader,
   updateRequestQueryParam,
-  updateRequestUrlEncodedParam
+  updateRequestUrlEncodedParam,
+  setItemScriptSource
 } from './postman/edit.ts';
 import './App.css';
 
@@ -596,6 +597,12 @@ export default function App() {
                   }
                   onChangeApiKeyAuth={(patch) =>
                     editSelectedItem((item) => setRequestApiKeyAuth(item, patch))
+                  }
+                  onChangePrerequestScript={(source) =>
+                    editSelectedItem((item) => setItemScriptSource(item, 'prerequest', source))
+                  }
+                  onChangeTestScript={(source) =>
+                    editSelectedItem((item) => setItemScriptSource(item, 'test', source))
                   }
                 />
               )}

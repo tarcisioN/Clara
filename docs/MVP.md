@@ -173,6 +173,21 @@ Trocar o tipo **não apaga** arrays irmãos (`bearer` permanece ao mudar para `b
 
 ---
 
+## Etapa 7 — Scripts (prerequest / test)
+
+### Requisitos
+- [x] Tabs **Pre-request** e **Tests** no request pane
+- [x] Editar `item.event[]` com `listen: prerequest` e `listen: test`
+- [x] `script.exec[]` ↔ textarea (join/split por `\n`)
+- [x] Preservar campos irmãos (`id`, `type`, outros events)
+- [x] Indicador na tab quando o script tem conteúdo
+
+### Validação
+- [x] Save → reopen → scripts idênticos _(imutável + serialize; `make check-etapa7`)_
+- [x] Request sem `event` ganha entries ao editar; siblings intactos
+
+---
+
 ## Etapa UX — Shell Bruno-inspired (obrigatória)
 
 A UI deve ter a densidade e o fluxo de trabalho de um API client desktop, não aparência de
@@ -189,7 +204,7 @@ formulário genérico.
 - [x] Atalhos: Open/Save/Close tab/Next/Prev/Tab 1–9
 - [x] Arrastar abas para reordenar
 - [x] Toolbar method + URL + Send (desabilitado até MVP 2)
-- [x] Tabs internas `Params | Body | Headers | Auth` com contadores/indicadores
+- [x] Tabs internas `Params | Body | Headers | Auth | Pre-request | Tests`
 - [x] Paleta light inspirada no Bruno (laranja de marca, superfícies neutras, bordas discretas)
 - [x] Tabelas key/value compactas, sem cards empilhados
 - [x] Chrome nativo integrado no macOS (`hiddenInset`)
@@ -202,7 +217,7 @@ formulário genérico.
 
 ---
 
-## Etapa 7 — Environments (opcional no MVP 1)
+## Etapa 8 — Environments (opcional no MVP 1)
 
 Pode ficar para um mini-MVP 1.1 se atrasar o resto.
 

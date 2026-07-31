@@ -140,11 +140,16 @@
   text-align: center;
 }
 
+/* Section content marker — deliberately neutral, since brand orange means unsaved. */
 .tab-dot {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--brand);
+  background: var(--text-faint);
+}
+
+.request-section-tabs > button.active .tab-dot {
+  background: var(--text-muted);
 }
 
 .url-shape {

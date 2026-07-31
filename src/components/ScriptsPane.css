@@ -1,0 +1,90 @@
+.scripts-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  min-height: 0;
+}
+
+.scripts-pane-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scripts-pane-title h3 {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.scripts-hint {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: 0.6875rem;
+}
+
+.scripts-editor {
+  flex: 1;
+  min-height: 180px;
+  width: 100%;
+  border: 1px solid var(--border-1);
+  border-radius: 6px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.scripts-editor:focus-within {
+  border-color: var(--border-2);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.04);
+}
+
+.scripts-editor .cm-editor {
+  height: 100%;
+  min-height: 180px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.scripts-editor .cm-scroller,
+.scripts-editor .cm-content {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.scripts-editor .cm-scroller {
+  overflow: auto;
+}
+
+.scripts-editor .cm-content {
+  padding: 10px 0;
+  caret-color: var(--text);
+}
+
+.scripts-editor .cm-line {
+  padding: 0 12px 0 6px;
+}
+
+.scripts-editor .cm-gutters {
+  border-right: 1px solid var(--border-0);
+  background: var(--crust);
+  color: var(--text-faint);
+}
+
+.scripts-editor .cm-activeLine,
+.scripts-editor .cm-activeLineGutter {
+  background: var(--surface-0);
+}
+
+.scripts-editor .cm-focused {
+  outline: none;
+}
+
+.scripts-editor .cm-placeholder {
+  color: var(--text-faint);
+  font-style: normal;
+}

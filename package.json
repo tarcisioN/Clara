@@ -16,9 +16,12 @@
     "check:etapa3": "node --experimental-strip-types scripts/check-etapa3.ts",
     "check:etapa4": "node --experimental-strip-types scripts/check-etapa4.ts",
     "check:etapa5": "node --experimental-strip-types scripts/check-etapa5.ts",
-    "check:etapa6": "node --experimental-strip-types scripts/check-etapa6.ts"
+    "check:etapa6": "node --experimental-strip-types scripts/check-etapa6.ts",
+    "check:etapa7": "node --experimental-strip-types scripts/check-etapa7.ts"
   },
   "dependencies": {
+    "@codemirror/lang-javascript": "^6.2.5",
+    "@uiw/react-codemirror": "^4.25.11",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

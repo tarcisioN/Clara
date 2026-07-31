@@ -9,14 +9,17 @@ import type { PostmanBodyMode, PostmanUrlEncodedParam } from '../postman/body.ts
 import type { EditableAuthType } from '../postman/auth.ts';
 import type { ItemPath } from '../postman/tree.ts';
 import { getUrlRaw, isUrlObject } from '../postman/url.ts';
+import { getItemScriptSource } from '../postman/edit.ts';
+import { hasScriptContent } from '../postman/scripts.ts';
 import HeaderTable from './HeaderTable.tsx';
 import BodyPane from './BodyPane.tsx';
 import AuthPane from './AuthPane.tsx';
 import QueryParamsPane from './QueryParamsPane.tsx';
+import ScriptsPane from './ScriptsPane.tsx';
 import './RequestPane.css';
 
 const COMMON_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
-type RequestSection = 'params' | 'body' | 'headers' | 'auth';
+type RequestSection = 'params' | 'body' | 'headers' | 'auth' | 'prerequest' | 'tests';
 
 type RequestPaneProps = {
   item: PostmanItem;
@@ -46,6 +49,8 @@ type RequestPaneProps = {
   onChangeBearerToken: (token: string) => void;
   onChangeBasicAuth: (patch: { username?: string; password?: string }) => void;
   onChangeApiKeyAuth: (patch: { key?: string; value?: string; in?: string }) => void;
+  onChangePrerequestScript: (source: string) => void;
+  onChangeTestScript: (source: string) => void;
 };
 
 export default function RequestPane({
@@ -72,7 +77,9 @@ export default function RequestPane({
   onChangeAuthType,
   onChangeBearerToken,
   onChangeBasicAuth,
-  onChangeApiKeyAuth
+  onChangeApiKeyAuth,
+  onChangePrerequestScript,
+  onChangeTestScript
 }: RequestPaneProps) {
   const [activeSection, setActiveSection] = useState<RequestSection>('params');
   const method = (request.method ?? 'GET').toUpperCase();
@@ -92,6 +99,8 @@ export default function RequestPane({
   const headerCount = headers.filter((header) => !header.disabled).length;
   const hasBody = request.body?.mode && request.body.mode !== 'none';
   const hasAuth = request.auth?.type && request.auth.type !== 'noauth';
+  const prerequestSource = getItemScriptSource(item, 'prerequest');
+  const testSource = getItemScriptSource(item, 'test');
   const sections: Array<{
     key: RequestSection;
     label: string;
@@ -101,7 +110,9 @@ export default function RequestPane({
     { key: 'params', label: 'Params', count: queryCount },
     { key: 'body', label: 'Body', active: Boolean(hasBody) },
     { key: 'headers', label: 'Headers', count: headerCount },
-    { key: 'auth', label: 'Auth', active: Boolean(hasAuth) }
+    { key: 'auth', label: 'Auth', active: Boolean(hasAuth) },
+    { key: 'prerequest', label: 'Pre-request', active: hasScriptContent(prerequestSource) },
+    { key: 'tests', label: 'Tests', active: hasScriptContent(testSource) }
   ];
 
   return (
@@ -163,7 +174,9 @@ export default function RequestPane({
           >
             {section.label}
             {section.count ? <span className="tab-count">{section.count}</span> : null}
-            {section.active ? <span className="tab-dot" aria-hidden /> : null}
+            {section.active ? (
+              <span className="tab-dot" title={`${section.label} has content`} />
+            ) : null}
           </button>
         ))}
         <span className="url-shape">
@@ -212,6 +225,22 @@ export default function RequestPane({
             onChangeUrlEncoded={onChangeUrlEncoded}
             onToggleUrlEncodedDisabled={onToggleUrlEncodedDisabled}
             onRemoveUrlEncoded={onRemoveUrlEncoded}
+          />
+        )}
+
+        {activeSection === 'prerequest' && (
+          <ScriptsPane
+            listen="prerequest"
+            source={prerequestSource}
+            onChange={onChangePrerequestScript}
+          />
+        )}
+
+        {activeSection === 'tests' && (
+          <ScriptsPane
+            listen="test"
+            source={testSource}
+            onChange={onChangeTestScript}
           />
         )}
       </div>

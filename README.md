@@ -31,14 +31,14 @@ make dev
 | `make check-etapa4` | Body (raw / urlencoded) |
 | `make check-etapa5` | Auth (bearer / basic / apikey) |
 | `make check-etapa6` | Query params (`url.query`) |
+| `make check-etapa7` | Scripts (`prerequest` / `test`) |
 
-## Uso (Etapa 6)
+## Uso (Etapa 7)
 
 1. `make dev`
-2. **Ping** → query table (`verbose` on, `trace` disabled; `raw` sem o disabled)
-3. **Root echo** (URL string) → Convert URL to object para habilitar a tabela
-4. Editar query reconstrói `raw`; host/path/`variable` permanecem
-5. **Save •** grava o mesmo JSON
+2. Abrir um request → tabs **Pre-request** / **Tests**
+3. Editar o JS; Save grava em `item.event[].script.exec`
+4. **Ping** na fixture já traz exemplos de ambos
 
 ## Sessão (`~/.clara`)
 

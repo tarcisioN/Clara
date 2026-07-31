@@ -8,6 +8,12 @@ import type {
 import type { PostmanBody, PostmanBodyMode, PostmanUrlEncodedParam } from './body.ts';
 import type { EditableAuthType, PostmanAuth } from './auth.ts';
 import { setAuthAttributeValue } from './auth.ts';
+import {
+  scriptExecToSource,
+  sourceToScriptExec,
+  type PostmanEvent,
+  type PostmanScriptListen
+} from './scripts.ts';
 import { updateItemByPath, type ItemPath } from './tree.ts';
 import { ensureUrlObject, isUrlObject, setUrlQueryParams, setUrlRaw } from './url.ts';
 
@@ -426,4 +432,54 @@ export function removeRequestQueryParam(item: PostmanItem, index: number): Postm
     params.splice(index, 1);
     return setUrlQueryParams(url, params);
   });
+}
+
+function getItemEvents(item: PostmanItem): PostmanEvent[] {
+  return Array.isArray(item.event) ? item.event : [];
+}
+
+export function getItemScriptSource(
+  item: PostmanItem,
+  listen: PostmanScriptListen
+): string {
+  const event = getItemEvents(item).find((entry) => entry.listen === listen);
+  return scriptExecToSource(event?.script?.exec);
+}
+
+/**
+ * Upsert `item.event[]` for prerequest/test. Preserves sibling events and
+ * unknown script fields (`id`, `src`, …). Empty source still writes
+ * `exec: [""]` so Newman/Postman round-trips stay valid.
+ */
+export function setItemScriptSource(
+  item: PostmanItem,
+  listen: PostmanScriptListen,
+  source: string
+): PostmanItem {
+  const events = [...getItemEvents(item)];
+  const index = events.findIndex((entry) => entry.listen === listen);
+  const exec = sourceToScriptExec(source);
+
+  if (index === -1) {
+    events.push({
+      listen,
+      script: {
+        type: 'text/javascript',
+        exec
+      }
+    });
+  } else {
+    const current = events[index]!;
+    events[index] = {
+      ...current,
+      listen,
+      script: {
+        ...(current.script ?? {}),
+        type: current.script?.type ?? 'text/javascript',
+        exec
+      }
+    };
+  }
+
+  return { ...item, event: events };
 }
