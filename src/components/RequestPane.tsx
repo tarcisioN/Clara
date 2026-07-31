@@ -1,0 +1,220 @@
+import { useState } from 'react';
+import type {
+  PostmanHeader,
+  PostmanItem,
+  PostmanQueryParam,
+  PostmanRequest
+} from '../postman/types.ts';
+import type { PostmanBodyMode, PostmanUrlEncodedParam } from '../postman/body.ts';
+import type { EditableAuthType } from '../postman/auth.ts';
+import type { ItemPath } from '../postman/tree.ts';
+import { getUrlRaw, isUrlObject } from '../postman/url.ts';
+import HeaderTable from './HeaderTable.tsx';
+import BodyPane from './BodyPane.tsx';
+import AuthPane from './AuthPane.tsx';
+import QueryParamsPane from './QueryParamsPane.tsx';
+import './RequestPane.css';
+
+const COMMON_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
+type RequestSection = 'params' | 'body' | 'headers' | 'auth';
+
+type RequestPaneProps = {
+  item: PostmanItem;
+  request: PostmanRequest;
+  path: ItemPath;
+  onChangeMethod: (method: string) => void;
+  onChangeUrl: (raw: string) => void;
+  onPromoteUrlToObject: () => void;
+  onAddQueryParam: () => void;
+  onChangeQueryParam: (index: number, patch: Pick<PostmanQueryParam, 'key' | 'value'>) => void;
+  onToggleQueryParamDisabled: (index: number, disabled: boolean) => void;
+  onRemoveQueryParam: (index: number) => void;
+  onAddHeader: () => void;
+  onChangeHeader: (index: number, patch: Pick<PostmanHeader, 'key' | 'value'>) => void;
+  onToggleHeaderDisabled: (index: number, disabled: boolean) => void;
+  onRemoveHeader: (index: number) => void;
+  onChangeBodyMode: (mode: PostmanBodyMode) => void;
+  onChangeBodyRaw: (raw: string) => void;
+  onAddUrlEncoded: () => void;
+  onChangeUrlEncoded: (
+    index: number,
+    patch: Pick<PostmanUrlEncodedParam, 'key' | 'value'>
+  ) => void;
+  onToggleUrlEncodedDisabled: (index: number, disabled: boolean) => void;
+  onRemoveUrlEncoded: (index: number) => void;
+  onChangeAuthType: (type: EditableAuthType) => void;
+  onChangeBearerToken: (token: string) => void;
+  onChangeBasicAuth: (patch: { username?: string; password?: string }) => void;
+  onChangeApiKeyAuth: (patch: { key?: string; value?: string; in?: string }) => void;
+};
+
+export default function RequestPane({
+  item,
+  request,
+  path,
+  onChangeMethod,
+  onChangeUrl,
+  onPromoteUrlToObject,
+  onAddQueryParam,
+  onChangeQueryParam,
+  onToggleQueryParamDisabled,
+  onRemoveQueryParam,
+  onAddHeader,
+  onChangeHeader,
+  onToggleHeaderDisabled,
+  onRemoveHeader,
+  onChangeBodyMode,
+  onChangeBodyRaw,
+  onAddUrlEncoded,
+  onChangeUrlEncoded,
+  onToggleUrlEncodedDisabled,
+  onRemoveUrlEncoded,
+  onChangeAuthType,
+  onChangeBearerToken,
+  onChangeBasicAuth,
+  onChangeApiKeyAuth
+}: RequestPaneProps) {
+  const [activeSection, setActiveSection] = useState<RequestSection>('params');
+  const method = (request.method ?? 'GET').toUpperCase();
+  const methods = COMMON_METHODS.includes(method)
+    ? COMMON_METHODS
+    : [method, ...COMMON_METHODS];
+  const urlRaw = getUrlRaw(request.url);
+  const urlShape = typeof item.request === 'string'
+    ? 'request string'
+    : isUrlObject(request.url)
+      ? 'url object'
+      : 'url string';
+  const headers = request.header ?? [];
+  const queryCount = isUrlObject(request.url)
+    ? request.url.query?.filter((param) => !param.disabled).length ?? 0
+    : 0;
+  const headerCount = headers.filter((header) => !header.disabled).length;
+  const hasBody = request.body?.mode && request.body.mode !== 'none';
+  const hasAuth = request.auth?.type && request.auth.type !== 'noauth';
+  const sections: Array<{
+    key: RequestSection;
+    label: string;
+    count?: number;
+    active?: boolean;
+  }> = [
+    { key: 'params', label: 'Params', count: queryCount },
+    { key: 'body', label: 'Body', active: Boolean(hasBody) },
+    { key: 'headers', label: 'Headers', count: headerCount },
+    { key: 'auth', label: 'Auth', active: Boolean(hasAuth) }
+  ];
+
+  return (
+    <div className="request-pane">
+      <div className="request-title">
+        <h2>{item.name?.trim() || '(unnamed request)'}</h2>
+        <span className="request-path">{path}</span>
+      </div>
+
+      <div className="request-line">
+        <label className="visually-hidden" htmlFor="request-method">
+          Method
+        </label>
+        <select
+          id="request-method"
+          className={`method-select method-${method.toLowerCase()}`}
+          value={method}
+          onChange={(event) => onChangeMethod(event.target.value)}
+        >
+          {methods.map((candidate) => (
+            <option key={candidate} value={candidate}>
+              {candidate}
+            </option>
+          ))}
+        </select>
+
+        <label className="visually-hidden" htmlFor="request-url">
+          URL
+        </label>
+        <input
+          id="request-url"
+          className="url-input"
+          type="text"
+          spellCheck={false}
+          autoComplete="off"
+          placeholder="https://example.com/path"
+          value={urlRaw}
+          onChange={(event) => onChangeUrl(event.target.value)}
+        />
+        <button
+          type="button"
+          className="send-button"
+          disabled
+          title="Execution arrives in MVP 2 via Newman"
+        >
+          Send
+        </button>
+      </div>
+
+      <div className="request-section-tabs" role="tablist" aria-label="Request settings">
+        {sections.map((section) => (
+          <button
+            key={section.key}
+            type="button"
+            role="tab"
+            aria-selected={activeSection === section.key}
+            className={activeSection === section.key ? 'active' : ''}
+            onClick={() => setActiveSection(section.key)}
+          >
+            {section.label}
+            {section.count ? <span className="tab-count">{section.count}</span> : null}
+            {section.active ? <span className="tab-dot" aria-hidden /> : null}
+          </button>
+        ))}
+        <span className="url-shape">
+          {urlShape}
+        </span>
+      </div>
+
+      <div className="request-section-content">
+        {activeSection === 'params' && (
+          <QueryParamsPane
+            url={request.url}
+            onPromoteToObject={onPromoteUrlToObject}
+            onAdd={onAddQueryParam}
+            onChange={onChangeQueryParam}
+            onToggleDisabled={onToggleQueryParamDisabled}
+            onRemove={onRemoveQueryParam}
+          />
+        )}
+
+        {activeSection === 'auth' && (
+          <AuthPane
+            auth={request.auth}
+            onChangeType={onChangeAuthType}
+            onChangeBearerToken={onChangeBearerToken}
+            onChangeBasic={onChangeBasicAuth}
+            onChangeApiKey={onChangeApiKeyAuth}
+          />
+        )}
+
+        {activeSection === 'headers' && (
+          <HeaderTable
+            headers={headers}
+            onAdd={onAddHeader}
+            onChange={onChangeHeader}
+            onToggleDisabled={onToggleHeaderDisabled}
+            onRemove={onRemoveHeader}
+          />
+        )}
+
+        {activeSection === 'body' && (
+          <BodyPane
+            body={request.body}
+            onChangeMode={onChangeBodyMode}
+            onChangeRaw={onChangeBodyRaw}
+            onAddUrlEncoded={onAddUrlEncoded}
+            onChangeUrlEncoded={onChangeUrlEncoded}
+            onToggleUrlEncodedDisabled={onToggleUrlEncodedDisabled}
+            onRemoveUrlEncoded={onRemoveUrlEncoded}
+          />
+        )}
+      </div>
+    </div>
+  );
+}

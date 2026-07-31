@@ -1,0 +1,35 @@
+{
+  "name": "clara",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lightweight Postman collection editor for collections versioned in git",
+  "main": "dist-electron/main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "check:etapa0": "node --experimental-strip-types scripts/check-etapa0.ts",
+    "check:etapa1": "node --experimental-strip-types scripts/check-etapa1.ts",
+    "check:etapa2": "node --experimental-strip-types scripts/check-etapa2.ts",
+    "check:etapa3": "node --experimental-strip-types scripts/check-etapa3.ts",
+    "check:etapa4": "node --experimental-strip-types scripts/check-etapa4.ts",
+    "check:etapa5": "node --experimental-strip-types scripts/check-etapa5.ts",
+    "check:etapa6": "node --experimental-strip-types scripts/check-etapa6.ts"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "electron": "^37.2.0",
+    "typescript": "^5.8.3",
+    "vite": "^7.0.4",
+    "vite-plugin-electron": "^0.29.0",
+    "vite-plugin-electron-renderer": "^0.14.6"
+  }
+}

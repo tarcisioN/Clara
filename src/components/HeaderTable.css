@@ -1,0 +1,120 @@
+.header-table {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.header-table-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.header-table-title h3 {
+  margin: 0;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6a7563;
+  font-weight: 600;
+}
+
+.header-add,
+.header-remove {
+  border: 1px solid #b7c4ad;
+  background: #fff;
+  color: #1a1f16;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+}
+
+.header-add:hover,
+.header-remove:hover {
+  background: rgba(47, 93, 58, 0.08);
+}
+
+.header-empty {
+  margin: 0;
+  color: #5c6756;
+  font-size: 0.9rem;
+}
+
+.header-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.header-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) minmax(0, 1.4fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.header-row-head {
+  padding: 0 2px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6a7563;
+}
+
+.header-row.disabled input[type='text'] {
+  opacity: 0.55;
+}
+
+.header-col-enabled {
+  display: flex;
+  justify-content: center;
+  margin: 0;
+}
+
+.header-row input[type='text'] {
+  border: 1px solid #c3cfb9;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fff;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.82rem;
+  color: inherit;
+  min-width: 0;
+  width: 100%;
+}
+
+.header-row input[type='text']:focus {
+  outline: 2px solid #2f5d3a;
+  outline-offset: 1px;
+}
+
+.header-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #6a7563;
+}
+
+.header-hint code {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.74rem;
+  background: rgba(47, 93, 58, 0.1);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+@media (max-width: 700px) {
+  .header-row {
+    grid-template-columns: 36px 1fr;
+  }
+
+  .header-row-head {
+    display: none;
+  }
+
+  .header-row input[type='text']:nth-of-type(2),
+  .header-remove {
+    grid-column: 2;
+  }
+}

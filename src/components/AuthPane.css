@@ -1,0 +1,85 @@
+.auth-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.auth-pane-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.auth-pane-title h3 {
+  margin: 0;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #6a7563;
+  font-weight: 600;
+}
+
+.auth-type select,
+.auth-field select,
+.auth-field input {
+  border: 1px solid #c3cfb9;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fff;
+  font-size: 0.86rem;
+  color: inherit;
+}
+
+.auth-type select {
+  cursor: pointer;
+  font-size: 0.82rem;
+  padding: 6px 10px;
+}
+
+.auth-hint {
+  margin: 0;
+  font-size: 0.86rem;
+  color: #5c6756;
+}
+
+.auth-hint code {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.76rem;
+  background: rgba(47, 93, 58, 0.1);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.auth-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.auth-field span {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #6a7563;
+}
+
+.auth-field input,
+.auth-field select {
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.82rem;
+}
+
+.auth-field input:focus,
+.auth-field select:focus,
+.auth-type select:focus {
+  outline: 2px solid #2f5d3a;
+  outline-offset: 1px;
+}
