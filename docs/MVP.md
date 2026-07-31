@@ -185,6 +185,9 @@ formulário genérico.
 - [x] Dirty state por request, não global — cada tab mostra o próprio indicador
 - [x] Arrastar request da árvore para a barra de tabs abre uma nova tab
 - [x] Nome longo na tab desvanece no final em vez de cortar com reticências
+- [x] Sessão persistida em `~/.clara/session.json` (collection, abas, expanded)
+- [x] Atalhos: Open/Save/Close tab/Next/Prev/Tab 1–9
+- [x] Arrastar abas para reordenar
 - [x] Toolbar method + URL + Send (desabilitado até MVP 2)
 - [x] Tabs internas `Params | Body | Headers | Auth` com contadores/indicadores
 - [x] Paleta light inspirada no Bruno (laranja de marca, superfícies neutras, bordas discretas)

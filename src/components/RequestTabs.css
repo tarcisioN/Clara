@@ -40,12 +40,35 @@
   color: var(--text-subtle);
   font-size: 0.75rem;
   white-space: nowrap;
-  cursor: pointer;
+  cursor: grab;
   user-select: none;
+}
+
+.request-tab:active {
+  cursor: grabbing;
 }
 
 .request-tab:hover {
   color: var(--text);
+}
+
+.request-tab.reorder-before::before,
+.request-tab.reorder-after::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--brand);
+}
+
+.request-tab.reorder-before::before {
+  left: 0;
+}
+
+.request-tab.reorder-after::after {
+  right: 0;
 }
 
 .request-tab.active {

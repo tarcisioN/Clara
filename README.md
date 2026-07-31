@@ -40,6 +40,24 @@ make dev
 4. Editar query reconstrói `raw`; host/path/`variable` permanecem
 5. **Save •** grava o mesmo JSON
 
+## Sessão (`~/.clara`)
+
+Clara guarda metadados de sessão em `~/.clara/session.json` (collection aberta,
+abas, pasta expandida). Edits não salvos **não** entram nesse arquivo — só o
+JSON da collection no disco.
+
+## Atalhos
+
+| Atalho | Ação |
+|--------|------|
+| `⌘/Ctrl+O` | Abrir collection |
+| `⌘/Ctrl+S` | Salvar |
+| `⌘/Ctrl+W` | Fechar aba ativa |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | Próxima / anterior aba |
+| `⌘/Ctrl+1…9` | Ir para a aba N |
+| Arrastar aba | Reordenar |
+| Arrastar request da árvore → barra | Abrir aba |
+
 ## Progresso
 
 Checklist do primeiro MVP: [docs/MVP.md](./docs/MVP.md)

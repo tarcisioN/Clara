@@ -1,7 +1,21 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  Menu,
+  type MenuItemConstructorOptions
+} from 'electron';
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { AppCommand } from './commands.ts';
+import {
+  CLARA_HOME,
+  loadSession,
+  saveSession,
+  type SessionState
+} from './session.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -14,10 +28,119 @@ let mainWindow: BrowserWindow | null = null;
 
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 
+function sendCommand(command: AppCommand) {
+  mainWindow?.webContents.send('app:command', command);
+}
+
+function buildMenu() {
+  const isMac = process.platform === 'darwin';
+
+  const template: MenuItemConstructorOptions[] = [
+    ...(isMac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              { role: 'about' as const },
+              { type: 'separator' as const },
+              { role: 'services' as const },
+              { type: 'separator' as const },
+              { role: 'hide' as const },
+              { role: 'hideOthers' as const },
+              { role: 'unhide' as const },
+              { type: 'separator' as const },
+              { role: 'quit' as const }
+            ]
+          }
+        ]
+      : []),
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'Open Collection…',
+          accelerator: 'CmdOrCtrl+O',
+          click: () => sendCommand({ type: 'open' })
+        },
+        {
+          label: 'Save',
+          accelerator: 'CmdOrCtrl+S',
+          click: () => sendCommand({ type: 'save' })
+        },
+        { type: 'separator' },
+        {
+          label: 'Close Window',
+          accelerator: 'CmdOrCtrl+Shift+W',
+          role: 'close'
+        },
+        ...(isMac ? [] : [{ type: 'separator' as const }, { role: 'quit' as const }])
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' }
+      ]
+    },
+    {
+      label: 'Tabs',
+      submenu: [
+        {
+          label: 'Close Tab',
+          accelerator: 'CmdOrCtrl+W',
+          click: () => sendCommand({ type: 'close-tab' })
+        },
+        {
+          label: 'Next Tab',
+          accelerator: 'Ctrl+Tab',
+          click: () => sendCommand({ type: 'next-tab' })
+        },
+        {
+          label: 'Previous Tab',
+          accelerator: 'Ctrl+Shift+Tab',
+          click: () => sendCommand({ type: 'prev-tab' })
+        },
+        { type: 'separator' },
+        ...Array.from({ length: 9 }, (_, index) => ({
+          label: `Tab ${index + 1}`,
+          accelerator: `CmdOrCtrl+${index + 1}`,
+          click: () => sendCommand({ type: 'select-tab', index })
+        }))
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      role: 'window',
+      submenu: [{ role: 'minimize' }, { role: 'zoom' }, ...(isMac ? [{ type: 'separator' as const }, { role: 'front' as const }] : [])]
+    }
+  ];
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 960,
-    height: 640,
+    width: 1100,
+    height: 720,
     title: 'Clara',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     trafficLightPosition: process.platform === 'darwin' ? { x: 14, y: 11 } : undefined,
@@ -35,7 +158,10 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  buildMenu();
+  createWindow();
+});
 
 // Quit on every platform, including macOS: the window is the whole app, and in dev the
 // Vite process only exits once Electron does.
@@ -67,6 +193,14 @@ ipcMain.handle('collection:open', async () => {
   };
 });
 
+ipcMain.handle('collection:read', async (_event, filePath: string) => {
+  if (!filePath || typeof filePath !== 'string') {
+    throw new Error('filePath is required');
+  }
+  const raw = await readFile(filePath, 'utf8');
+  return { filePath, raw };
+});
+
 ipcMain.handle(
   'collection:save',
   async (_event, payload: { filePath: string; contents: string }) => {
@@ -79,3 +213,9 @@ ipcMain.handle(
     return { ok: true as const, filePath };
   }
 );
+
+ipcMain.handle('session:load', async () => loadSession());
+
+ipcMain.handle('session:save', async (_event, state: SessionState) => saveSession(state));
+
+ipcMain.handle('session:home', async () => CLARA_HOME);

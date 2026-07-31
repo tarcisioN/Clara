@@ -286,6 +286,13 @@ button.primary {
   font-size: 0.75rem;
 }
 
+.welcome-session {
+  margin-top: 28px !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.6875rem !important;
+  color: var(--text-faint) !important;
+}
+
 .statusbar {
   height: 24px;
   flex: 0 0 24px;
