@@ -1,23 +1,42 @@
 import type { PostmanVariable } from '../postman/variables.ts';
+import type { KeyChangeKind } from '../git/keyedDiff.ts';
 import './VariablesPane.css';
 
 type VariablesPaneProps = {
   scopeLabel: string;
   variables: PostmanVariable[];
+  compareBaseRef?: string | null;
+  valueStatusByIndex?: Map<number, KeyChangeKind> | null;
+  removedKeys?: Array<{ key: string }> | null;
   onAdd: () => void;
   onChange: (index: number, patch: Pick<PostmanVariable, 'key' | 'value'>) => void;
   onToggleDisabled: (index: number, disabled: boolean) => void;
   onRemove: (index: number) => void;
 };
 
+function statusClass(kind: KeyChangeKind | undefined): string {
+  if (kind === 'added') {
+    return 'compare-row-added';
+  }
+  if (kind === 'modified') {
+    return 'compare-row-modified';
+  }
+  return '';
+}
+
 export default function VariablesPane({
   scopeLabel,
   variables,
+  compareBaseRef = null,
+  valueStatusByIndex = null,
+  removedKeys = null,
   onAdd,
   onChange,
   onToggleDisabled,
   onRemove
 }: VariablesPaneProps) {
+  const baseLabel = compareBaseRef ?? 'base';
+
   return (
     <section className="variables-pane">
       <div className="variables-pane-title">
@@ -30,7 +49,7 @@ export default function VariablesPane({
         </button>
       </div>
 
-      {variables.length === 0 ? (
+      {variables.length === 0 && !(removedKeys?.length) ? (
         <p className="variables-empty">No variables on this {scopeLabel}.</p>
       ) : (
         <div className="variables-rows" role="table" aria-label={`${scopeLabel} variables`}>
@@ -46,11 +65,17 @@ export default function VariablesPane({
           </div>
           {variables.map((variable, index) => {
             const enabled = !variable.disabled;
+            const kind = valueStatusByIndex?.get(index);
             return (
               <div
                 key={index}
-                className={`variables-row ${enabled ? '' : 'disabled'}`.trim()}
+                className={`variables-row ${enabled ? '' : 'disabled'} ${statusClass(kind)}`.trim()}
                 role="row"
+                title={
+                  kind && kind !== 'unchanged'
+                    ? `${kind} vs ${baseLabel}`
+                    : undefined
+                }
               >
                 <label className="variables-col-enabled">
                   <input
@@ -87,6 +112,19 @@ export default function VariablesPane({
               </div>
             );
           })}
+          {removedKeys?.map((entry) => (
+            <div
+              key={`removed:${entry.key}`}
+              className="variables-row compare-row-removed"
+              role="row"
+              title={`Removed vs ${baseLabel}`}
+            >
+              <span className="variables-col-enabled" />
+              <span className="variables-removed-key">{entry.key || '(empty)'}</span>
+              <span className="variables-removed-value">removed in current</span>
+              <span className="variables-col-actions" />
+            </div>
+          ))}
         </div>
       )}
     </section>

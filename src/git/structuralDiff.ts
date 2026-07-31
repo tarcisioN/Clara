@@ -24,10 +24,12 @@ export type StructuralDiff = {
   removed: RemovedGhost[];
   /** Changed descendants under each current folder path (excludes self-only meta). */
   descendantChangeCount: Map<ItemPath, number>;
+  /** Collection-level `variable[]` differs from base. */
+  collectionVariablesChanged: boolean;
   added: number;
   removedCount: number;
   modified: number;
-  /** added + removed + modified (leaf + folder meta). */
+  /** added + removed + modified (+1 when collection variables differ). */
   changedCount: number;
 };
 
@@ -268,14 +270,19 @@ export function computeStructuralDiff(
 
   walk(current.item, base.item, null);
 
+  const collectionVariablesChanged =
+    stable(current.variable ?? []) !== stable(base.variable ?? []);
+  const extra = collectionVariablesChanged ? 1 : 0;
+
   return {
     statusByPath,
     removed,
     descendantChangeCount,
+    collectionVariablesChanged,
     added,
     removedCount,
     modified,
-    changedCount: added + removedCount + modified
+    changedCount: added + removedCount + modified + extra
   };
 }
 

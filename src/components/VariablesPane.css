@@ -64,6 +64,26 @@
   background: var(--bg);
 }
 
+.variables-row.compare-row-added {
+  background: rgba(47, 133, 90, 0.08);
+}
+
+.variables-row.compare-row-modified {
+  background: rgba(212, 136, 26, 0.08);
+}
+
+.variables-row.compare-row-removed {
+  background: rgba(180, 60, 60, 0.06);
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+
+.variables-removed-key,
+.variables-removed-value {
+  font-size: 0.75rem;
+  padding: 0 8px;
+}
+
 .variables-row:last-child {
   border-bottom: 0;
 }

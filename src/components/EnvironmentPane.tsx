@@ -1,25 +1,53 @@
 import type { PostmanEnvironmentValue } from '../postman/environment.ts';
+import type { KeyChangeKind } from '../git/keyedDiff.ts';
 import './EnvironmentPane.css';
 
 type EnvironmentPaneProps = {
   name: string;
   filePath: string;
   values: PostmanEnvironmentValue[];
+  compareBaseRef?: string | null;
+  /** Status per current-row index. */
+  valueStatusByIndex?: Map<number, KeyChangeKind> | null;
+  removedKeys?: Array<{ key: string }> | null;
   onAdd: () => void;
   onChange: (index: number, patch: Pick<PostmanEnvironmentValue, 'key' | 'value'>) => void;
   onToggleEnabled: (index: number, enabled: boolean) => void;
   onRemove: (index: number) => void;
+  onRestoreAll?: (() => void) | null;
+  onRestoreKey?: ((key: string) => void) | null;
 };
+
+function statusClass(kind: KeyChangeKind | undefined): string {
+  if (kind === 'added') {
+    return 'compare-row-added';
+  }
+  if (kind === 'modified') {
+    return 'compare-row-modified';
+  }
+  return '';
+}
 
 export default function EnvironmentPane({
   name,
   filePath,
   values,
+  compareBaseRef = null,
+  valueStatusByIndex = null,
+  removedKeys = null,
   onAdd,
   onChange,
   onToggleEnabled,
-  onRemove
+  onRemove,
+  onRestoreAll = null,
+  onRestoreKey = null
 }: EnvironmentPaneProps) {
+  const baseLabel = compareBaseRef ?? 'base';
+  const hasCompare =
+    Boolean(valueStatusByIndex) &&
+    [...(valueStatusByIndex?.values() ?? [])].some((kind) => kind !== 'unchanged');
+  const hasRemoved = (removedKeys?.length ?? 0) > 0;
+
   return (
     <section className="environment-pane">
       <header className="environment-pane-header">
@@ -27,12 +55,19 @@ export default function EnvironmentPane({
           <h2>{name || 'Untitled environment'}</h2>
           <p title={filePath}>{filePath}</p>
         </div>
-        <button type="button" onClick={onAdd}>
-          Add variable
-        </button>
+        <div className="environment-pane-actions">
+          {(hasCompare || hasRemoved) && onRestoreAll ? (
+            <button type="button" className="compare-restore" onClick={onRestoreAll}>
+              Restore all from {baseLabel}
+            </button>
+          ) : null}
+          <button type="button" onClick={onAdd}>
+            Add variable
+          </button>
+        </div>
       </header>
 
-      {values.length === 0 ? (
+      {values.length === 0 && !hasRemoved ? (
         <p className="environment-empty">No variables in this environment.</p>
       ) : (
         <div className="environment-rows" role="table" aria-label="Environment variables">
@@ -48,11 +83,17 @@ export default function EnvironmentPane({
           </div>
           {values.map((variable, index) => {
             const enabled = variable.enabled !== false;
+            const kind = valueStatusByIndex?.get(index);
             return (
               <div
                 key={index}
-                className={`environment-row ${enabled ? '' : 'disabled'}`.trim()}
+                className={`environment-row ${enabled ? '' : 'disabled'} ${statusClass(kind)}`.trim()}
                 role="row"
+                title={
+                  kind && kind !== 'unchanged'
+                    ? `${kind} vs ${baseLabel}`
+                    : undefined
+                }
               >
                 <label className="environment-col-enabled">
                   <input
@@ -78,17 +119,52 @@ export default function EnvironmentPane({
                   onChange={(event) => onChange(index, { value: event.target.value })}
                   aria-label="Variable value"
                 />
-                <button
-                  type="button"
-                  className="environment-col-actions"
-                  onClick={() => onRemove(index)}
-                  aria-label="Remove variable"
-                >
-                  ✕
-                </button>
+                <span className="environment-col-actions">
+                  {kind === 'modified' && variable.key && onRestoreKey ? (
+                    <button
+                      type="button"
+                      className="compare-restore-key"
+                      onClick={() => onRestoreKey(variable.key!)}
+                      title={`Restore ${variable.key} from ${baseLabel}`}
+                    >
+                      ↻
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => onRemove(index)}
+                    aria-label="Remove variable"
+                  >
+                    ✕
+                  </button>
+                </span>
               </div>
             );
           })}
+          {removedKeys?.map((entry) => (
+            <div
+              key={`removed:${entry.key}`}
+              className="environment-row compare-row-removed"
+              role="row"
+              title={`Removed vs ${baseLabel}`}
+            >
+              <span className="environment-col-enabled" />
+              <span className="environment-removed-key">{entry.key || '(empty)'}</span>
+              <span className="environment-removed-value">removed in current</span>
+              <span className="environment-col-actions">
+                {entry.key && onRestoreKey ? (
+                  <button
+                    type="button"
+                    className="compare-restore-key"
+                    onClick={() => onRestoreKey(entry.key)}
+                    title={`Restore ${entry.key} from ${baseLabel}`}
+                  >
+                    ↻
+                  </button>
+                ) : null}
+              </span>
+            </div>
+          ))}
         </div>
       )}
     </section>

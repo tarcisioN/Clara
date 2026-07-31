@@ -108,6 +108,7 @@ import { computeDirtyState } from './workspace/dirty.ts';
 import {
   discoverForCollection,
   loadCollectionAtRef,
+  loadEnvironmentAtRef,
   type GitContext
 } from './git/context.ts';
 import {
@@ -115,13 +116,25 @@ import {
   computeStructuralDiff,
   type StructuralDiff
 } from './git/structuralDiff.ts';
-import { resolveBaseRequestItem } from './git/resolveBaseItem.ts';
-import { computeSemanticDiff } from './git/semanticDiff.ts';
+import { findPairedBaseItem, resolveBaseRequestItem } from './git/resolveBaseItem.ts';
+import { computeSemanticDiff, type RequestSectionKey } from './git/semanticDiff.ts';
 import {
   flattenStructuralChanges,
   type ChangeListEntry
 } from './git/changeList.ts';
 import type { RemovedGhost } from './git/structuralDiff.ts';
+import {
+  restoreFolderSubtreeFromBase,
+  restoreItemFromBase,
+  restoreRequestSectionFromBase
+} from './git/restoreFromBase.ts';
+import {
+  computeEnvironmentDiff,
+  restoreAllEnvironmentValuesFromBase,
+  restoreEnvironmentValueFromBase
+} from './git/environmentDiff.ts';
+import { computeVariableDiff } from './git/variableDiff.ts';
+import type { KeyedDiff } from './git/keyedDiff.ts';
 import {
   clampSidebarWidth,
   DEFAULT_SIDEBAR,
@@ -152,6 +165,13 @@ type CollectionCompareState = {
   diff: StructuralDiff;
   /** Compare in-memory edits vs last-saved file against the base ref. */
   compareSource: 'working' | 'saved';
+};
+
+type EnvironmentCompareState = {
+  baseRef: string;
+  git: GitContext;
+  baseEnvironment: PostmanEnvironment;
+  diff: KeyedDiff;
 };
 
 type CompareRefreshOptions = {
@@ -232,6 +252,9 @@ export default function App() {
   const [compareByPath, setCompareByPath] = useState<Record<string, CollectionCompareState | null>>(
     {}
   );
+  const [envCompareByPath, setEnvCompareByPath] = useState<
+    Record<string, EnvironmentCompareState | null>
+  >({});
   const [focusedChangeKey, setFocusedChangeKey] = useState<string | null>(null);
   const [compareBases, setCompareBases] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
@@ -256,6 +279,7 @@ export default function App() {
   const environmentsRef = useRef(environments);
   const uiByPathRef = useRef(uiByPath);
   const compareByPathRef = useRef(compareByPath);
+  const envCompareByPathRef = useRef(envCompareByPath);
   const openTabsRef = useRef(openTabs);
   const activeTabRef = useRef(activeTab);
   const activeEnvironmentPathRef = useRef(activeEnvironmentPath);
@@ -268,6 +292,7 @@ export default function App() {
   environmentsRef.current = environments;
   uiByPathRef.current = uiByPath;
   compareByPathRef.current = compareByPath;
+  envCompareByPathRef.current = envCompareByPath;
   openTabsRef.current = openTabs;
   activeTabRef.current = activeTab;
   activeEnvironmentPathRef.current = activeEnvironmentPath;
@@ -423,6 +448,42 @@ export default function App() {
     }
     return computeSemanticDiff(selectedItem, resolution.item);
   }, [activeCollection, activeCompare, activeRequestPath, selectedItem]);
+
+  const activeEnvCompare =
+    activeTab?.kind === 'environment'
+      ? (envCompareByPath[activeTab.environmentPath] ?? null)
+      : null;
+
+  const collectionVariableDiff = useMemo(() => {
+    if (!activeCollection || !activeCompare) {
+      return null;
+    }
+    return computeVariableDiff(
+      activeCollection.collection.variable,
+      activeCompare.baseCollection.variable
+    );
+  }, [activeCollection, activeCompare]);
+
+  const folderVariableDiff = useMemo(() => {
+    if (
+      !activeCollection ||
+      !activeCompare ||
+      activeTab?.kind !== 'folder' ||
+      !activeTab.path
+    ) {
+      return null;
+    }
+    const current = getItemByPath(activeCollection.collection.item, activeTab.path);
+    const base = findPairedBaseItem(
+      activeCollection.collection.item,
+      activeCompare.baseCollection.item,
+      activeTab.path
+    );
+    if (!current || !base) {
+      return null;
+    }
+    return computeVariableDiff(current.variable, base.variable);
+  }, [activeCollection, activeCompare, activeTab]);
 
   const changeList = useMemo(() => {
     if (!activeCollection || !activeCompare) {
@@ -637,6 +698,62 @@ export default function App() {
     [refreshCompare]
   );
 
+  const refreshEnvCompare = useCallback(
+    async (environmentPath: string, environment: PostmanEnvironment) => {
+      try {
+        const existing = envCompareByPathRef.current[environmentPath];
+        const git = existing?.git ?? (await discoverForCollection(environmentPath));
+        if (!git) {
+          setEnvCompareByPath((current) => ({ ...current, [environmentPath]: null }));
+          return;
+        }
+
+        const preferred =
+          compareBasesRef.current[git.repoRoot] ?? existing?.baseRef ?? git.defaultBase;
+
+        let baseEnvironment: PostmanEnvironment;
+        let baseRef = preferred;
+        try {
+          baseEnvironment = await loadEnvironmentAtRef(environmentPath, preferred);
+        } catch (error) {
+          if (preferred !== git.defaultBase) {
+            baseRef = git.defaultBase;
+            baseEnvironment = await loadEnvironmentAtRef(environmentPath, git.defaultBase);
+            setStatus({
+              kind: 'error',
+              message: `Could not read ${preferred}; fell back to ${git.defaultBase}. ${errorMessage(error)}`
+            });
+          } else {
+            throw error;
+          }
+        }
+
+        const diff = computeEnvironmentDiff(environment, baseEnvironment);
+        setEnvCompareByPath((current) => ({
+          ...current,
+          [environmentPath]: {
+            baseRef,
+            git,
+            baseEnvironment,
+            diff
+          }
+        }));
+        setCompareBases((current) =>
+          current[git.repoRoot] === baseRef
+            ? current
+            : { ...current, [git.repoRoot]: baseRef }
+        );
+      } catch (error) {
+        setEnvCompareByPath((current) => ({ ...current, [environmentPath]: null }));
+        setStatus({
+          kind: 'error',
+          message: `Environment compare failed: ${errorMessage(error)}`
+        });
+      }
+    },
+    []
+  );
+
   const applyCollectionUpdate = useCallback(
     (collectionPath: string, collection: PostmanCollection) => {
       const entry = collectionsRef.current.find(
@@ -796,6 +913,7 @@ export default function App() {
           }
           opened.push(environment.name ?? fileName(file.filePath));
           focusPath = file.filePath;
+          void refreshEnvCompare(file.filePath, environment);
         } catch (error) {
           failed.push(`${fileName(file.filePath)}: ${errorMessage(error)}`);
         }
@@ -832,7 +950,7 @@ export default function App() {
     } catch (error) {
       setStatus({ kind: 'error', message: errorMessage(error) });
     }
-  }, [openTab]);
+  }, [openTab, refreshEnvCompare]);
 
   const closeEnvironment = useCallback((environmentPath: string) => {
     const entry = environmentsRef.current.find(
@@ -845,6 +963,11 @@ export default function App() {
     }
 
     setEnvironments((list) => list.filter((candidate) => candidate.filePath !== environmentPath));
+    setEnvCompareByPath((current) => {
+      const next = { ...current };
+      delete next[environmentPath];
+      return next;
+    });
     setActiveEnvironmentPath((current) => (current === environmentPath ? null : current));
 
     const remaining = openTabsRef.current.filter(
@@ -1450,6 +1573,9 @@ export default function App() {
         for (const entry of restored) {
           void refreshCompare(entry.filePath, entry.collection);
         }
+        for (const entry of restoredEnvs) {
+          void refreshEnvCompare(entry.filePath, entry.environment);
+        }
 
         const allFailures = [...failures, ...envFailures];
         if (allFailures.length > 0) {
@@ -1487,7 +1613,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [refreshCompare]);
+  }, [refreshCompare, refreshEnvCompare]);
 
   const collectionPathsKey = collections.map((entry) => entry.filePath).join('\u0000');
   const environmentPathsKey = environments.map((entry) => entry.filePath).join('\u0000');
@@ -1845,10 +1971,31 @@ export default function App() {
         { id: 'delete', label: 'Close', danger: true, separatorBefore: true }
       ];
     }
+    const compare =
+      'collectionPath' in target
+        ? compareByPath[target.collectionPath]
+        : null;
+    const status =
+      compare && 'path' in target
+        ? compare.diff.statusByPath.get(target.path)
+        : undefined;
+    const canRestore =
+      Boolean(compare) &&
+      (status === 'modified' || status === 'unchanged') &&
+      (target.kind === 'request' || target.kind === 'folder');
     return [
       { id: 'run', label: target.kind === 'folder' ? 'Run folder' : 'Run' },
       { id: 'rename', label: 'Rename' },
       { id: 'duplicate', label: 'Duplicate' },
+      ...(canRestore
+        ? [
+            {
+              id: 'restore-from-base',
+              label: `Restore from ${compare!.baseRef}`,
+              separatorBefore: true
+            }
+          ]
+        : []),
       { id: 'delete', label: 'Delete', danger: true, separatorBefore: true }
     ];
   })();
@@ -2049,7 +2196,111 @@ export default function App() {
         entry.filePath === environmentPath ? { ...entry, environment } : entry
       )
     );
+    void refreshEnvCompare(environmentPath, environment);
   };
+
+  const restoreRequestFromBase = useCallback(
+    (collectionPath: string, path: ItemPath) => {
+      const entry = collectionsRef.current.find(
+        (candidate) => candidate.filePath === collectionPath
+      );
+      const compare = compareByPathRef.current[collectionPath];
+      if (!entry || !compare) {
+        return;
+      }
+      const label = getItemByPath(entry.collection.item, path)?.name?.trim() || path;
+      if (
+        !window.confirm(
+          `Restore “${label}” from ${compare.baseRef}? This creates an unsaved edit (Save writes the file; git is not modified).`
+        )
+      ) {
+        return;
+      }
+      try {
+        applyCollectionUpdate(
+          collectionPath,
+          restoreItemFromBase(entry.collection, path, compare.baseCollection)
+        );
+        setStatus({ kind: 'ok', message: `Restored from ${compare.baseRef}` });
+      } catch (error) {
+        setStatus({ kind: 'error', message: errorMessage(error) });
+      }
+    },
+    [applyCollectionUpdate]
+  );
+
+  const restoreRequestSection = useCallback(
+    (collectionPath: string, path: ItemPath, section: RequestSectionKey) => {
+      const entry = collectionsRef.current.find(
+        (candidate) => candidate.filePath === collectionPath
+      );
+      const compare = compareByPathRef.current[collectionPath];
+      if (!entry || !compare) {
+        return;
+      }
+      const current = getItemByPath(entry.collection.item, path);
+      const base = findPairedBaseItem(
+        entry.collection.item,
+        compare.baseCollection.item,
+        path
+      );
+      if (!current || !base) {
+        return;
+      }
+      if (
+        !window.confirm(
+          `Restore ${section} from ${compare.baseRef}? This creates an unsaved edit.`
+        )
+      ) {
+        return;
+      }
+      try {
+        applyCollectionUpdate(
+          collectionPath,
+          {
+            ...entry.collection,
+            item: updateItemByPath(entry.collection.item, path, () =>
+              restoreRequestSectionFromBase(current, base, section)
+            )
+          }
+        );
+        setStatus({ kind: 'ok', message: `Restored ${section} from ${compare.baseRef}` });
+      } catch (error) {
+        setStatus({ kind: 'error', message: errorMessage(error) });
+      }
+    },
+    [applyCollectionUpdate]
+  );
+
+  const restoreFolderFromBase = useCallback(
+    (collectionPath: string, path: ItemPath) => {
+      const entry = collectionsRef.current.find(
+        (candidate) => candidate.filePath === collectionPath
+      );
+      const compare = compareByPathRef.current[collectionPath];
+      if (!entry || !compare) {
+        return;
+      }
+      const label = getItemByPath(entry.collection.item, path)?.name?.trim() || path;
+      if (
+        !window.confirm(
+          `Restore folder “${label}” (including nested items) from ${compare.baseRef}? This creates an unsaved edit.`
+        )
+      ) {
+        return;
+      }
+      try {
+        applyCollectionUpdate(
+          collectionPath,
+          restoreFolderSubtreeFromBase(entry.collection, path, compare.baseCollection)
+        );
+        setStatus({ kind: 'ok', message: `Restored folder from ${compare.baseRef}` });
+      } catch (error) {
+        setStatus({ kind: 'error', message: errorMessage(error) });
+      }
+    },
+    [applyCollectionUpdate]
+  );
 
   const renameEnvironmentTarget = (environmentPath: string) => {
     const entry = environments.find((candidate) => candidate.filePath === environmentPath);
@@ -2113,6 +2364,15 @@ export default function App() {
       deleteTarget(target);
     } else if (id === 'duplicate' && target.kind !== 'collection') {
       duplicateTarget(target);
+    } else if (
+      id === 'restore-from-base' &&
+      (target.kind === 'request' || target.kind === 'folder')
+    ) {
+      if (target.kind === 'folder') {
+        restoreFolderFromBase(target.collectionPath, target.path);
+      } else {
+        restoreRequestFromBase(target.collectionPath, target.path);
+      }
     } else if (id === 'expand-all' && target.kind === 'collection') {
       const entry = collections.find(
         (candidate) => candidate.filePath === target.collectionPath
@@ -2782,6 +3042,54 @@ export default function App() {
                   name={activeEnvironment.environment.name?.trim() || 'Untitled environment'}
                   filePath={activeEnvironment.filePath}
                   values={getEnvironmentValues(activeEnvironment.environment)}
+                  compareBaseRef={activeEnvCompare?.baseRef ?? null}
+                  valueStatusByIndex={activeEnvCompare?.diff.byCurrentIndex ?? null}
+                  removedKeys={activeEnvCompare?.diff.removed ?? null}
+                  onRestoreAll={
+                    activeEnvCompare
+                      ? () => {
+                          if (
+                            !window.confirm(
+                              `Restore all environment values from ${activeEnvCompare.baseRef}? This creates an unsaved edit.`
+                            )
+                          ) {
+                            return;
+                          }
+                          applyEnvironmentUpdate(
+                            activeEnvironment.filePath,
+                            restoreAllEnvironmentValuesFromBase(
+                              activeEnvironment.environment,
+                              activeEnvCompare.baseEnvironment
+                            )
+                          );
+                        }
+                      : null
+                  }
+                  onRestoreKey={
+                    activeEnvCompare
+                      ? (key) => {
+                          if (
+                            !window.confirm(
+                              `Restore “${key}” from ${activeEnvCompare.baseRef}? This creates an unsaved edit.`
+                            )
+                          ) {
+                            return;
+                          }
+                          try {
+                            applyEnvironmentUpdate(
+                              activeEnvironment.filePath,
+                              restoreEnvironmentValueFromBase(
+                                activeEnvironment.environment,
+                                activeEnvCompare.baseEnvironment,
+                                key
+                              )
+                            );
+                          } catch (error) {
+                            setStatus({ kind: 'error', message: errorMessage(error) });
+                          }
+                        }
+                      : null
+                  }
                   onAdd={() =>
                     applyEnvironmentUpdate(
                       activeEnvironment.filePath,
@@ -2849,6 +3157,9 @@ export default function App() {
                     <VariablesPane
                       scopeLabel="collection"
                       variables={getCollectionVariables(activeCollection.collection)}
+                      compareBaseRef={activeCompare?.baseRef ?? null}
+                      valueStatusByIndex={collectionVariableDiff?.byCurrentIndex ?? null}
+                      removedKeys={collectionVariableDiff?.removed ?? null}
                       onAdd={() => editCollectionVariables((vars) => addVariable(vars))}
                       onChange={(index, patch) =>
                         editCollectionVariables((vars) => updateVariable(vars, index, patch))
@@ -2881,6 +3192,9 @@ export default function App() {
                     <VariablesPane
                       scopeLabel="folder"
                       variables={getItemVariables(activeFolder)}
+                      compareBaseRef={activeCompare?.baseRef ?? null}
+                      valueStatusByIndex={folderVariableDiff?.byCurrentIndex ?? null}
+                      removedKeys={folderVariableDiff?.removed ?? null}
                       onAdd={() =>
                         editFolderVariables(activeTab.path, (vars) => addVariable(vars))
                       }
@@ -2928,6 +3242,30 @@ export default function App() {
                         path={activeRequestPath}
                         semanticDiff={requestSemanticDiff}
                         compareBaseRef={activeCompare?.baseRef ?? null}
+                        onRestoreRequest={
+                          activeCompare &&
+                          requestSemanticDiff &&
+                          !requestSemanticDiff.isAdded &&
+                          requestSemanticDiff.hasChanges
+                            ? () =>
+                                restoreRequestFromBase(
+                                  activeTab.collectionPath,
+                                  activeRequestPath
+                                )
+                            : null
+                        }
+                        onRestoreSection={
+                          activeCompare &&
+                          requestSemanticDiff &&
+                          !requestSemanticDiff.isAdded
+                            ? (section) =>
+                                restoreRequestSection(
+                                  activeTab.collectionPath,
+                                  activeRequestPath,
+                                  section
+                                )
+                            : null
+                        }
                         onChangeMethod={(method) =>
                           editSelectedItem((item) => setRequestMethod(item, method))
                         }

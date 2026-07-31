@@ -142,26 +142,31 @@ Let the user pick what to compare, and clarify dirty vs committed.
 Act on the comparison.
 
 ### Requirements
-- [ ] Restore one field / whole request / folder subtree from base (confirm dialog)
-- [ ] Restore creates an in-memory edit (dirty); Save still writes the working file
-- [ ] Environments: same discover/read-at-ref; markers for added/removed/changed values
-- [ ] Collection / folder variables included in structural + semantic diff
+- [x] Restore one field / whole request / folder subtree from base (confirm dialog)
+- [x] Restore creates an in-memory edit (dirty); Save still writes the working file
+- [x] Environments: same discover/read-at-ref; markers for added/removed/changed values
+- [x] Collection / folder variables included in structural + semantic diff
 
 ### Validation
-- [ ] Restore request from base → semantic equality with base; collection dirty
-- [ ] Env var changed only in value → marked modified, not removed+added
-- [ ] Restore does not run `git checkout`
+- [x] Restore request from base → semantic equality with base; collection dirty
+- [x] Env var changed only in value → marked modified, not removed+added
+- [x] Restore does not run `git checkout`
+
+### Policy (this stage)
+- Restore copies base JSON into the in-memory collection/environment; never `git checkout` / index writes.
+- Environment + collection/folder variable matching is **key-based** (duplicate keys match in order); value-only edits are `modified`.
+- Confirm before restore; after restore the file is dirty until Save.
 
 ---
 
 ## Definition of Done — Epic
 
-- [ ] Stages G0–G3 complete (G4–G5 may land as follow-ups if scoped)
-- [ ] Large real collection: find changed requests without reading raw `git diff`
-- [ ] Default base works on repos whose default branch is `main` or `master`
-- [ ] No accidental writes to git index/working tree from compare features
-- [ ] README documents Compare mode briefly
-- [ ] Stage checks green (`make check` includes new git stages)
+- [x] Stages G0–G5 complete
+- [x] Large real collection: find changed requests without reading raw `git diff`
+- [x] Default base works on repos whose default branch is `main` or `master`
+- [x] No accidental writes to git index/working tree from compare features
+- [x] README documents Compare mode briefly
+- [x] Stage checks green (`make check` includes new git stages)
 
 ---
 

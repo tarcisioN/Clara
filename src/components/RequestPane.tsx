@@ -11,7 +11,7 @@ import type { ItemPath } from '../postman/tree.ts';
 import { getUrlRaw, isUrlObject } from '../postman/url.ts';
 import { getItemScriptSource } from '../postman/edit.ts';
 import { hasScriptContent } from '../postman/scripts.ts';
-import type { RequestSemanticDiff } from '../git/semanticDiff.ts';
+import type { RequestSectionKey, RequestSemanticDiff } from '../git/semanticDiff.ts';
 import HeaderTable from './HeaderTable.tsx';
 import BodyPane from './BodyPane.tsx';
 import AuthPane from './AuthPane.tsx';
@@ -28,6 +28,8 @@ type RequestPaneProps = {
   path: ItemPath;
   semanticDiff?: RequestSemanticDiff | null;
   compareBaseRef?: string | null;
+  onRestoreRequest?: (() => void) | null;
+  onRestoreSection?: ((section: RequestSectionKey) => void) | null;
   onChangeMethod: (method: string) => void;
   onChangeUrl: (raw: string) => void;
   onPromoteUrlToObject: () => void;
@@ -64,6 +66,8 @@ export default function RequestPane({
   path,
   semanticDiff = null,
   compareBaseRef = null,
+  onRestoreRequest = null,
+  onRestoreSection = null,
   onChangeMethod,
   onChangeUrl,
   onPromoteUrlToObject,
@@ -111,6 +115,8 @@ export default function RequestPane({
   const prerequestSource = getItemScriptSource(item, 'prerequest');
   const testSource = getItemScriptSource(item, 'test');
   const changed = semanticDiff?.active ? semanticDiff.sections : null;
+  const baseLabel = compareBaseRef ?? 'base';
+  const canRestore = Boolean(onRestoreRequest || onRestoreSection);
   const sections: Array<{
     key: RequestSection;
     label: string;
@@ -136,6 +142,8 @@ export default function RequestPane({
     }
   ];
 
+  const activeSectionChanged = Boolean(changed?.[activeSection]);
+
   return (
     <div className="request-pane">
       <div className="request-title">
@@ -145,7 +153,30 @@ export default function RequestPane({
 
       {semanticDiff?.isAdded ? (
         <div className="compare-banner compare-banner-added" role="status">
-          New request — not in {compareBaseRef ?? 'base'}
+          New request — not in {baseLabel}
+        </div>
+      ) : null}
+
+      {semanticDiff?.active && !semanticDiff.isAdded && semanticDiff.hasChanges && canRestore ? (
+        <div className="compare-banner compare-banner-changed" role="status">
+          <span>Differs from {baseLabel}</span>
+          <span className="compare-banner-actions">
+            {changed?.method && onRestoreSection ? (
+              <button type="button" onClick={() => onRestoreSection('method')}>
+                Restore method
+              </button>
+            ) : null}
+            {changed?.url && onRestoreSection ? (
+              <button type="button" onClick={() => onRestoreSection('url')}>
+                Restore URL
+              </button>
+            ) : null}
+            {onRestoreRequest ? (
+              <button type="button" onClick={onRestoreRequest}>
+                Restore request
+              </button>
+            ) : null}
+          </span>
         </div>
       ) : null}
 
@@ -160,7 +191,7 @@ export default function RequestPane({
           }`}
           value={method}
           onChange={(event) => onChangeMethod(event.target.value)}
-          title={changed?.method ? `Method differs from ${compareBaseRef ?? 'base'}` : undefined}
+          title={changed?.method ? `Method differs from ${baseLabel}` : undefined}
         >
           {methods.map((candidate) => (
             <option key={candidate} value={candidate}>
@@ -181,7 +212,7 @@ export default function RequestPane({
           placeholder="https://example.com/path"
           value={urlRaw}
           onChange={(event) => onChangeUrl(event.target.value)}
-          title={changed?.url ? `URL differs from ${compareBaseRef ?? 'base'}` : undefined}
+          title={changed?.url ? `URL differs from ${baseLabel}` : undefined}
         />
         <button
           type="button"
@@ -212,7 +243,7 @@ export default function RequestPane({
             {section.changed ? (
               <span
                 className="tab-change"
-                title={`${section.label} differs from ${compareBaseRef ?? 'base'}`}
+                title={`${section.label} differs from ${baseLabel}`}
               >
                 ~
               </span>
@@ -223,6 +254,15 @@ export default function RequestPane({
           {urlShape}
         </span>
       </div>
+
+      {activeSectionChanged && onRestoreSection ? (
+        <div className="compare-section-restore">
+          <button type="button" onClick={() => onRestoreSection(activeSection)}>
+            Restore {sections.find((section) => section.key === activeSection)?.label} from{' '}
+            {baseLabel}
+          </button>
+        </div>
+      ) : null}
 
       <div className="request-section-content">
         {activeSection === 'params' && (

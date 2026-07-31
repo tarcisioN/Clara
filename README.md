@@ -34,6 +34,7 @@ make dev
 | `make check-stage14` | Git semantic request diff (section badges) |
 | `make check-stage15` | Git change list flatten / navigation order |
 | `make check-stage16` | Git compare base selector / session bases |
+| `make check-stage17` | Git restore from base + env/variable keyed diff |
 
 ## Usage (Send / Newman)
 
@@ -63,6 +64,17 @@ on-disk collection JSON does.
 | `⌘/Ctrl+Enter` | Send (Newman) |
 | Drag tab | Reorder |
 | Drag request from tree → bar | Open tab |
+
+## Compare (git)
+
+When a collection lives in a git repo, Clara compares the open tree against a base
+ref (`main`/`master` by default, or any branch/tag/SHA you pick). Markers show
+added / removed / modified requests; open a request to see which sections differ.
+You can restore a request, section, or folder from the base as an **unsaved edit**
+(Save writes the collection file — compare never runs `git checkout`). Environments
+get the same key-based value markers.
+
+See [docs/EPIC-git-compare.md](./docs/EPIC-git-compare.md).
 
 ## Progress
 
