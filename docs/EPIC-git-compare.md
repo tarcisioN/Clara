@@ -116,18 +116,24 @@ A navigable index of all collection changes.
 Let the user pick what to compare, and clarify dirty vs committed.
 
 ### Requirements
-- [ ] UI to select base: branches, remotes, (optional) tags / commit SHA
-- [ ] Remember last base per repo (session or `~/.clara`)
-- [ ] Distinguish:
+- [x] UI to select base: branches, remotes, (optional) tags / commit SHA
+- [x] Remember last base per repo (session or `~/.clara`)
+- [x] Distinguish:
   - unsaved edits vs disk (existing dirty dots)
   - disk/HEAD vs selected base (compare markers)
-- [ ] Optional toggle: compare **working tree (incl. unsaved)** vs **last saved file** against base
-- [ ] Refresh when git HEAD or file on disk changes (manual refresh acceptable first)
+- [x] Optional toggle: compare **working tree (incl. unsaved)** vs **last saved file** against base
+- [x] Refresh when git HEAD or file on disk changes (manual refresh acceptable first)
 
 ### Validation
-- [ ] Switching base recomputes markers without reopening the collection
-- [ ] Detached HEAD still allows selecting an explicit base
-- [ ] Invalid ref → error message, previous compare state cleared or kept (document)
+- [x] Switching base recomputes markers without reopening the collection
+- [x] Detached HEAD still allows selecting an explicit base
+- [x] Invalid ref → error message, previous compare state cleared or kept (document)
+
+### Policy (this stage)
+- Base preference is stored in `session.compareBases[repoRoot]`.
+- Invalid selected refs fall back to `defaultBase` and surface an error status; previous markers are replaced only after a successful load.
+- **Working** compares the in-memory collection (includes unsaved edits); **Saved** compares `originalRaw`.
+- Manual **↻** re-reads the selected base via `git show`.
 
 ---
 

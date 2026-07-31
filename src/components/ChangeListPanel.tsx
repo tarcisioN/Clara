@@ -5,12 +5,18 @@ import './ChangeListPanel.css';
 
 type ChangeListPanelProps = {
   baseRef: string;
+  branches: string[];
+  currentBranch: string | null;
+  compareSource: 'working' | 'saved';
   collection: PostmanCollection;
   entries: ChangeListEntry[];
   activeKey: string | null;
   onSelect: (entry: ChangeListEntry) => void;
   onPrev: () => void;
   onNext: () => void;
+  onChangeBase: (baseRef: string) => void;
+  onChangeSource: (source: 'working' | 'saved') => void;
+  onRefresh: () => void;
 };
 
 function ChangeBadge({ kind }: { kind: ChangeListEntry['changeKind'] }) {
@@ -24,16 +30,27 @@ function ChangeBadge({ kind }: { kind: ChangeListEntry['changeKind'] }) {
 
 export default function ChangeListPanel({
   baseRef,
+  branches,
+  currentBranch,
+  compareSource,
   collection,
   entries,
   activeKey,
   onSelect,
   onPrev,
-  onNext
+  onNext,
+  onChangeBase,
+  onChangeSource,
+  onRefresh
 }: ChangeListPanelProps) {
   const added = entries.filter((entry) => entry.changeKind === 'added').length;
   const modified = entries.filter((entry) => entry.changeKind === 'modified').length;
   const removed = entries.filter((entry) => entry.changeKind === 'removed').length;
+
+  const branchOptions = [...branches];
+  if (baseRef && !branchOptions.includes(baseRef)) {
+    branchOptions.unshift(baseRef);
+  }
 
   let lastGroup: string | null = null;
 
@@ -42,11 +59,22 @@ export default function ChangeListPanel({
       <div className="sidebar-section-title change-list-header">
         <div className="change-list-title">
           <strong>Changes</strong>
-          <span className="sidebar-count" title={`Compared to ${baseRef}`}>
-            vs {baseRef}
-          </span>
+          {currentBranch ? (
+            <span className="sidebar-count" title="Current branch">
+              {currentBranch}
+            </span>
+          ) : null}
         </div>
         <div className="change-list-actions">
+          <button
+            type="button"
+            className="change-list-nav"
+            aria-label="Refresh compare"
+            title="Refresh base from git"
+            onClick={onRefresh}
+          >
+            ↻
+          </button>
           <button
             type="button"
             className="change-list-nav"
@@ -68,6 +96,38 @@ export default function ChangeListPanel({
             ›
           </button>
         </div>
+      </div>
+
+      <div className="change-list-controls">
+        <label className="change-list-base">
+          <span className="visually-hidden">Compare base</span>
+          <select
+            value={baseRef}
+            aria-label="Compare base branch"
+            title="Base ref to compare against"
+            onChange={(event) => onChangeBase(event.target.value)}
+          >
+            {branchOptions.map((branch) => (
+              <option key={branch} value={branch}>
+                vs {branch}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="change-list-source">
+          <span className="visually-hidden">Compare source</span>
+          <select
+            value={compareSource}
+            aria-label="Compare source"
+            title="Working tree includes unsaved edits; Saved uses the last written file"
+            onChange={(event) =>
+              onChangeSource(event.target.value === 'saved' ? 'saved' : 'working')
+            }
+          >
+            <option value="working">Working</option>
+            <option value="saved">Saved</option>
+          </select>
+        </label>
       </div>
 
       <div className="change-list-summary">

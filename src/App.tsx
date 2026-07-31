@@ -150,6 +150,15 @@ type CollectionCompareState = {
   git: GitContext;
   baseCollection: PostmanCollection;
   diff: StructuralDiff;
+  /** Compare in-memory edits vs last-saved file against the base ref. */
+  compareSource: 'working' | 'saved';
+};
+
+type CompareRefreshOptions = {
+  baseRef?: string;
+  /** Force re-reading the base blob (branch switch / manual refresh). */
+  forceReloadBase?: boolean;
+  compareSource?: 'working' | 'saved';
 };
 
 type CollectionTarget = { kind: 'collection'; collectionPath: string };
@@ -224,6 +233,7 @@ export default function App() {
     {}
   );
   const [focusedChangeKey, setFocusedChangeKey] = useState<string | null>(null);
+  const [compareBases, setCompareBases] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [openTabs, setOpenTabs] = useState<WorkspaceTab[]>([]);
   const [activeTab, setActiveTab] = useState<WorkspaceTab | null>(null);
@@ -250,6 +260,7 @@ export default function App() {
   const activeTabRef = useRef(activeTab);
   const activeEnvironmentPathRef = useRef(activeEnvironmentPath);
   const sidebarRef = useRef(sidebar);
+  const compareBasesRef = useRef(compareBases);
   const sendingRef = useRef(sending);
   const runningKeyRef = useRef(runningKey);
   const sidebarResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -261,6 +272,7 @@ export default function App() {
   activeTabRef.current = activeTab;
   activeEnvironmentPathRef.current = activeEnvironmentPath;
   sidebarRef.current = sidebar;
+  compareBasesRef.current = compareBases;
   sendingRef.current = sending;
   runningKeyRef.current = runningKey;
 
@@ -486,43 +498,143 @@ export default function App() {
   );
 
   const refreshCompare = useCallback(
-    async (collectionPath: string, collection: PostmanCollection) => {
+    async (
+      collectionPath: string,
+      collection: PostmanCollection,
+      options?: CompareRefreshOptions
+    ) => {
       try {
         const existing = compareByPathRef.current[collectionPath];
-        if (existing) {
-          const diff = computeStructuralDiff(collection, existing.baseCollection);
+        const compareSource =
+          options?.compareSource ?? existing?.compareSource ?? 'working';
+
+        const entry = collectionsRef.current.find(
+          (candidate) => candidate.filePath === collectionPath
+        );
+        let currentForDiff = collection;
+        if (compareSource === 'saved' && entry) {
+          try {
+            currentForDiff = assertPostmanCollection(JSON.parse(entry.originalRaw));
+          } catch {
+            currentForDiff = collection;
+          }
+        }
+
+        if (existing && !options?.forceReloadBase && !options?.baseRef) {
+          const diff = computeStructuralDiff(currentForDiff, existing.baseCollection);
           setCompareByPath((current) => ({
             ...current,
-            [collectionPath]: { ...existing, diff }
+            [collectionPath]: { ...existing, compareSource, diff }
           }));
           expandChangedFolders(collectionPath, collection, diff);
           return;
         }
 
-        const git = await discoverForCollection(collectionPath);
+        const git = existing?.git ?? (await discoverForCollection(collectionPath));
         if (!git) {
           setCompareByPath((current) => ({ ...current, [collectionPath]: null }));
           return;
         }
 
-        const baseCollection = await loadCollectionAtRef(collectionPath, git.defaultBase);
-        const diff = computeStructuralDiff(collection, baseCollection);
+        const preferred =
+          options?.baseRef ??
+          compareBasesRef.current[git.repoRoot] ??
+          existing?.baseRef ??
+          git.defaultBase;
+
+        let baseCollection: PostmanCollection;
+        let baseRef = preferred;
+        try {
+          baseCollection = await loadCollectionAtRef(collectionPath, preferred);
+        } catch (error) {
+          if (preferred !== git.defaultBase) {
+            baseRef = git.defaultBase;
+            baseCollection = await loadCollectionAtRef(collectionPath, git.defaultBase);
+            setStatus({
+              kind: 'error',
+              message: `Could not read ${preferred}; fell back to ${git.defaultBase}. ${errorMessage(error)}`
+            });
+          } else {
+            throw error;
+          }
+        }
+
+        const diff = computeStructuralDiff(currentForDiff, baseCollection);
         setCompareByPath((current) => ({
           ...current,
           [collectionPath]: {
-            baseRef: git.defaultBase,
+            baseRef,
             currentBranch: git.currentBranch,
             git,
             baseCollection,
-            diff
+            diff,
+            compareSource
           }
         }));
+        setCompareBases((current) =>
+          current[git.repoRoot] === baseRef
+            ? current
+            : { ...current, [git.repoRoot]: baseRef }
+        );
         expandChangedFolders(collectionPath, collection, diff);
-      } catch {
+      } catch (error) {
         setCompareByPath((current) => ({ ...current, [collectionPath]: null }));
+        setStatus({
+          kind: 'error',
+          message: `Compare failed: ${errorMessage(error)}`
+        });
       }
     },
     [expandChangedFolders]
+  );
+
+  const setCompareBaseRef = useCallback(
+    async (collectionPath: string, baseRef: string) => {
+      const entry = collectionsRef.current.find(
+        (candidate) => candidate.filePath === collectionPath
+      );
+      if (!entry) {
+        return;
+      }
+      setStatus({ kind: 'idle' });
+      await refreshCompare(collectionPath, entry.collection, {
+        baseRef,
+        forceReloadBase: true
+      });
+    },
+    [refreshCompare]
+  );
+
+  const setCompareSource = useCallback(
+    async (collectionPath: string, compareSource: 'working' | 'saved') => {
+      const entry = collectionsRef.current.find(
+        (candidate) => candidate.filePath === collectionPath
+      );
+      if (!entry) {
+        return;
+      }
+      await refreshCompare(collectionPath, entry.collection, { compareSource });
+    },
+    [refreshCompare]
+  );
+
+  const reloadCompareBase = useCallback(
+    async (collectionPath: string) => {
+      const entry = collectionsRef.current.find(
+        (candidate) => candidate.filePath === collectionPath
+      );
+      const compare = compareByPathRef.current[collectionPath];
+      if (!entry || !compare) {
+        return;
+      }
+      setStatus({ kind: 'idle' });
+      await refreshCompare(collectionPath, entry.collection, {
+        baseRef: compare.baseRef,
+        forceReloadBase: true,
+        compareSource: compare.compareSource
+      });
+    },
+    [refreshCompare]
   );
 
   const applyCollectionUpdate = useCallback(
@@ -889,11 +1001,12 @@ export default function App() {
           current[saveCollection.filePath] ?? createCollectionUiState()
         )
       }));
+      void refreshCompare(saveCollection.filePath, saveCollection.collection);
       setStatus({ kind: 'ok', message: `Saved ${saveCollection.filePath}` });
     } catch (error) {
       setStatus({ kind: 'error', message: errorMessage(error) });
     }
-  }, []);
+  }, [refreshCompare]);
 
   const runSingleRequest = useCallback(async (collectionPath: string, path: ItemPath) => {
     const entry = collectionsRef.current.find(
@@ -1246,6 +1359,7 @@ export default function App() {
         }
         setSessionHome(home);
         setSidebar(session.sidebar ?? { ...DEFAULT_SIDEBAR });
+        setCompareBases(session.compareBases ?? {});
 
         const entries = session.collections ?? [];
         const envPaths = session.openedEnvironments ?? [];
@@ -1398,7 +1512,8 @@ export default function App() {
         activeTabKey: activeTab ? tabKey(activeTab) : null,
         openedEnvironments: environmentsRef.current.map((entry) => entry.filePath),
         activeEnvironmentPath: activeEnvironmentPathRef.current,
-        sidebar: sidebarRef.current
+        sidebar: sidebarRef.current,
+        compareBases: compareBasesRef.current
       });
     }, 250);
 
@@ -1411,7 +1526,8 @@ export default function App() {
     openTabs,
     activeTab,
     activeEnvironmentPath,
-    sidebar
+    sidebar,
+    compareBases
   ]);
 
   const createNewRequestNear = useCallback(
@@ -2460,6 +2576,9 @@ export default function App() {
             {activeCompare && activeCollection ? (
               <ChangeListPanel
                 baseRef={activeCompare.baseRef}
+                branches={activeCompare.git.branches}
+                currentBranch={activeCompare.currentBranch}
+                compareSource={activeCompare.compareSource}
                 collection={activeCollection.collection}
                 entries={changeList}
                 activeKey={focusedChangeKey}
@@ -2468,6 +2587,15 @@ export default function App() {
                 }}
                 onPrev={() => cycleChange(-1)}
                 onNext={() => cycleChange(1)}
+                onChangeBase={(baseRef) => {
+                  void setCompareBaseRef(activeCollection.filePath, baseRef);
+                }}
+                onChangeSource={(source) => {
+                  void setCompareSource(activeCollection.filePath, source);
+                }}
+                onRefresh={() => {
+                  void reloadCompareBase(activeCollection.filePath);
+                }}
               />
             ) : null}
 

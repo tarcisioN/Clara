@@ -39,6 +39,8 @@ export type SessionState = {
   openedEnvironments: string[];
   activeEnvironmentPath: string | null;
   sidebar: SessionSidebar;
+  /** Last selected compare base ref, keyed by git repo root. */
+  compareBases: Record<string, string>;
 };
 
 export const EMPTY_SESSION: SessionState = {
@@ -48,8 +50,22 @@ export const EMPTY_SESSION: SessionState = {
   activeTabKey: null,
   openedEnvironments: [],
   activeEnvironmentPath: null,
-  sidebar: { ...DEFAULT_SIDEBAR }
+  sidebar: { ...DEFAULT_SIDEBAR },
+  compareBases: {}
 };
+
+export function normalizeCompareBases(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {};
+  }
+  const result: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof key === 'string' && key.length > 0 && typeof entry === 'string' && entry.trim()) {
+      result[key] = entry.trim();
+    }
+  }
+  return result;
+}
 
 function isSessionTab(value: unknown): value is SessionTab {
   if (!value || typeof value !== 'object') {
@@ -91,6 +107,7 @@ function withSessionDefaults(partial: {
   openedEnvironments?: string[];
   activeEnvironmentPath?: string | null;
   sidebar?: SessionSidebar;
+  compareBases?: Record<string, string>;
 }): SessionState {
   return {
     version: 4,
@@ -99,7 +116,8 @@ function withSessionDefaults(partial: {
     activeTabKey: partial.activeTabKey,
     openedEnvironments: partial.openedEnvironments ?? [],
     activeEnvironmentPath: partial.activeEnvironmentPath ?? null,
-    sidebar: partial.sidebar ?? { ...DEFAULT_SIDEBAR }
+    sidebar: partial.sidebar ?? { ...DEFAULT_SIDEBAR },
+    compareBases: normalizeCompareBases(partial.compareBases)
   };
 }
 
@@ -237,7 +255,8 @@ function migrateV3(value: Record<string, unknown>): SessionState | null {
       value.activeEnvironmentPath === null || typeof value.activeEnvironmentPath === 'string'
         ? (value.activeEnvironmentPath as string | null)
         : null,
-    sidebar: normalizeSidebar(value.sidebar)
+    sidebar: normalizeSidebar(value.sidebar),
+    compareBases: normalizeCompareBases(value.compareBases)
   });
 }
 
@@ -274,7 +293,8 @@ export async function loadSession(): Promise<SessionState> {
     if (isSessionState(parsed)) {
       return {
         ...parsed,
-        sidebar: normalizeSidebar(parsed.sidebar)
+        sidebar: normalizeSidebar(parsed.sidebar),
+        compareBases: normalizeCompareBases(parsed.compareBases)
       };
     }
     if (parsed && typeof parsed === 'object') {
@@ -311,7 +331,8 @@ export async function saveSession(state: SessionState): Promise<SessionState> {
     activeTabKey: state.activeTabKey ?? null,
     openedEnvironments: state.openedEnvironments ?? [],
     activeEnvironmentPath: state.activeEnvironmentPath ?? null,
-    sidebar: normalizeSidebar(state.sidebar)
+    sidebar: normalizeSidebar(state.sidebar),
+    compareBases: normalizeCompareBases(state.compareBases)
   };
   await writeFile(SESSION_FILE, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8');
   return normalized;

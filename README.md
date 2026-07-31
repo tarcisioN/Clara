@@ -33,6 +33,7 @@ make dev
 | `make check-stage13` | Git structural tree diff (markers / changed-only) |
 | `make check-stage14` | Git semantic request diff (section badges) |
 | `make check-stage15` | Git change list flatten / navigation order |
+| `make check-stage16` | Git compare base selector / session bases |
 
 ## Usage (Send / Newman)
 

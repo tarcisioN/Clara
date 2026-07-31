@@ -131,16 +131,26 @@ try {
       width: 360,
       followActiveTab: true,
       changedOnly: true
-    }
+    },
+    compareBases: {}
   });
   assert.equal(saved.version, 4);
   assert.equal(saved.sidebar.width, 360);
   assert.equal(saved.sidebar.followActiveTab, true);
   assert.equal(saved.sidebar.changedOnly, true);
+  assert.deepEqual(saved.compareBases, {});
   assert.equal(saved.activeEnvironmentPath, envPath);
 
+  const withBase = await session.saveSession({
+    ...saved,
+    compareBases: { '/repo': 'main' }
+  });
+  assert.equal(withBase.compareBases['/repo'], 'main');
+  const reloadedBase = await session.loadSession();
+  assert.equal(reloadedBase.compareBases['/repo'], 'main');
+
   const reloaded = await session.loadSession();
-  assert.deepEqual(reloaded, saved);
+  assert.deepEqual(reloaded, withBase);
 
   // Width is clamped on save/load.
   const clamped = await session.saveSession({
