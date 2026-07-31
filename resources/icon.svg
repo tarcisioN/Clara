@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f59a18"/>
+      <stop offset="1" stop-color="#d97706"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Transparent safe area around the macOS-style rounded icon tile. -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#background)"/>
+
+  <text
+    x="512"
+    y="704"
+    fill="#fff"
+    font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Rounded', 'Arial Rounded MT Bold', sans-serif"
+    font-size="550"
+    font-weight="650"
+    text-anchor="middle"
+  >C</text>
+</svg>
