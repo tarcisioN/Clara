@@ -77,6 +77,8 @@ const clara = {
     ref: string
   ): Promise<GitReadAtRefResult> =>
     ipcRenderer.invoke('git:readAtRef', { collectionPath, ref }),
+  watchFiles: (filePaths: string[]): Promise<{ ok: true }> =>
+    ipcRenderer.invoke('files:watch', filePaths),
   onCommand: (handler: (command: AppCommand) => void): (() => void) => {
     const listener = (_event: unknown, command: AppCommand) => {
       handler(command);
@@ -84,6 +86,15 @@ const clara = {
     ipcRenderer.on('app:command', listener);
     return () => {
       ipcRenderer.removeListener('app:command', listener);
+    };
+  },
+  onFilesChanged: (handler: (filePaths: string[]) => void): (() => void) => {
+    const listener = (_event: unknown, filePaths: string[]) => {
+      handler(filePaths);
+    };
+    ipcRenderer.on('files:changed', listener);
+    return () => {
+      ipcRenderer.removeListener('files:changed', listener);
     };
   }
 };

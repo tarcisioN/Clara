@@ -108,6 +108,7 @@ import {
   type CollectionUiState
 } from './workspace/collectionUi.ts';
 import { computeDirtyState } from './workspace/dirty.ts';
+import { decideExternalChange } from './workspace/externalChanges.ts';
 import {
   discoverForCollection,
   loadCollectionAtRef,
@@ -666,6 +667,97 @@ export default function App() {
     [expandChangedFolders]
   );
 
+  /**
+   * Pick up edits made outside Clara (editor, git checkout, another window).
+   * Unsaved edits are never overwritten unless the reload is explicit.
+   */
+  const syncCollectionFromDisk = useCallback(
+    async (
+      collectionPath: string,
+      options?: { force?: boolean }
+    ): Promise<PostmanCollection | null> => {
+      const entry = collectionsRef.current.find(
+        (candidate) => candidate.filePath === collectionPath
+      );
+      if (!entry) {
+        return null;
+      }
+
+      let raw: string;
+      try {
+        raw = (await window.clara.readCollection(collectionPath)).raw;
+      } catch {
+        // Deleted or unreadable right now; keep what we have.
+        return null;
+      }
+
+      const decision = decideExternalChange({
+        diskRaw: raw,
+        loadedRaw: entry.originalRaw,
+        dirty: isCollectionDirty(uiByPathRef.current[collectionPath] ?? EMPTY_UI),
+        force: options?.force
+      });
+
+      if (decision === 'unchanged') {
+        return null;
+      }
+
+      if (decision === 'conflict') {
+        setStatus({
+          kind: 'error',
+          message: `${fileName(collectionPath)} changed on disk; your unsaved edits were kept. Use Reload from disk to discard them.`
+        });
+        return null;
+      }
+
+      let collection: PostmanCollection;
+      try {
+        collection = parseCollection(raw);
+      } catch (error) {
+        setStatus({
+          kind: 'error',
+          message: `${fileName(collectionPath)} changed on disk but could not be read: ${errorMessage(error)}`
+        });
+        return null;
+      }
+
+      setCollections((list) =>
+        list.map((candidate) =>
+          candidate.filePath === collectionPath
+            ? { ...candidate, collection, originalRaw: raw }
+            : candidate
+        )
+      );
+      updateUi(collectionPath, (ui) => clearCollectionDirty(ui));
+
+      const validKeys = new Set(
+        filterValidTabs(collectionPath, collection.item, openTabsRef.current).map(tabKey)
+      );
+      const survivingTabs = openTabsRef.current.filter(
+        (tab) =>
+          tab.kind === 'environment' ||
+          tab.collectionPath !== collectionPath ||
+          validKeys.has(tabKey(tab))
+      );
+      if (survivingTabs.length !== openTabsRef.current.length) {
+        setOpenTabs(survivingTabs);
+        setActiveTab((current) =>
+          current && !survivingTabs.some((tab) => sameTab(tab, current))
+            ? (survivingTabs[0] ?? null)
+            : current
+        );
+      }
+
+      await refreshCompare(collectionPath, collection);
+      setStatus({
+        kind: 'ok',
+        message: `Reloaded ${fileName(collectionPath)} from disk`
+      });
+      return collection;
+    },
+    [refreshCompare, updateUi]
+  );
+
   const setCompareBaseRef = useCallback(
     async (collectionPath: string, baseRef: string) => {
       const entry = collectionsRef.current.find(
@@ -698,6 +790,9 @@ export default function App() {
 
   const reloadCompareBase = useCallback(
     async (collectionPath: string) => {
+      setStatus({ kind: 'idle' });
+      // The working file may have moved on too, not just the base ref.
+      const reloaded = await syncCollectionFromDisk(collectionPath);
       const entry = collectionsRef.current.find(
         (candidate) => candidate.filePath === collectionPath
       );
@@ -705,14 +800,13 @@ export default function App() {
       if (!entry || !compare) {
         return;
       }
-      setStatus({ kind: 'idle' });
-      await refreshCompare(collectionPath, entry.collection, {
+      await refreshCompare(collectionPath, reloaded ?? entry.collection, {
         baseRef: compare.baseRef,
         forceReloadBase: true,
         compareSource: compare.compareSource
       });
     },
-    [refreshCompare]
+    [refreshCompare, syncCollectionFromDisk]
   );
 
   const refreshEnvCompare = useCallback(
@@ -774,6 +868,85 @@ export default function App() {
       }
     },
     []
+  );
+
+  const syncEnvironmentFromDisk = useCallback(
+    async (environmentPath: string, options?: { force?: boolean }) => {
+      const entry = environmentsRef.current.find(
+        (candidate) => candidate.filePath === environmentPath
+      );
+      if (!entry) {
+        return;
+      }
+
+      let raw: string;
+      try {
+        raw = (await window.clara.readEnvironment(environmentPath)).raw;
+      } catch {
+        return;
+      }
+
+      const decision = decideExternalChange({
+        diskRaw: raw,
+        loadedRaw: entry.originalRaw,
+        dirty: isEnvironmentDirty(entry.environment, entry.originalRaw),
+        force: options?.force
+      });
+
+      if (decision === 'unchanged') {
+        return;
+      }
+
+      if (decision === 'conflict') {
+        setStatus({
+          kind: 'error',
+          message: `${fileName(environmentPath)} changed on disk; your unsaved edits were kept.`
+        });
+        return;
+      }
+
+      let environment: PostmanEnvironment;
+      try {
+        environment = parseEnvironment(raw);
+      } catch (error) {
+        setStatus({
+          kind: 'error',
+          message: `${fileName(environmentPath)} changed on disk but could not be read: ${errorMessage(error)}`
+        });
+        return;
+      }
+
+      setEnvironments((list) =>
+        list.map((candidate) =>
+          candidate.filePath === environmentPath
+            ? { ...candidate, environment, originalRaw: raw }
+            : candidate
+        )
+      );
+      await refreshEnvCompare(environmentPath, environment);
+      setStatus({
+        kind: 'ok',
+        message: `Reloaded ${fileName(environmentPath)} from disk`
+      });
+    },
+    [refreshEnvCompare]
+  );
+
+  const syncOpenFilesFromDisk = useCallback(
+    async (filePaths?: string[]) => {
+      const targets = filePaths ? new Set(filePaths) : null;
+      for (const entry of collectionsRef.current) {
+        if (!targets || targets.has(entry.filePath)) {
+          await syncCollectionFromDisk(entry.filePath);
+        }
+      }
+      for (const entry of environmentsRef.current) {
+        if (!targets || targets.has(entry.filePath)) {
+          await syncEnvironmentFromDisk(entry.filePath);
+        }
+      }
+    },
+    [syncCollectionFromDisk, syncEnvironmentFromDisk]
   );
 
   const askText = useCallback(
@@ -1699,6 +1872,29 @@ export default function App() {
   const environmentPathsKey = environments.map((entry) => entry.filePath).join('\u0000');
 
   useEffect(() => {
+    const paths = [
+      ...collectionPathsKey.split('\u0000'),
+      ...environmentPathsKey.split('\u0000')
+    ].filter(Boolean);
+    void window.clara.watchFiles(paths);
+  }, [collectionPathsKey, environmentPathsKey]);
+
+  useEffect(() => {
+    return window.clara.onFilesChanged((filePaths) => {
+      void syncOpenFilesFromDisk(filePaths);
+    });
+  }, [syncOpenFilesFromDisk]);
+
+  // fs events can be missed (network mounts, editors writing via temp files).
+  useEffect(() => {
+    const onFocus = () => {
+      void syncOpenFilesFromDisk();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [syncOpenFilesFromDisk]);
+
+  useEffect(() => {
     if (!sessionHydrated) {
       return;
     }
@@ -2051,6 +2247,7 @@ export default function App() {
         { id: 'new-request', label: 'New Request', shortcut: `${shortcutMod} T` },
         { id: 'run', label: 'Run collection' },
         { id: 'rename', label: 'Rename' },
+        { id: 'reload-from-disk', label: 'Reload from disk', separatorBefore: true },
         { id: 'expand-all', label: 'Expand all', separatorBefore: true },
         { id: 'collapse-all', label: 'Collapse all' },
         { id: 'delete', label: 'Close', danger: true, separatorBefore: true }
@@ -2497,6 +2694,8 @@ export default function App() {
       }
     } else if (id === 'collapse-all' && target.kind === 'collection') {
       updateUi(target.collectionPath, (ui) => ({ ...ui, expanded: new Set() }));
+    } else if (id === 'reload-from-disk' && target.kind === 'collection') {
+      void syncCollectionFromDisk(target.collectionPath, { force: true });
     }
   };
 

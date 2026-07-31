@@ -6,16 +6,21 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import {
-  normalizeCompareBases,
-  loadSession,
-  saveSession
-} from '../electron/session.ts';
-import {
   discoverGit,
   readCollectionAtRef
 } from '../electron/git.ts';
 import { computeStructuralDiff } from '../src/git/structuralDiff.ts';
 import { assertPostmanCollection } from '../src/postman/types.ts';
+
+// Sandbox HOME before importing session.ts: it resolves ~/.clara at module load,
+// so a static import here would read and overwrite the developer's own session.
+const home = mkdtempSync(path.join(tmpdir(), 'clara-stage16-home-'));
+const previousHome = process.env.HOME;
+process.env.HOME = home;
+
+const { normalizeCompareBases, loadSession, saveSession } = await import(
+  '../electron/session.ts'
+);
 
 assert.deepEqual(normalizeCompareBases(undefined), {});
 assert.deepEqual(normalizeCompareBases(null), {});
@@ -23,10 +28,6 @@ assert.deepEqual(normalizeCompareBases({ '/a': 'main', '/b': '  develop  ', bad:
   '/a': 'main',
   '/b': 'develop'
 });
-
-const home = mkdtempSync(path.join(tmpdir(), 'clara-stage16-home-'));
-const previousHome = process.env.HOME;
-process.env.HOME = home;
 
 const root = mkdtempSync(path.join(tmpdir(), 'clara-stage16-'));
 const repoUnlinked = path.join(root, 'repo');

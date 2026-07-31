@@ -55,6 +55,7 @@ GUI picks up PATH changes on macOS.
 | `make check-stage15` | Git change list flatten / navigation order |
 | `make check-stage16` | Git compare base selector / session bases |
 | `make check-stage17` | Git restore from base + env/variable keyed diff |
+| `make check-stage18` | External file changes (watcher / reload decisions) |
 
 ## Usage (Send / Newman)
 
@@ -71,6 +72,14 @@ GUI picks up PATH changes on macOS.
 Clara stores session metadata in `~/.clara/session.json` (open collection,
 tabs, expanded folder). Unsaved edits do **not** go into that file — only the
 on-disk collection JSON does.
+
+## Files changed outside Clara
+
+Open collections and environments are watched, so edits from your editor, a
+`git checkout`, or a second Clara window are picked up automatically and the
+compare counts refresh. When you have unsaved edits, Clara keeps them and warns
+instead; **Reload from disk** (collection context menu) discards them and takes
+the file as-is. The ↻ button in **Changes** reloads both the file and the base ref.
 
 ## Shortcuts
 

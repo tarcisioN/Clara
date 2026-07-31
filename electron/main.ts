@@ -26,6 +26,7 @@ import {
   type NewmanRunRequest
 } from './newman.ts';
 import { discoverGit, readCollectionAtRef } from './git.ts';
+import { WorkspaceFileWatcher } from './watch.ts';
 import {
   createEmptyCollection,
   serializeCollection,
@@ -41,6 +42,10 @@ process.env.VITE_PUBLIC = app.isPackaged
   : path.join(process.env.DIST, '../public');
 
 let mainWindow: BrowserWindow | null = null;
+
+const fileWatcher = new WorkspaceFileWatcher((filePaths) => {
+  mainWindow?.webContents.send('files:changed', filePaths);
+});
 
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 
@@ -239,7 +244,13 @@ app.whenReady().then(() => {
 // Quit on every platform, including macOS: the window is the whole app, and in dev the
 // Vite process only exits once Electron does.
 app.on('window-all-closed', () => {
+  fileWatcher.close();
   app.quit();
+});
+
+ipcMain.handle('files:watch', (_event, filePaths: string[]) => {
+  fileWatcher.setFiles(Array.isArray(filePaths) ? filePaths.filter(Boolean) : []);
+  return { ok: true as const };
 });
 
 ipcMain.handle('collection:open', async () => {

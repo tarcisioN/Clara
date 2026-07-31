@@ -333,7 +333,7 @@ export default function ChangeListPanel({
             type="button"
             className="change-list-nav"
             aria-label="Refresh compare"
-            title="Refresh base from git"
+            title="Reload the file from disk and refresh the base from git"
             onClick={onRefresh}
           >
             ↻

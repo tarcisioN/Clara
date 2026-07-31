@@ -1,4 +1,4 @@
-.PHONY: help install install-app package dev build typecheck check check-stage0 check-stage1 check-stage2 check-stage3 check-stage4 check-stage5 check-stage6 check-stage7 check-stage8 check-stage9 check-stage10 check-stage11 check-stage12 check-stage13 check-stage14 check-stage15 check-stage16 check-stage17
+.PHONY: help install install-app package dev build typecheck check check-stage0 check-stage1 check-stage2 check-stage3 check-stage4 check-stage5 check-stage6 check-stage7 check-stage8 check-stage9 check-stage10 check-stage11 check-stage12 check-stage13 check-stage14 check-stage15 check-stage16 check-stage17 check-stage18
 
 APP_NAME := Clara
 APP_BUNDLE := $(APP_NAME).app
@@ -32,6 +32,7 @@ help:
 	@echo "  make check-stage15 Git change list flatten / navigation order"
 	@echo "  make check-stage16 Git compare base selector / session bases"
 	@echo "  make check-stage17 Git restore from base + env/variable keyed diff"
+	@echo "  make check-stage18 External file changes (watcher / reload decisions)"
 
 install:
 	npm install
@@ -59,7 +60,7 @@ build:
 typecheck:
 	npm run typecheck
 
-check: typecheck check-stage0 check-stage1 check-stage2 check-stage3 check-stage4 check-stage5 check-stage6 check-stage7 check-stage8 check-stage9 check-stage10 check-stage11 check-stage12 check-stage13 check-stage14 check-stage15 check-stage16 check-stage17
+check: typecheck check-stage0 check-stage1 check-stage2 check-stage3 check-stage4 check-stage5 check-stage6 check-stage7 check-stage8 check-stage9 check-stage10 check-stage11 check-stage12 check-stage13 check-stage14 check-stage15 check-stage16 check-stage17 check-stage18
 
 check-stage0:
 	npm run check:stage0
@@ -114,3 +115,6 @@ check-stage16:
 
 check-stage17:
 	npm run check:stage17
+
+check-stage18:
+	npm run check:stage18
