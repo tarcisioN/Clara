@@ -520,6 +520,22 @@ export default function App() {
     );
   }, [activeCollection, activeCompare]);
 
+  const folderBaseItem = useMemo(() => {
+    if (
+      !activeCollection ||
+      !activeCompare ||
+      activeTab?.kind !== 'folder' ||
+      !activeTab.path
+    ) {
+      return null;
+    }
+    return findPairedBaseItem(
+      activeCollection.collection.item,
+      activeCompare.baseCollection.item,
+      activeTab.path
+    );
+  }, [activeCollection, activeCompare, activeTab]);
+
   const folderVariableDiff = useMemo(() => {
     if (
       !activeCollection ||
@@ -530,16 +546,11 @@ export default function App() {
       return null;
     }
     const current = getItemByPath(activeCollection.collection.item, activeTab.path);
-    const base = findPairedBaseItem(
-      activeCollection.collection.item,
-      activeCompare.baseCollection.item,
-      activeTab.path
-    );
-    if (!current || !base) {
+    if (!current || !folderBaseItem) {
       return null;
     }
-    return computeVariableDiff(current.variable, base.variable);
-  }, [activeCollection, activeCompare, activeTab]);
+    return computeVariableDiff(current.variable, folderBaseItem.variable);
+  }, [activeCollection, activeCompare, activeTab, folderBaseItem]);
 
   const changeList = useMemo(() => {
     if (!activeCollection || !activeCompare) {
@@ -3478,6 +3489,11 @@ export default function App() {
                   filePath={activeEnvironment.filePath}
                   values={getEnvironmentValues(activeEnvironment.environment)}
                   compareBaseRef={activeEnvCompare?.baseRef ?? null}
+                  baseValues={
+                    activeEnvCompare
+                      ? getEnvironmentValues(activeEnvCompare.baseEnvironment)
+                      : null
+                  }
                   valueStatusByIndex={activeEnvCompare?.diff.byCurrentIndex ?? null}
                   removedKeys={activeEnvCompare?.diff.removed ?? null}
                   onRestoreAll={
@@ -3629,6 +3645,11 @@ export default function App() {
                       scopeLabel="collection"
                       variables={getCollectionVariables(activeCollection.collection)}
                       compareBaseRef={activeCompare?.baseRef ?? null}
+                      baseVariables={
+                        activeCompare
+                          ? getCollectionVariables(activeCompare.baseCollection)
+                          : null
+                      }
                       valueStatusByIndex={collectionVariableDiff?.byCurrentIndex ?? null}
                       removedKeys={collectionVariableDiff?.removed ?? null}
                       onAdd={() => editCollectionVariables((vars) => addVariable(vars))}
@@ -3680,6 +3701,9 @@ export default function App() {
                       scopeLabel="folder"
                       variables={getItemVariables(activeFolder)}
                       compareBaseRef={activeCompare?.baseRef ?? null}
+                      baseVariables={
+                        folderBaseItem ? getItemVariables(folderBaseItem) : null
+                      }
                       valueStatusByIndex={folderVariableDiff?.byCurrentIndex ?? null}
                       removedKeys={folderVariableDiff?.removed ?? null}
                       onAdd={() =>

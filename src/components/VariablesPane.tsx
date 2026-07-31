@@ -1,11 +1,15 @@
+import { useMemo, useState } from 'react';
 import type { PostmanVariable } from '../postman/variables.ts';
 import type { KeyChangeKind } from '../git/keyedDiff.ts';
+import { computeKeyedValueDiff } from '../git/keyedValueDiff.ts';
+import KeyedDiffView from './KeyedDiffView.tsx';
 import './VariablesPane.css';
 
 type VariablesPaneProps = {
   scopeLabel: string;
   variables: PostmanVariable[];
   compareBaseRef?: string | null;
+  baseVariables?: PostmanVariable[] | null;
   valueStatusByIndex?: Map<number, KeyChangeKind> | null;
   removedKeys?: Array<{ key: string }> | null;
   onAdd: () => void;
@@ -24,10 +28,19 @@ function statusClass(kind: KeyChangeKind | undefined): string {
   return '';
 }
 
+function toRows(variables: PostmanVariable[]) {
+  return variables.map((variable) => ({
+    key: variable.key ?? '',
+    value: variable.value ?? '',
+    disabled: Boolean(variable.disabled)
+  }));
+}
+
 export default function VariablesPane({
   scopeLabel,
   variables,
   compareBaseRef = null,
+  baseVariables = null,
   valueStatusByIndex = null,
   removedKeys = null,
   onAdd,
@@ -36,6 +49,19 @@ export default function VariablesPane({
   onRemove
 }: VariablesPaneProps) {
   const baseLabel = compareBaseRef ?? 'base';
+  const hasCompare =
+    Boolean(valueStatusByIndex) &&
+    [...(valueStatusByIndex?.values() ?? [])].some((kind) => kind !== 'unchanged');
+  const hasRemoved = (removedKeys?.length ?? 0) > 0;
+  const canDiff = Boolean(baseVariables) && (hasCompare || hasRemoved);
+  const [viewMode, setViewMode] = useState<'edit' | 'diff'>('edit');
+
+  const keyedDiff = useMemo(() => {
+    if (!baseVariables) {
+      return null;
+    }
+    return computeKeyedValueDiff(toRows(variables), toRows(baseVariables));
+  }, [variables, baseVariables]);
 
   return (
     <section className="variables-pane">
@@ -44,12 +70,44 @@ export default function VariablesPane({
           <h3>Variables</h3>
           <p>Defined on this {scopeLabel} and inherited by nested requests.</p>
         </div>
-        <button type="button" onClick={onAdd}>
-          Add variable
-        </button>
+        <div className="variables-pane-actions">
+          {canDiff ? (
+            <div className="variables-view-mode" role="group" aria-label="Variables view">
+              <button
+                type="button"
+                className={viewMode === 'edit' ? 'active' : ''}
+                onClick={() => setViewMode('edit')}
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                className={viewMode === 'diff' ? 'active' : ''}
+                onClick={() => setViewMode('diff')}
+              >
+                Diff
+              </button>
+            </div>
+          ) : null}
+          {viewMode === 'edit' ? (
+            <button type="button" onClick={onAdd}>
+              Add variable
+            </button>
+          ) : null}
+        </div>
       </div>
 
-      {variables.length === 0 && !(removedKeys?.length) ? (
+      {viewMode === 'diff' && keyedDiff ? (
+        <div className="variables-diff">
+          <p className="variables-diff-banner" role="status">
+            Comparing vs {baseLabel}
+            {keyedDiff.hasChanges
+              ? ` · ${keyedDiff.rows.filter((row) => row.change !== 'unchanged').length} changed`
+              : ' · no changes'}
+          </p>
+          <KeyedDiffView rows={keyedDiff.rows} />
+        </div>
+      ) : variables.length === 0 && !(removedKeys?.length) ? (
         <p className="variables-empty">No variables on this {scopeLabel}.</p>
       ) : (
         <div className="variables-rows" role="table" aria-label={`${scopeLabel} variables`}>

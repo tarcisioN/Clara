@@ -1,14 +1,13 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import type { RequestSectionKey } from '../git/semanticDiff.ts';
 import type {
   DiffAuth,
   DiffBody,
-  DiffKeyedRow,
-  DiffScalar,
   DiffTextBlock,
   RequestFieldDiff
 } from '../git/requestFieldDiff.ts';
 import { highlightPair, type DiffSegment } from '../git/textDiff.ts';
+import KeyedDiffView from './KeyedDiffView.tsx';
 import './RequestDiffPane.css';
 
 type RequestDiffPaneProps = {
@@ -32,14 +31,6 @@ const SECTION_LABELS: Record<RequestSectionKey, string> = {
   tests: 'Tests'
 };
 
-function ChangeMark({ change }: { change: DiffKeyedRow['change'] | DiffScalar['kind'] }) {
-  if (change === 'unchanged') {
-    return null;
-  }
-  const label = change === 'added' ? '+' : change === 'removed' ? '−' : '~';
-  return <span className={`request-diff-mark request-diff-mark-${change}`}>{label}</span>;
-}
-
 function Segments({
   segments,
   fallback,
@@ -61,7 +52,7 @@ function Segments({
             segment.kind === 'equal' ? undefined : `request-diff-char request-diff-char-${segment.kind}`
           }
         >
-          {segment.text || (segment.kind === 'equal' ? '' : '')}
+          {segment.text}
         </span>
       ))}
     </>
@@ -100,86 +91,6 @@ function StackedBars({
   );
 }
 
-function KeyedValue({
-  side,
-  baseValue,
-  currentValue,
-  disabled,
-  change
-}: {
-  side: 'base' | 'current';
-  baseValue: string;
-  currentValue: string;
-  disabled: boolean;
-  change: DiffKeyedRow['change'];
-}) {
-  const pair = useMemo(
-    () => (change === 'modified' ? highlightPair(baseValue, currentValue) : null),
-    [change, baseValue, currentValue]
-  );
-  const value = side === 'base' ? baseValue : currentValue;
-  const segments = pair ? (side === 'base' ? pair.base : pair.current) : null;
-
-  return (
-    <div className={`request-diff-value request-diff-value-${side}`}>
-      <span className="request-diff-value-label">{side}</span>
-      <code>
-        {segments ? <Segments segments={segments} fallback={value} /> : value}
-        {disabled ? <em> · disabled</em> : null}
-      </code>
-    </div>
-  );
-}
-
-function KeyedRows({
-  rows,
-  showUnchanged
-}: {
-  rows: DiffKeyedRow[];
-  showUnchanged: boolean;
-}) {
-  const visible = showUnchanged
-    ? rows
-    : rows.filter((row) => row.change !== 'unchanged');
-  if (visible.length === 0) {
-    return (
-      <p className="request-diff-empty">
-        {rows.length === 0 ? 'No entries' : 'No changes (unchanged rows hidden)'}
-      </p>
-    );
-  }
-  return (
-    <ul className="request-diff-keyed">
-      {visible.map((row, index) => (
-        <li key={`${row.change}:${row.key}:${index}`} className={`request-diff-keyed-row ${row.change}`}>
-          <ChangeMark change={row.change} />
-          <span className="request-diff-keyed-key">{row.key}</span>
-          <div className="request-diff-keyed-values">
-            {row.change !== 'added' ? (
-              <KeyedValue
-                side="base"
-                baseValue={row.baseValue ?? ''}
-                currentValue={row.currentValue ?? ''}
-                disabled={row.baseDisabled}
-                change={row.change}
-              />
-            ) : null}
-            {row.change !== 'removed' ? (
-              <KeyedValue
-                side="current"
-                baseValue={row.baseValue ?? ''}
-                currentValue={row.currentValue ?? ''}
-                disabled={row.currentDisabled}
-                change={row.change}
-              />
-            ) : null}
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
 function TextDiffView({ block }: { block: DiffTextBlock }) {
   if (block.lines.length === 0) {
     return <p className="request-diff-empty">(empty)</p>;
@@ -212,7 +123,7 @@ function TextDiffView({ block }: { block: DiffTextBlock }) {
   );
 }
 
-function BodyDiff({ body, showUnchanged }: { body: DiffBody; showUnchanged: boolean }) {
+function BodyDiff({ body }: { body: DiffBody }) {
   if (body.kind === 'none') {
     return <p className="request-diff-empty">No body</p>;
   }
@@ -220,7 +131,7 @@ function BodyDiff({ body, showUnchanged }: { body: DiffBody; showUnchanged: bool
     return <TextDiffView block={body.text} />;
   }
   if (body.kind === 'urlencoded') {
-    return <KeyedRows rows={body.list.rows} showUnchanged={showUnchanged} />;
+    return <KeyedDiffView rows={body.list.rows} />;
   }
   if (body.kind === 'mode-change') {
     return (
@@ -235,7 +146,7 @@ function BodyDiff({ body, showUnchanged }: { body: DiffBody; showUnchanged: bool
   return <StackedBars label="body" base={body.baseSummary} current={body.currentSummary} />;
 }
 
-function AuthDiff({ auth, showUnchanged }: { auth: DiffAuth; showUnchanged: boolean }) {
+function AuthDiff({ auth }: { auth: DiffAuth }) {
   if (auth.kind === 'unchanged') {
     return <p className="request-diff-empty">No changes ({auth.typeLabel})</p>;
   }
@@ -248,11 +159,10 @@ function AuthDiff({ auth, showUnchanged }: { auth: DiffAuth; showUnchanged: bool
           <code className="request-diff-value-current">{auth.currentType || '(none)'}</code>
         </p>
       ) : null}
-      <KeyedRows
+      <KeyedDiffView
         rows={auth.rows.filter(
           (row) => row.key !== 'type' || auth.baseType === auth.currentType
         )}
-        showUnchanged={showUnchanged}
       />
     </div>
   );
@@ -296,17 +206,6 @@ export default function RequestDiffPane({
   const { semantic, changedSections } = fieldDiff;
   const canRestoreSection =
     Boolean(onRestoreSection) && !semantic.isAdded && !semantic.isRemoved;
-  const [showUnchanged, setShowUnchanged] = useState(false);
-  const hasUnchangedRows = useMemo(
-    () =>
-      fieldDiff.params.rows.some((row) => row.change === 'unchanged') ||
-      fieldDiff.headers.rows.some((row) => row.change === 'unchanged') ||
-      (fieldDiff.body.kind === 'urlencoded' &&
-        fieldDiff.body.list.rows.some((row) => row.change === 'unchanged')) ||
-      (fieldDiff.auth.kind === 'changed' &&
-        fieldDiff.auth.rows.some((row) => row.change === 'unchanged')),
-    [fieldDiff]
-  );
 
   return (
     <div className="request-diff-pane">
@@ -350,17 +249,6 @@ export default function RequestDiffPane({
                   changedSections.length === 1 ? '' : 's'
                 }`}
       </p>
-
-      {hasUnchangedRows ? (
-        <label className="request-diff-show-unchanged">
-          <input
-            type="checkbox"
-            checked={showUnchanged}
-            onChange={(event) => setShowUnchanged(event.target.checked)}
-          />
-          Show unchanged
-        </label>
-      ) : null}
 
       {(semantic.sections.method ||
         semantic.sections.url ||
@@ -408,7 +296,7 @@ export default function RequestDiffPane({
           section="params"
           onRestore={canRestoreSection ? onRestoreSection : null}
         >
-          <KeyedRows rows={fieldDiff.params.rows} showUnchanged={showUnchanged} />
+          <KeyedDiffView rows={fieldDiff.params.rows} />
         </Section>
       ) : null}
 
@@ -418,7 +306,7 @@ export default function RequestDiffPane({
           section="headers"
           onRestore={canRestoreSection ? onRestoreSection : null}
         >
-          <KeyedRows rows={fieldDiff.headers.rows} showUnchanged={showUnchanged} />
+          <KeyedDiffView rows={fieldDiff.headers.rows} />
         </Section>
       ) : null}
 
@@ -428,7 +316,7 @@ export default function RequestDiffPane({
           section="auth"
           onRestore={canRestoreSection ? onRestoreSection : null}
         >
-          <AuthDiff auth={fieldDiff.auth} showUnchanged={showUnchanged} />
+          <AuthDiff auth={fieldDiff.auth} />
         </Section>
       ) : null}
 
@@ -438,7 +326,7 @@ export default function RequestDiffPane({
           section="body"
           onRestore={canRestoreSection ? onRestoreSection : null}
         >
-          <BodyDiff body={fieldDiff.body} showUnchanged={showUnchanged} />
+          <BodyDiff body={fieldDiff.body} />
         </Section>
       ) : null}
 

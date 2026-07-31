@@ -176,9 +176,10 @@ Read-only field-level comparison when opening a change from the Changes list.
 - [x] **Show unchanged** toggle for keyed rows
 - [x] Next/prev change keeps Diff mode
 - [x] Character-level highlight inside modified URL/values and paired body/script lines
+- [x] Shared keyed Diff UI for environment values and collection/folder variables (Edit | Diff)
 
 ### Validation
-- [x] `make check-stage19` — textDiff + requestFieldDiff fixtures
+- [x] `make check-stage19` — textDiff + keyedValueDiff + requestFieldDiff fixtures
 
 ### Policy (this stage)
 - Diff is read-only; editing stays in RequestPane.

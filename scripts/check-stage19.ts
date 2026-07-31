@@ -1,10 +1,37 @@
 import assert from 'node:assert/strict';
+import { computeKeyedValueDiff } from '../src/git/keyedValueDiff.ts';
 import { computeRequestFieldDiff } from '../src/git/requestFieldDiff.ts';
 import { findRemovedBaseItem } from '../src/git/resolveBaseItem.ts';
 import { computeStructuralDiff } from '../src/git/structuralDiff.ts';
 import { diffLines, hasTextChanges, highlightPair, diffChars } from '../src/git/textDiff.ts';
 import { updateRequestHeader, setRequestUrl, setRequestBodyRaw } from '../src/postman/edit.ts';
 import type { PostmanCollection, PostmanItem } from '../src/postman/types.ts';
+
+// --- keyedValueDiff (shared by request / env / variables Diff) ---
+const keyed = computeKeyedValueDiff(
+  [
+    { key: 'keep', value: '1', disabled: false },
+    { key: 'changed', value: 'new', disabled: false },
+    { key: 'added', value: 'x', disabled: false }
+  ],
+  [
+    { key: 'keep', value: '1', disabled: false },
+    { key: 'changed', value: 'old', disabled: false },
+    { key: 'gone', value: 'z', disabled: true }
+  ]
+);
+assert.equal(keyed.hasChanges, true);
+assert.deepEqual(
+  keyed.rows.map((row) => `${row.change}:${row.key}`),
+  ['unchanged:keep', 'modified:changed', 'added:added', 'removed:gone']
+);
+assert.equal(
+  computeKeyedValueDiff(
+    [{ key: 'a', value: '1', disabled: false }],
+    [{ key: 'a', value: '1', disabled: false }]
+  ).hasChanges,
+  false
+);
 
 // --- textDiff ---
 const empty = diffLines('', '');

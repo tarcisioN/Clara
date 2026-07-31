@@ -9,7 +9,11 @@ import { getAuthAttributeValue, resolveEditableAuthType } from '../postman/auth.
 import type { PostmanItem } from '../postman/types.ts';
 import { isRequest } from '../postman/tree.ts';
 import { getUrlRaw } from '../postman/url.ts';
-import type { KeyChangeKind } from './keyedDiff.ts';
+import {
+  computeKeyedValueDiff,
+  type DiffKeyedList,
+  type DiffKeyedRow
+} from './keyedValueDiff.ts';
 import {
   computeSemanticDiff,
   type RequestSectionKey,
@@ -23,20 +27,7 @@ export type DiffScalar = {
   current: string;
 };
 
-export type DiffKeyedRow = {
-  key: string;
-  change: KeyChangeKind;
-  baseValue: string | null;
-  currentValue: string | null;
-  baseDisabled: boolean;
-  currentDisabled: boolean;
-};
-
-export type DiffKeyedList = {
-  rows: DiffKeyedRow[];
-  /** True when at least one row is not unchanged. */
-  hasChanges: boolean;
-};
+export type { DiffKeyedRow, DiffKeyedList };
 
 export type DiffTextBlock = {
   kind: 'text';
@@ -100,88 +91,6 @@ function scalar(base: string, current: string): DiffScalar {
   return { kind: 'modified', base, current };
 }
 
-function fingerprintKv(key: string, value: string, disabled: boolean): string {
-  return JSON.stringify({ key, value, disabled });
-}
-
-function keyedList(
-  current: Array<{ key: string; value: string; disabled: boolean }>,
-  base: Array<{ key: string; value: string; disabled: boolean }>
-): DiffKeyedList {
-  const baseUsed = new Set<number>();
-  const rows: DiffKeyedRow[] = [];
-  let changed = 0;
-
-  current.forEach((row) => {
-    let matched = -1;
-    for (let i = 0; i < base.length; i += 1) {
-      if (baseUsed.has(i)) {
-        continue;
-      }
-      if (base[i]!.key === row.key) {
-        matched = i;
-        break;
-      }
-    }
-
-    if (matched < 0) {
-      changed += 1;
-      rows.push({
-        key: row.key || '(empty)',
-        change: 'added',
-        baseValue: null,
-        currentValue: row.value,
-        baseDisabled: false,
-        currentDisabled: row.disabled
-      });
-      return;
-    }
-
-    baseUsed.add(matched);
-    const baseRow = base[matched]!;
-    const same =
-      fingerprintKv(row.key, row.value, row.disabled) ===
-      fingerprintKv(baseRow.key, baseRow.value, baseRow.disabled);
-    if (same) {
-      rows.push({
-        key: row.key || '(empty)',
-        change: 'unchanged',
-        baseValue: baseRow.value,
-        currentValue: row.value,
-        baseDisabled: baseRow.disabled,
-        currentDisabled: row.disabled
-      });
-      return;
-    }
-    changed += 1;
-    rows.push({
-      key: row.key || '(empty)',
-      change: 'modified',
-      baseValue: baseRow.value,
-      currentValue: row.value,
-      baseDisabled: baseRow.disabled,
-      currentDisabled: row.disabled
-    });
-  });
-
-  base.forEach((row, baseIndex) => {
-    if (baseUsed.has(baseIndex)) {
-      return;
-    }
-    changed += 1;
-    rows.push({
-      key: row.key || '(empty)',
-      change: 'removed',
-      baseValue: row.value,
-      currentValue: null,
-      baseDisabled: row.disabled,
-      currentDisabled: false
-    });
-  });
-
-  return { rows, hasChanges: changed > 0 };
-}
-
 function textBlock(base: string, current: string): DiffTextBlock {
   return {
     kind: 'text',
@@ -209,7 +118,7 @@ function summarizeBody(item: PostmanItem): { mode: string; summary: string; raw?
     return {
       mode: 'urlencoded',
       summary: rows.map((row) => `${row.key}=${row.value}`).join('&') || '(empty)',
-      urlencoded: keyedList(rows, rows)
+      urlencoded: computeKeyedValueDiff(rows, rows)
     };
   }
   return { mode: body.mode, summary: JSON.stringify(body) };
@@ -232,7 +141,7 @@ function buildBody(current: PostmanItem, base: PostmanItem | null): DiffBody {
         value: param.value ?? '',
         disabled: Boolean(param.disabled)
       }));
-      return { kind: 'urlencoded', list: keyedList(currentRows, []) };
+      return { kind: 'urlencoded', list: computeKeyedValueDiff(currentRows, []) };
     }
     return {
       kind: 'other',
@@ -262,7 +171,7 @@ function buildBody(current: PostmanItem, base: PostmanItem | null): DiffBody {
         value: param.value ?? '',
         disabled: Boolean(param.disabled)
       }));
-      return { kind: 'urlencoded', list: keyedList(currentRows, baseRows) };
+      return { kind: 'urlencoded', list: computeKeyedValueDiff(currentRows, baseRows) };
     }
     if (currentInfo.summary === baseInfo.summary) {
       return { kind: 'none' };
@@ -346,11 +255,11 @@ function buildAuth(current: PostmanItem, base: PostmanItem | null): DiffAuth {
       kind: 'changed',
       baseType: '',
       currentType,
-      rows: keyedList(authRows(current), []).rows
+      rows: computeKeyedValueDiff(authRows(current), []).rows
     };
   }
   const baseType = String(resolveEditableAuthType(getRequestAuth(base)));
-  const list = keyedList(authRows(current), authRows(base));
+  const list = computeKeyedValueDiff(authRows(current), authRows(base));
   if (!list.hasChanges && currentType === baseType) {
     return { kind: 'unchanged', typeLabel: currentType };
   }
@@ -420,11 +329,11 @@ export function computeRequestFieldDiff(
     baseItem ? (baseItem.name?.trim() || '') : '',
     currentItem ? currentItem.name?.trim() || '' : ''
   );
-  const params = keyedList(
+  const params = computeKeyedValueDiff(
     currentItem ? kvRows(currentItem, 'params') : [],
     baseItem ? kvRows(baseItem, 'params') : []
   );
-  const headers = keyedList(
+  const headers = computeKeyedValueDiff(
     currentItem ? kvRows(currentItem, 'headers') : [],
     baseItem ? kvRows(baseItem, 'headers') : []
   );
@@ -510,7 +419,7 @@ function buildBodyRemoved(base: PostmanItem): DiffBody {
       value: param.value ?? '',
       disabled: Boolean(param.disabled)
     }));
-    return { kind: 'urlencoded', list: keyedList([], baseRows) };
+    return { kind: 'urlencoded', list: computeKeyedValueDiff([], baseRows) };
   }
   return {
     kind: 'other',
@@ -525,6 +434,6 @@ function buildAuthRemoved(base: PostmanItem): DiffAuth {
     kind: 'changed',
     baseType,
     currentType: '',
-    rows: keyedList([], authRows(base)).rows
+    rows: computeKeyedValueDiff([], authRows(base)).rows
   };
 }

@@ -105,9 +105,10 @@ ref (`main`/`master` by default, or any branch/tag/SHA you pick). Markers show
 added / removed / modified requests; open a request to see which sections differ.
 Click a row in **Changes** to open the request in a read-only **Diff** view
 (stacked URL, paired headers/params/auth, unified body/script diffs). Toggle
-**Edit** to return to the editor. You can restore a request, section, or folder
-from the base as an **unsaved edit** (Save writes the collection file — compare
-never runs `git checkout`). Environments get the same key-based value markers.
+**Edit** to return to the editor. Environments and collection/folder variables
+offer the same **Edit | Diff** keyed comparison when Compare is active. You can
+restore a request, section, folder, or environment value from the base as an
+**unsaved edit** (Save writes the file — compare never runs `git checkout`).
 Files that do not exist at the base ref (new or untracked) simply show no comparison.
 
 See [docs/EPIC-git-compare.md](./docs/EPIC-git-compare.md).

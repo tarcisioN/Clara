@@ -1,5 +1,8 @@
+import { useMemo, useState } from 'react';
 import type { PostmanEnvironmentValue } from '../postman/environment.ts';
 import type { KeyChangeKind } from '../git/keyedDiff.ts';
+import { computeKeyedValueDiff } from '../git/keyedValueDiff.ts';
+import KeyedDiffView from './KeyedDiffView.tsx';
 import './EnvironmentPane.css';
 
 type EnvironmentPaneProps = {
@@ -7,6 +10,7 @@ type EnvironmentPaneProps = {
   filePath: string;
   values: PostmanEnvironmentValue[];
   compareBaseRef?: string | null;
+  baseValues?: PostmanEnvironmentValue[] | null;
   /** Status per current-row index. */
   valueStatusByIndex?: Map<number, KeyChangeKind> | null;
   removedKeys?: Array<{ key: string }> | null;
@@ -28,11 +32,20 @@ function statusClass(kind: KeyChangeKind | undefined): string {
   return '';
 }
 
+function toRows(values: PostmanEnvironmentValue[]) {
+  return values.map((value) => ({
+    key: value.key ?? '',
+    value: value.value ?? '',
+    disabled: value.enabled === false
+  }));
+}
+
 export default function EnvironmentPane({
   name,
   filePath,
   values,
   compareBaseRef = null,
+  baseValues = null,
   valueStatusByIndex = null,
   removedKeys = null,
   onAdd,
@@ -47,6 +60,15 @@ export default function EnvironmentPane({
     Boolean(valueStatusByIndex) &&
     [...(valueStatusByIndex?.values() ?? [])].some((kind) => kind !== 'unchanged');
   const hasRemoved = (removedKeys?.length ?? 0) > 0;
+  const canDiff = Boolean(baseValues) && (hasCompare || hasRemoved);
+  const [viewMode, setViewMode] = useState<'edit' | 'diff'>('edit');
+
+  const keyedDiff = useMemo(() => {
+    if (!baseValues) {
+      return null;
+    }
+    return computeKeyedValueDiff(toRows(values), toRows(baseValues));
+  }, [values, baseValues]);
 
   return (
     <section className="environment-pane">
@@ -56,18 +78,48 @@ export default function EnvironmentPane({
           <p title={filePath}>{filePath}</p>
         </div>
         <div className="environment-pane-actions">
+          {canDiff ? (
+            <div className="environment-view-mode" role="group" aria-label="Environment view">
+              <button
+                type="button"
+                className={viewMode === 'edit' ? 'active' : ''}
+                onClick={() => setViewMode('edit')}
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                className={viewMode === 'diff' ? 'active' : ''}
+                onClick={() => setViewMode('diff')}
+              >
+                Diff
+              </button>
+            </div>
+          ) : null}
           {(hasCompare || hasRemoved) && onRestoreAll ? (
             <button type="button" className="compare-restore" onClick={onRestoreAll}>
               Restore all from {baseLabel}
             </button>
           ) : null}
-          <button type="button" onClick={onAdd}>
-            Add variable
-          </button>
+          {viewMode === 'edit' ? (
+            <button type="button" onClick={onAdd}>
+              Add variable
+            </button>
+          ) : null}
         </div>
       </header>
 
-      {values.length === 0 && !hasRemoved ? (
+      {viewMode === 'diff' && keyedDiff ? (
+        <div className="environment-diff">
+          <p className="environment-diff-banner" role="status">
+            Comparing vs {baseLabel}
+            {keyedDiff.hasChanges
+              ? ` · ${keyedDiff.rows.filter((row) => row.change !== 'unchanged').length} changed`
+              : ' · no changes'}
+          </p>
+          <KeyedDiffView rows={keyedDiff.rows} onRestoreKey={onRestoreKey} />
+        </div>
+      ) : values.length === 0 && !hasRemoved ? (
         <p className="environment-empty">No variables in this environment.</p>
       ) : (
         <div className="environment-rows" role="table" aria-label="Environment variables">
