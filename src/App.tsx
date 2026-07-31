@@ -3302,6 +3302,18 @@ export default function App() {
                   running={runningKey === tabKey(activeTab)}
                   onRun={() => void runScope(activeTab)}
                   onNewRequest={() => createNewRequestNear(activeTab)}
+                  onNewmanReady={(version) => {
+                    const key = tabKey(activeTab);
+                    setScopeRuns((runs) => {
+                      const next = { ...runs };
+                      delete next[key];
+                      return next;
+                    });
+                    setStatus({
+                      kind: 'ok',
+                      message: `Newman ${version} ready — Run again`
+                    });
+                  }}
                   variablesSlot={
                     <VariablesPane
                       scopeLabel="collection"
@@ -3338,6 +3350,18 @@ export default function App() {
                   running={runningKey === tabKey(activeTab)}
                   onRun={() => void runScope(activeTab)}
                   onNewRequest={() => createNewRequestNear(activeTab)}
+                  onNewmanReady={(version) => {
+                    const key = tabKey(activeTab);
+                    setScopeRuns((runs) => {
+                      const next = { ...runs };
+                      delete next[key];
+                      return next;
+                    });
+                    setStatus({
+                      kind: 'ok',
+                      message: `Newman ${version} ready — Run again`
+                    });
+                  }}
                   variablesSlot={
                     <VariablesPane
                       scopeLabel="folder"
@@ -3508,6 +3532,21 @@ export default function App() {
                           ] ?? null
                         }
                         running={sending && runningKey === tabKey(activeTab)}
+                        onNewmanReady={(version) => {
+                          const key = requestRunKey(
+                            activeTab.collectionPath,
+                            activeRequestPath
+                          );
+                          setRequestRuns((runs) => {
+                            const next = { ...runs };
+                            delete next[key];
+                            return next;
+                          });
+                          setStatus({
+                            kind: 'ok',
+                            message: `Newman ${version} ready — Send again`
+                          });
+                        }}
                       />
                     </div>
                   </div>

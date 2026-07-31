@@ -27,7 +27,9 @@ npm install -g newman
 newman --version
 ```
 
-If Send shows “Newman is not installed”, install as above and **restart Clara** so the GUI picks up PATH changes (especially on macOS).
+If Send shows “Newman is not installed”, use **Install with npm** in the guide (or run
+`npm install -g newman` in a terminal). Click **Check again**, or **restart Clara** so the
+GUI picks up PATH changes on macOS.
 
 | Target | What it does |
 |--------|-----------|

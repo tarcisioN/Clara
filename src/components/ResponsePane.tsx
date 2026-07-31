@@ -6,6 +6,7 @@ import './ResponsePane.css';
 type ResponsePaneProps = {
   result: NewmanRunView | null;
   running: boolean;
+  onNewmanReady?: (version: string) => void;
 };
 
 type ResponseSection = 'body' | 'headers' | 'tests';
@@ -20,7 +21,7 @@ function formatBytes(size: number | null): string {
   return `${(size / 1024).toFixed(1)} KB`;
 }
 
-export default function ResponsePane({ result, running }: ResponsePaneProps) {
+export default function ResponsePane({ result, running, onNewmanReady }: ResponsePaneProps) {
   const [section, setSection] = useState<ResponseSection>('body');
   const execution = result?.execution ?? null;
   const testTotal = execution?.assertions.length ?? 0;
@@ -89,7 +90,7 @@ export default function ResponsePane({ result, running }: ResponsePaneProps) {
 
       {result && !running && result.missingNewman ? (
         <div className="response-errors">
-          <NewmanMissingGuide />
+          <NewmanMissingGuide onReady={onNewmanReady} />
         </div>
       ) : null}
 

@@ -5,6 +5,7 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  shell,
   type MenuItemConstructorOptions
 } from 'electron';
 import { existsSync } from 'node:fs';
@@ -18,13 +19,19 @@ import {
   saveSession,
   type SessionState
 } from './session.ts';
-import { runNewmanCollection, type NewmanRunRequest } from './newman.ts';
+import {
+  checkNewman,
+  installNewman,
+  runNewmanCollection,
+  type NewmanRunRequest
+} from './newman.ts';
 import { discoverGit, readCollectionAtRef } from './git.ts';
 import {
   createEmptyCollection,
   serializeCollection,
   suggestCollectionFileName
 } from '../src/postman/types.ts';
+import { NEWMAN_DOCS_URL } from '../src/newman/missing.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -377,6 +384,26 @@ ipcMain.handle('session:home', async () => CLARA_HOME);
 ipcMain.handle('newman:run', async (_event, payload: NewmanRunRequest) =>
   runNewmanCollection(payload)
 );
+
+ipcMain.handle('newman:check', async () => checkNewman());
+
+ipcMain.handle('newman:install', async () => installNewman());
+
+ipcMain.handle('shell:openExternal', async (_event, url: string) => {
+  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+    throw new Error('Only http(s) URLs can be opened');
+  }
+  // Allow Newman docs + npm pages; keep the surface narrow.
+  const allowed =
+    url === NEWMAN_DOCS_URL ||
+    url.startsWith('https://learning.postman.com/') ||
+    url.startsWith('https://www.npmjs.com/');
+  if (!allowed) {
+    throw new Error('URL not allowed');
+  }
+  await shell.openExternal(url);
+  return { ok: true as const };
+});
 
 ipcMain.handle('git:discover', async (_event, collectionPath: string) =>
   discoverGit(collectionPath)

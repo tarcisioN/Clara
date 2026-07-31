@@ -15,31 +15,100 @@
 
 .newman-missing strong {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   color: #8a2f2f;
   font-size: 0.875rem;
 }
 
-.newman-missing ol {
+.newman-missing-lead {
   margin: 0 0 10px;
-  padding-left: 1.25rem;
   color: var(--text-muted);
   line-height: 1.45;
 }
 
-.newman-missing li + li {
-  margin-top: 4px;
+.newman-missing-cmd-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
-.newman-missing-cmd {
-  margin: 0;
-}
-
-.newman-missing-cmd code {
-  display: inline-block;
-  padding: 4px 8px;
+.newman-missing-cmd-row code {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  overflow: hidden;
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.06);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.newman-missing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.newman-missing-btn {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-1);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.newman-missing-btn.primary {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+  font-weight: 500;
+}
+
+.newman-missing-btn:hover:not(:disabled) {
+  filter: brightness(0.97);
+}
+
+.newman-missing-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.newman-missing-alt {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.newman-missing-alt summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.newman-missing-alt p {
+  margin: 8px 0 0;
+  line-height: 1.4;
+}
+
+.newman-missing-status {
+  margin: 8px 0 0;
+  line-height: 1.4;
+}
+
+.newman-missing-status.ok {
+  color: #1f6b3a;
+}
+
+.newman-missing-status.warn {
+  color: #8a5a00;
+}
+
+.newman-missing-status.error {
+  color: #8a2f2f;
 }

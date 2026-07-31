@@ -2,6 +2,11 @@
 
 export const NEWMAN_INSTALL_COMMAND = 'npm install -g newman';
 
+export const NEWMAN_BREW_INSTALL_COMMAND = 'brew install newman';
+
+export const NEWMAN_DOCS_URL =
+  'https://learning.postman.com/docs/collections/using-newman-cli/installing-running-newman/';
+
 export const NEWMAN_MISSING_ERROR =
   'Newman was not found on PATH. Install it with: npm install -g newman';
 
@@ -11,6 +16,20 @@ export const NEWMAN_MISSING_HINTS = [
   'Then restart Clara (GUI apps on macOS may not see a freshly updated shell PATH until relaunch).',
   'Verify in a terminal: newman --version'
 ] as const;
+
+export type NewmanPresence =
+  | { ok: true; version: string }
+  | { ok: false; version: null; error: string };
+
+export type NewmanInstallResult = {
+  ok: boolean;
+  version: string | null;
+  stdout: string;
+  stderr: string;
+  error: string | null;
+  /** True when npm finished but `newman` is still not visible to Clara's PATH. */
+  needsRelaunch: boolean;
+};
 
 export function isNewmanNotFoundError(error: unknown): boolean {
   if (!error || typeof error !== 'object') {

@@ -16,6 +16,7 @@ type CollectionRunPaneProps = {
   running: boolean;
   onRun: () => void;
   onNewRequest?: () => void;
+  onNewmanReady?: (version: string) => void;
   variablesSlot?: ReactNode;
 };
 
@@ -142,6 +143,7 @@ export default function CollectionRunPane({
   running,
   onRun,
   onNewRequest,
+  onNewmanReady,
   variablesSlot
 }: CollectionRunPaneProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
@@ -200,7 +202,7 @@ export default function CollectionRunPane({
       )}
 
       {result && !running && result.missingNewman ? (
-        <NewmanMissingGuide compact />
+        <NewmanMissingGuide compact onReady={onNewmanReady} />
       ) : null}
 
       {result && !running && !result.missingNewman && (

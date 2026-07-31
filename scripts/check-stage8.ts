@@ -121,6 +121,8 @@ assert.equal(multi.executions[1]?.method, 'POST');
 import {
   isNewmanNotFoundError,
   newmanMissingRunView,
+  NEWMAN_DOCS_URL,
+  NEWMAN_INSTALL_COMMAND,
   NEWMAN_MISSING_ERROR
 } from '../src/newman/missing.ts';
 
@@ -133,5 +135,8 @@ assert.equal(missing.ok, false);
 assert.equal(missing.missingNewman, true);
 assert.equal(missing.error, NEWMAN_MISSING_ERROR);
 assert.equal(missing.executions.length, 0);
+
+assert.equal(NEWMAN_INSTALL_COMMAND, 'npm install -g newman');
+assert.match(NEWMAN_DOCS_URL, /^https:\/\/learning\.postman\.com\//);
 
 console.log('stage8 checks passed');
