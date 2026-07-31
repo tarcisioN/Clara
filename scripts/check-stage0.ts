@@ -8,7 +8,8 @@ import {
   countItems,
   createEmptyCollection,
   serializeCollection,
-  suggestCollectionFileName
+  suggestCollectionFileName,
+  trailingNewlineFromRaw
 } from '../src/postman/types.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -30,12 +31,22 @@ writeFileSync(copyPath, raw, 'utf8');
 writeFileSync(copyPath, raw, 'utf8');
 assert.equal(readFileSync(copyPath, 'utf8'), raw);
 
-// edited save format: 2-space + trailing newline
+// edited save format: 2-space; trailing newline follows the original when known
 const serialized = serializeCollection(collection);
 assert.match(serialized, /\n$/);
 assert.ok(serialized.includes('\n  "info"'));
 writeFileSync(copyPath, serialized, 'utf8');
 assert.equal(readFileSync(copyPath, 'utf8'), serialized);
+
+const withoutEof = serializeCollection(collection, { trailingNewline: false });
+assert.equal(withoutEof.endsWith('\n'), false);
+assert.equal(withoutEof + '\n', serialized);
+assert.equal(
+  serializeCollection(collection, { trailingNewline: trailingNewlineFromRaw(raw) }).endsWith(
+    '\n'
+  ),
+  raw.endsWith('\n')
+);
 
 const blank = createEmptyCollection('Demo APIs');
 assert.equal(blank.info?.name, 'Demo APIs');

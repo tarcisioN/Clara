@@ -31,6 +31,7 @@ import {
   assertPostmanCollection,
   countItems,
   serializeCollection,
+  trailingNewlineFromRaw,
   type PostmanCollection,
   type PostmanItem
 } from './postman/types.ts';
@@ -1040,7 +1041,12 @@ export default function App() {
   /** Writes the collection to disk so the edit lands clean instead of pending a Save. */
   const persistCollection = useCallback(
     async (collectionPath: string, collection: PostmanCollection) => {
-      const contents = serializeCollection(collection);
+      const entry = collectionsRef.current.find(
+        (candidate) => candidate.filePath === collectionPath
+      );
+      const contents = serializeCollection(collection, {
+        trailingNewline: entry ? trailingNewlineFromRaw(entry.originalRaw) : true
+      });
       await window.clara.saveCollection(collectionPath, contents);
       setCollections((list) =>
         list.map((candidate) =>
@@ -1437,7 +1443,9 @@ export default function App() {
           saveEnvironment.originalRaw
         );
         const contents = hasDirty
-          ? serializeEnvironment(saveEnvironment.environment)
+          ? serializeEnvironment(saveEnvironment.environment, {
+              trailingNewline: trailingNewlineFromRaw(saveEnvironment.originalRaw)
+            })
           : saveEnvironment.originalRaw;
         await window.clara.saveEnvironment(saveEnvironment.filePath, contents);
         setEnvironments((current) =>
@@ -1459,7 +1467,9 @@ export default function App() {
         uiByPathRef.current[saveCollection.filePath] ?? EMPTY_UI
       );
       const contents = hasDirty
-        ? serializeCollection(saveCollection.collection)
+        ? serializeCollection(saveCollection.collection, {
+            trailingNewline: trailingNewlineFromRaw(saveCollection.originalRaw)
+          })
         : saveCollection.originalRaw;
 
       await window.clara.saveCollection(saveCollection.filePath, contents);
@@ -2616,7 +2626,12 @@ export default function App() {
     environmentPath: string,
     environment: PostmanEnvironment
   ) => {
-    const contents = serializeEnvironment(environment);
+    const entry = environmentsRef.current.find(
+      (candidate) => candidate.filePath === environmentPath
+    );
+    const contents = serializeEnvironment(environment, {
+      trailingNewline: entry ? trailingNewlineFromRaw(entry.originalRaw) : true
+    });
     await window.clara.saveEnvironment(environmentPath, contents);
     setEnvironments((list) =>
       list.map((entry) =>

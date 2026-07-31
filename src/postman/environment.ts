@@ -35,9 +35,18 @@ export function assertPostmanEnvironment(value: unknown): PostmanEnvironment {
   return value;
 }
 
-/** Canonical on-disk format after edits: 2-space indent + trailing newline. */
-export function serializeEnvironment(environment: PostmanEnvironment): string {
-  return `${JSON.stringify(environment, null, 2)}\n`;
+/** Canonical on-disk format after edits: 2-space indent; trailing newline matches the original file when known. */
+export type SerializeEnvironmentOptions = {
+  /** When false, omit the final newline. Defaults to true. */
+  trailingNewline?: boolean;
+};
+
+export function serializeEnvironment(
+  environment: PostmanEnvironment,
+  options?: SerializeEnvironmentOptions
+): string {
+  const body = JSON.stringify(environment, null, 2);
+  return options?.trailingNewline === false ? body : `${body}\n`;
 }
 
 function normalizeValue(value: PostmanEnvironmentValue): {

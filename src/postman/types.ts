@@ -135,9 +135,22 @@ export function countItems(items: PostmanItem[] | undefined): CollectionCounts {
   return { folders, requests };
 }
 
-/** Canonical on-disk format after edits: 2-space indent + trailing newline. */
-export function serializeCollection(collection: PostmanCollection): string {
-  return `${JSON.stringify(collection, null, 2)}\n`;
+/** Canonical on-disk format after edits: 2-space indent; trailing newline matches the original file when known. */
+export type SerializeOptions = {
+  /** When false, omit the final newline. Defaults to true. */
+  trailingNewline?: boolean;
+};
+
+export function trailingNewlineFromRaw(raw: string): boolean {
+  return raw.endsWith('\n');
+}
+
+export function serializeCollection(
+  collection: PostmanCollection,
+  options?: SerializeOptions
+): string {
+  const body = JSON.stringify(collection, null, 2);
+  return options?.trailingNewline === false ? body : `${body}\n`;
 }
 
 /** Empty Postman Collection v2.1 used when creating a new file. */

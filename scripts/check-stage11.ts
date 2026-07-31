@@ -83,6 +83,10 @@ assert.ok(environmentsEqual(edited, sample));
 const serialized = serializeEnvironment(sample);
 assert.ok(serialized.endsWith('\n'));
 assert.equal(serialized, `${JSON.stringify(sample, null, 2)}\n`);
+assert.equal(
+  serializeEnvironment(sample, { trailingNewline: false }),
+  JSON.stringify(sample, null, 2)
+);
 
 // Environment tab keys encode paths portably.
 const envPath = '/Users/dev/my env/a:b/local.postman_environment.json';
