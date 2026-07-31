@@ -1,14 +1,29 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import type { AppCommand } from '../electron/commands.ts';
 import CollectionTree, { type TreeTarget } from './components/CollectionTree.tsx';
 import CollectionRunPane from './components/CollectionRunPane.tsx';
 import ContextMenu, { type ContextMenuItem } from './components/ContextMenu.tsx';
+import EnvironmentPane from './components/EnvironmentPane.tsx';
 import RequestPane from './components/RequestPane.tsx';
 import RequestTabs, { type WorkspaceTabView } from './components/RequestTabs.tsx';
 import ResponsePane from './components/ResponsePane.tsx';
 import VariablesPane from './components/VariablesPane.tsx';
 import { buildSingleRequestCollection } from './newman/buildRunCollection.ts';
 import type { NewmanRunView } from './newman/parseResult.ts';
+import {
+  addEnvironmentValue,
+  assertPostmanEnvironment,
+  getEnvironmentValues,
+  isEnvironmentDirty,
+  removeEnvironmentValue,
+  renameEnvironment,
+  serializeEnvironment,
+  setEnvironmentValueEnabled,
+  setEnvironmentValues,
+  updateEnvironmentValue,
+  type LoadedEnvironment,
+  type PostmanEnvironment
+} from './postman/environment.ts';
 import {
   assertPostmanCollection,
   countItems,
@@ -89,6 +104,13 @@ import {
   type CollectionUiState
 } from './workspace/collectionUi.ts';
 import { computeDirtyState } from './workspace/dirty.ts';
+import {
+  clampSidebarWidth,
+  DEFAULT_SIDEBAR,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH,
+  type SessionSidebar
+} from './workspace/sidebar.ts';
 import './App.css';
 
 type LoadedCollection = {
@@ -99,7 +121,12 @@ type LoadedCollection = {
 };
 
 type CollectionTarget = { kind: 'collection'; collectionPath: string };
-type ContextTarget = TreeTarget | CollectionTarget | { kind: 'tab'; tab: WorkspaceTab };
+type EnvironmentTarget = { kind: 'environment'; environmentPath: string };
+type ContextTarget =
+  | TreeTarget
+  | CollectionTarget
+  | EnvironmentTarget
+  | { kind: 'tab'; tab: WorkspaceTab };
 
 type Status = { kind: 'idle' } | { kind: 'ok'; message: string } | { kind: 'error'; message: string };
 
@@ -123,6 +150,16 @@ function parseCollection(raw: string): PostmanCollection {
   return assertPostmanCollection(parsed);
 }
 
+function parseEnvironment(raw: string): PostmanEnvironment {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('File is not valid JSON');
+  }
+  return assertPostmanEnvironment(parsed);
+}
+
 /** Keep only the tabs that belong to `collectionPath` and still point at a live item. */
 function filterValidTabs(
   collectionPath: string,
@@ -130,7 +167,7 @@ function filterValidTabs(
   tabs: WorkspaceTab[]
 ): WorkspaceTab[] {
   return tabs.filter((tab) => {
-    if (tab.collectionPath !== collectionPath) {
+    if (tab.kind === 'environment' || tab.collectionPath !== collectionPath) {
       return false;
     }
     if (tab.kind === 'collection') {
@@ -149,10 +186,13 @@ function filterValidTabs(
 
 export default function App() {
   const [collections, setCollections] = useState<LoadedCollection[]>([]);
+  const [environments, setEnvironments] = useState<LoadedEnvironment[]>([]);
   const [uiByPath, setUiByPath] = useState<Record<string, CollectionUiState>>({});
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [openTabs, setOpenTabs] = useState<WorkspaceTab[]>([]);
   const [activeTab, setActiveTab] = useState<WorkspaceTab | null>(null);
+  const [activeEnvironmentPath, setActiveEnvironmentPath] = useState<string | null>(null);
+  const [sidebar, setSidebar] = useState<SessionSidebar>({ ...DEFAULT_SIDEBAR });
   const [sessionHydrated, setSessionHydrated] = useState(false);
   const [sessionHome, setSessionHome] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -166,24 +206,45 @@ export default function App() {
   } | null>(null);
 
   const collectionsRef = useRef(collections);
+  const environmentsRef = useRef(environments);
   const uiByPathRef = useRef(uiByPath);
   const openTabsRef = useRef(openTabs);
   const activeTabRef = useRef(activeTab);
+  const activeEnvironmentPathRef = useRef(activeEnvironmentPath);
+  const sidebarRef = useRef(sidebar);
   const sendingRef = useRef(sending);
   const runningKeyRef = useRef(runningKey);
+  const sidebarResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
   collectionsRef.current = collections;
+  environmentsRef.current = environments;
   uiByPathRef.current = uiByPath;
   openTabsRef.current = openTabs;
   activeTabRef.current = activeTab;
+  activeEnvironmentPathRef.current = activeEnvironmentPath;
+  sidebarRef.current = sidebar;
   sendingRef.current = sending;
   runningKeyRef.current = runningKey;
 
-  const anyDirty = collections.some((entry) =>
-    isCollectionDirty(uiByPath[entry.filePath] ?? EMPTY_UI)
-  );
+  const hasResources = collections.length > 0 || environments.length > 0;
+
+  const anyDirty =
+    collections.some((entry) => isCollectionDirty(uiByPath[entry.filePath] ?? EMPTY_UI)) ||
+    environments.some((entry) => isEnvironmentDirty(entry.environment, entry.originalRaw));
 
   const activeCollection =
-    collections.find((entry) => entry.filePath === activeTab?.collectionPath) ?? null;
+    activeTab && activeTab.kind !== 'environment'
+      ? (collections.find((entry) => entry.filePath === activeTab.collectionPath) ?? null)
+      : null;
+
+  const activeEnvironment =
+    activeTab?.kind === 'environment'
+      ? (environments.find((entry) => entry.filePath === activeTab.environmentPath) ?? null)
+      : null;
+
+  const selectedActiveEnvironment =
+    activeEnvironmentPath != null
+      ? (environments.find((entry) => entry.filePath === activeEnvironmentPath) ?? null)
+      : null;
 
   const countsByPath = useMemo(() => {
     const map: Record<string, ReturnType<typeof countItems>> = {};
@@ -202,6 +263,23 @@ export default function App() {
 
   const tabs = useMemo<WorkspaceTabView[]>(() => {
     return openTabs.flatMap((tab): WorkspaceTabView[] => {
+      if (tab.kind === 'environment') {
+        const entry = environments.find(
+          (candidate) => candidate.filePath === tab.environmentPath
+        );
+        if (!entry) {
+          return [];
+        }
+        return [
+          {
+            tab,
+            name: entry.environment.name?.trim() || 'Environment',
+            badge: 'ENV',
+            badgeClass: 'badge-environment',
+            dirty: isEnvironmentDirty(entry.environment, entry.originalRaw)
+          }
+        ];
+      }
       const entry = collections.find((candidate) => candidate.filePath === tab.collectionPath);
       if (!entry) {
         return [];
@@ -250,7 +328,7 @@ export default function App() {
         }
       ];
     });
-  }, [collections, uiByPath, openTabs]);
+  }, [collections, environments, uiByPath, openTabs]);
 
   const activeRequestPath = activeTab?.kind === 'request' ? activeTab.path : null;
 
@@ -320,6 +398,18 @@ export default function App() {
       current.some((entry) => sameTab(entry, tab)) ? current : [...current, tab]
     );
     setActiveTab(tab);
+  }, []);
+
+  const activeEnvironmentJson = useCallback((): string | undefined => {
+    const path = activeEnvironmentPathRef.current;
+    if (!path) {
+      return undefined;
+    }
+    const entry = environmentsRef.current.find((candidate) => candidate.filePath === path);
+    if (!entry) {
+      return undefined;
+    }
+    return serializeEnvironment(entry.environment);
   }, []);
 
   const openCollection = useCallback(async () => {
@@ -396,6 +486,105 @@ export default function App() {
     }
   }, [openTab]);
 
+  const openEnvironment = useCallback(async () => {
+    setStatus({ kind: 'idle' });
+    try {
+      const result = await window.clara.openEnvironment();
+      if (result.canceled || result.files.length === 0) {
+        return;
+      }
+
+      const opened: string[] = [];
+      const alreadyOpen: string[] = [];
+      const failed: string[] = [];
+      let focusPath: string | null = null;
+
+      for (const file of result.files) {
+        const existing = environmentsRef.current.find(
+          (entry) => entry.filePath === file.filePath
+        );
+        if (existing) {
+          alreadyOpen.push(existing.environment.name ?? fileName(existing.filePath));
+          focusPath = existing.filePath;
+          continue;
+        }
+
+        try {
+          const environment = parseEnvironment(file.raw);
+          setEnvironments((list) => [
+            ...list,
+            { filePath: file.filePath, originalRaw: file.raw, environment }
+          ]);
+          openTab({ kind: 'environment', environmentPath: file.filePath });
+          if (activeEnvironmentPathRef.current == null) {
+            setActiveEnvironmentPath(file.filePath);
+          }
+          opened.push(environment.name ?? fileName(file.filePath));
+          focusPath = file.filePath;
+        } catch (error) {
+          failed.push(`${fileName(file.filePath)}: ${errorMessage(error)}`);
+        }
+      }
+
+      if (focusPath && opened.length === 0) {
+        openTab({ kind: 'environment', environmentPath: focusPath });
+      }
+
+      if (failed.length > 0 && opened.length === 0 && alreadyOpen.length === 0) {
+        setStatus({ kind: 'error', message: failed.join(' · ') });
+        return;
+      }
+
+      const parts: string[] = [];
+      if (opened.length === 1) {
+        parts.push(`Opened ${opened[0]}`);
+      } else if (opened.length > 1) {
+        parts.push(`Opened ${opened.length} environments`);
+      }
+      if (alreadyOpen.length === 1) {
+        parts.push(`${alreadyOpen[0]} already open`);
+      } else if (alreadyOpen.length > 1) {
+        parts.push(`${alreadyOpen.length} already open`);
+      }
+      if (failed.length > 0) {
+        parts.push(`${failed.length} failed`);
+      }
+
+      setStatus({
+        kind: failed.length > 0 && opened.length === 0 ? 'error' : 'ok',
+        message: parts.join(' · ') || 'Ready'
+      });
+    } catch (error) {
+      setStatus({ kind: 'error', message: errorMessage(error) });
+    }
+  }, [openTab]);
+
+  const closeEnvironment = useCallback((environmentPath: string) => {
+    const entry = environmentsRef.current.find(
+      (candidate) => candidate.filePath === environmentPath
+    );
+    if (entry && isEnvironmentDirty(entry.environment, entry.originalRaw)) {
+      if (!window.confirm('This environment has unsaved changes. Close anyway?')) {
+        return;
+      }
+    }
+
+    setEnvironments((list) => list.filter((candidate) => candidate.filePath !== environmentPath));
+    setActiveEnvironmentPath((current) => (current === environmentPath ? null : current));
+
+    const remaining = openTabsRef.current.filter(
+      (tab) => !(tab.kind === 'environment' && tab.environmentPath === environmentPath)
+    );
+    setOpenTabs(remaining);
+    setActiveTab((active) =>
+      active?.kind === 'environment' && active.environmentPath === environmentPath
+        ? (remaining[0] ?? null)
+        : active
+    );
+    setContextMenu(null);
+    setStatus({ kind: 'ok', message: `Closed ${fileName(environmentPath)}` });
+  }, []);
+
   const closeCollection = useCallback((collectionPath: string) => {
     const ui = uiByPathRef.current[collectionPath];
     if (ui && isCollectionDirty(ui)) {
@@ -412,11 +601,15 @@ export default function App() {
     });
 
     const remaining = openTabsRef.current.filter(
-      (tab) => tab.collectionPath !== collectionPath
+      (tab) => tab.kind === 'environment' || tab.collectionPath !== collectionPath
     );
     setOpenTabs(remaining);
     setActiveTab((active) =>
-      active && active.collectionPath === collectionPath ? (remaining[0] ?? null) : active
+      active &&
+      active.kind !== 'environment' &&
+      active.collectionPath === collectionPath
+        ? (remaining[0] ?? null)
+        : active
     );
 
     const runPrefix = requestRunKey(collectionPath, '');
@@ -425,52 +618,110 @@ export default function App() {
     );
     setScopeRuns((runs) =>
       Object.fromEntries(
-        Object.entries(runs).filter(
-          ([key]) => parseTabKey(key)?.collectionPath !== collectionPath
-        )
+        Object.entries(runs).filter(([key]) => {
+          const tab = parseTabKey(key);
+          return !(tab && tab.kind !== 'environment' && tab.collectionPath === collectionPath);
+        })
       )
     );
     setContextMenu(null);
     setStatus({ kind: 'ok', message: `Closed ${fileName(collectionPath)}` });
   }, []);
 
-  /** Save the collection behind the active tab; fall back to the first dirty one. */
-  const saveCollection = useCallback(async () => {
-    const list = collectionsRef.current;
-    if (list.length === 0) {
+  /** Save the resource behind the active tab; fall back to the first dirty one. */
+  const saveActiveResource = useCallback(async () => {
+    const collectionsList = collectionsRef.current;
+    const environmentsList = environmentsRef.current;
+    if (collectionsList.length === 0 && environmentsList.length === 0) {
       return;
     }
-    const activePath = activeTabRef.current?.collectionPath;
-    const target =
-      (activePath ? list.find((entry) => entry.filePath === activePath) : undefined) ??
-      list.find((entry) =>
+
+    const active = activeTabRef.current;
+    let saveEnvironment: LoadedEnvironment | undefined;
+    let saveCollection: LoadedCollection | undefined;
+
+    if (active?.kind === 'environment') {
+      saveEnvironment = environmentsList.find(
+        (entry) => entry.filePath === active.environmentPath
+      );
+    } else if (active) {
+      saveCollection = collectionsList.find(
+        (entry) => entry.filePath === active.collectionPath
+      );
+    }
+
+    if (!saveEnvironment && !saveCollection) {
+      saveEnvironment = environmentsList.find((entry) =>
+        isEnvironmentDirty(entry.environment, entry.originalRaw)
+      );
+      saveCollection = collectionsList.find((entry) =>
         isCollectionDirty(uiByPathRef.current[entry.filePath] ?? EMPTY_UI)
-      ) ??
-      list[0];
-    if (!target) {
-      return;
+      );
+    }
+
+    if (!saveEnvironment && !saveCollection) {
+      saveEnvironment = environmentsList[0];
+      saveCollection = collectionsList[0];
+    }
+
+    // Prefer the kind matching the active tab when both somehow resolve.
+    if (active?.kind === 'environment' && saveEnvironment) {
+      saveCollection = undefined;
+    } else if (active && active.kind !== 'environment' && saveCollection) {
+      saveEnvironment = undefined;
+    } else if (saveEnvironment && saveCollection) {
+      // Active tab unclear — prefer first dirty; environments checked first above when no active match.
+      saveCollection = undefined;
     }
 
     setStatus({ kind: 'idle' });
     try {
-      const hasDirty = isCollectionDirty(uiByPathRef.current[target.filePath] ?? EMPTY_UI);
-      const contents = hasDirty
-        ? serializeCollection(target.collection)
-        : target.originalRaw;
+      if (saveEnvironment) {
+        const hasDirty = isEnvironmentDirty(
+          saveEnvironment.environment,
+          saveEnvironment.originalRaw
+        );
+        const contents = hasDirty
+          ? serializeEnvironment(saveEnvironment.environment)
+          : saveEnvironment.originalRaw;
+        await window.clara.saveEnvironment(saveEnvironment.filePath, contents);
+        setEnvironments((current) =>
+          current.map((entry) =>
+            entry.filePath === saveEnvironment.filePath
+              ? { ...entry, originalRaw: contents }
+              : entry
+          )
+        );
+        setStatus({ kind: 'ok', message: `Saved ${saveEnvironment.filePath}` });
+        return;
+      }
 
-      await window.clara.saveCollection(target.filePath, contents);
+      if (!saveCollection) {
+        return;
+      }
+
+      const hasDirty = isCollectionDirty(
+        uiByPathRef.current[saveCollection.filePath] ?? EMPTY_UI
+      );
+      const contents = hasDirty
+        ? serializeCollection(saveCollection.collection)
+        : saveCollection.originalRaw;
+
+      await window.clara.saveCollection(saveCollection.filePath, contents);
       setCollections((current) =>
         current.map((entry) =>
-          entry.filePath === target.filePath ? { ...entry, originalRaw: contents } : entry
+          entry.filePath === saveCollection.filePath
+            ? { ...entry, originalRaw: contents }
+            : entry
         )
       );
       setUiByPath((current) => ({
         ...current,
-        [target.filePath]: clearCollectionDirty(
-          current[target.filePath] ?? createCollectionUiState()
+        [saveCollection.filePath]: clearCollectionDirty(
+          current[saveCollection.filePath] ?? createCollectionUiState()
         )
       }));
-      setStatus({ kind: 'ok', message: `Saved ${target.filePath}` });
+      setStatus({ kind: 'ok', message: `Saved ${saveCollection.filePath}` });
     } catch (error) {
       setStatus({ kind: 'error', message: errorMessage(error) });
     }
@@ -490,7 +741,10 @@ export default function App() {
     setStatus({ kind: 'idle' });
     try {
       const runCollection = buildSingleRequestCollection(entry.collection, path);
-      const result = await window.clara.runNewman(serializeCollection(runCollection));
+      const environmentJson = activeEnvironmentJson();
+      const result = await window.clara.runNewman(serializeCollection(runCollection), {
+        ...(environmentJson ? { environmentJson } : {})
+      });
       setRequestRuns((runs) => ({ ...runs, [requestRunKey(collectionPath, path)]: result }));
       const code = result.execution?.code;
       const unsaved = uiByPathRef.current[collectionPath]?.dirtyPaths.has(path) ?? false;
@@ -508,7 +762,7 @@ export default function App() {
       setSending(false);
       setRunningKey(null);
     }
-  }, []);
+  }, [activeEnvironmentJson]);
 
   const sendRequest = useCallback(async () => {
     const tab = activeTabRef.current;
@@ -519,13 +773,13 @@ export default function App() {
   }, [runSingleRequest]);
 
   const runScope = useCallback(async (tab: WorkspaceTab) => {
+    if (tab.kind !== 'collection' && tab.kind !== 'folder') {
+      return;
+    }
     const entry = collectionsRef.current.find(
       (candidate) => candidate.filePath === tab.collectionPath
     );
     if (!entry || runningKeyRef.current) {
-      return;
-    }
-    if (tab.kind !== 'collection' && tab.kind !== 'folder') {
       return;
     }
 
@@ -550,10 +804,11 @@ export default function App() {
     setActiveTab(tab);
     setStatus({ kind: 'idle' });
     try {
-      const result = await window.clara.runNewman(
-        serializeCollection(entry.collection),
-        folderName ? { folder: folderName } : undefined
-      );
+      const environmentJson = activeEnvironmentJson();
+      const result = await window.clara.runNewman(serializeCollection(entry.collection), {
+        ...(folderName ? { folder: folderName } : {}),
+        ...(environmentJson ? { environmentJson } : {})
+      });
       setScopeRuns((runs) => ({ ...runs, [key]: result }));
       const total = result.executions.length;
       const failed = result.failures.length;
@@ -573,7 +828,7 @@ export default function App() {
     } finally {
       setRunningKey(null);
     }
-  }, []);
+  }, [activeEnvironmentJson]);
 
   const openRequestTab = useCallback(
     (collectionPath: string, path: ItemPath) => {
@@ -615,6 +870,12 @@ export default function App() {
   );
 
   const isTabDirty = useCallback((tab: WorkspaceTab): boolean => {
+    if (tab.kind === 'environment') {
+      const entry = environmentsRef.current.find(
+        (candidate) => candidate.filePath === tab.environmentPath
+      );
+      return entry ? isEnvironmentDirty(entry.environment, entry.originalRaw) : false;
+    }
     const ui = uiByPathRef.current[tab.collectionPath];
     if (!ui) {
       return false;
@@ -739,11 +1000,10 @@ export default function App() {
           return;
         }
         setSessionHome(home);
+        setSidebar(session.sidebar ?? { ...DEFAULT_SIDEBAR });
 
         const entries = session.collections ?? [];
-        if (entries.length === 0) {
-          return;
-        }
+        const envPaths = session.openedEnvironments ?? [];
 
         const restored: LoadedCollection[] = [];
         const restoredUi: Record<string, CollectionUiState> = {};
@@ -772,17 +1032,42 @@ export default function App() {
           }
         }
 
+        const restoredEnvs: LoadedEnvironment[] = [];
+        const envFailures: string[] = [];
+        for (const envPath of envPaths) {
+          try {
+            const result = await window.clara.readEnvironment(envPath);
+            if (cancelled) {
+              return;
+            }
+            const environment = parseEnvironment(result.raw);
+            restoredEnvs.push({
+              filePath: result.filePath,
+              originalRaw: result.raw,
+              environment
+            });
+          } catch (error) {
+            envFailures.push(`${fileName(envPath)}: ${errorMessage(error)}`);
+          }
+        }
+
         if (cancelled) {
           return;
         }
 
+        const openEnvPaths = new Set(restoredEnvs.map((entry) => entry.filePath));
         const sessionTabs = (session.openTabs ?? []).map(fromSessionTab);
-        const validKeys = new Set(
+        const validCollectionKeys = new Set(
           restored.flatMap((entry) =>
             filterValidTabs(entry.filePath, entry.collection.item, sessionTabs).map(tabKey)
           )
         );
-        const restoredTabs = sessionTabs.filter((tab) => validKeys.has(tabKey(tab)));
+        const restoredTabs = sessionTabs.filter((tab) => {
+          if (tab.kind === 'environment') {
+            return openEnvPaths.has(tab.environmentPath);
+          }
+          return validCollectionKeys.has(tabKey(tab));
+        });
         const restoredActive =
           session.activeTabKey != null ? parseTabKey(session.activeTabKey) : null;
         const active =
@@ -790,25 +1075,40 @@ export default function App() {
             ? restoredActive
             : (restoredTabs[0] ?? null);
 
+        const restoredActiveEnv =
+          session.activeEnvironmentPath &&
+          openEnvPaths.has(session.activeEnvironmentPath)
+            ? session.activeEnvironmentPath
+            : null;
+
         setCollections(restored);
+        setEnvironments(restoredEnvs);
         setUiByPath(restoredUi);
         setOpenTabs(restoredTabs);
         setActiveTab(active);
+        setActiveEnvironmentPath(restoredActiveEnv);
 
-        if (failures.length > 0) {
+        const allFailures = [...failures, ...envFailures];
+        if (allFailures.length > 0) {
           setStatus({
             kind: 'error',
-            message: `Could not restore ${failures.length} collection${
-              failures.length === 1 ? '' : 's'
-            }: ${failures.join('; ')}`
+            message: `Could not restore ${allFailures.length} file${
+              allFailures.length === 1 ? '' : 's'
+            }: ${allFailures.join('; ')}`
           });
-        } else {
-          setStatus({
-            kind: 'ok',
-            message: `Restored ${restored.length} collection${
-              restored.length === 1 ? '' : 's'
-            }`
-          });
+        } else if (restored.length > 0 || restoredEnvs.length > 0) {
+          const parts: string[] = [];
+          if (restored.length > 0) {
+            parts.push(
+              `${restored.length} collection${restored.length === 1 ? '' : 's'}`
+            );
+          }
+          if (restoredEnvs.length > 0) {
+            parts.push(
+              `${restoredEnvs.length} environment${restoredEnvs.length === 1 ? '' : 's'}`
+            );
+          }
+          setStatus({ kind: 'ok', message: `Restored ${parts.join(' · ')}` });
         }
       } catch (error) {
         if (!cancelled) {
@@ -827,6 +1127,7 @@ export default function App() {
   }, []);
 
   const collectionPathsKey = collections.map((entry) => entry.filePath).join('\u0000');
+  const environmentPathsKey = environments.map((entry) => entry.filePath).join('\u0000');
 
   useEffect(() => {
     if (!sessionHydrated) {
@@ -835,7 +1136,7 @@ export default function App() {
 
     const handle = window.setTimeout(() => {
       void window.clara.saveSession({
-        version: 3,
+        version: 4,
         collections: collectionsRef.current.map((entry) => {
           const ui = uiByPathRef.current[entry.filePath] ?? EMPTY_UI;
           return {
@@ -845,17 +1146,36 @@ export default function App() {
           };
         }),
         openTabs: openTabs.map(toSessionTab),
-        activeTabKey: activeTab ? tabKey(activeTab) : null
+        activeTabKey: activeTab ? tabKey(activeTab) : null,
+        openedEnvironments: environmentsRef.current.map((entry) => entry.filePath),
+        activeEnvironmentPath: activeEnvironmentPathRef.current,
+        sidebar: sidebarRef.current
       });
     }, 250);
 
     return () => window.clearTimeout(handle);
-  }, [sessionHydrated, collectionPathsKey, uiByPath, openTabs, activeTab]);
+  }, [
+    sessionHydrated,
+    collectionPathsKey,
+    environmentPathsKey,
+    uiByPath,
+    openTabs,
+    activeTab,
+    activeEnvironmentPath,
+    sidebar
+  ]);
 
   const createNewRequestNear = useCallback(
     (tab: WorkspaceTab) => {
+      const collectionPath =
+        tab.kind === 'environment'
+          ? collectionsRef.current[0]?.filePath
+          : tab.collectionPath;
+      if (!collectionPath) {
+        return;
+      }
       const entry = collectionsRef.current.find(
-        (candidate) => candidate.filePath === tab.collectionPath
+        (candidate) => candidate.filePath === collectionPath
       );
       if (!entry) {
         return;
@@ -899,8 +1219,11 @@ export default function App() {
         case 'open':
           void openCollection();
           break;
+        case 'open-environment':
+          void openEnvironment();
+          break;
         case 'save':
-          void saveCollection();
+          void saveActiveResource();
           break;
         case 'send':
           void sendRequest();
@@ -942,7 +1265,8 @@ export default function App() {
     });
   }, [
     openCollection,
-    saveCollection,
+    openEnvironment,
+    saveActiveResource,
     sendRequest,
     closeTab,
     createNewRequestNear,
@@ -969,7 +1293,7 @@ export default function App() {
 
   const remapTabsAfterDelete = (collectionPath: string, deleted: ItemPath) => {
     const remap = (tab: WorkspaceTab): WorkspaceTab | null => {
-      if (tab.collectionPath !== collectionPath || tab.kind === 'collection') {
+      if (tab.kind === 'environment' || tab.collectionPath !== collectionPath || tab.kind === 'collection') {
         return tab;
       }
       const nextPath = remapPathAfterDelete(tab.path, deleted);
@@ -989,7 +1313,7 @@ export default function App() {
     created: ItemPath
   ) => {
     const remap = (tab: WorkspaceTab): WorkspaceTab => {
-      if (tab.collectionPath !== collectionPath || tab.kind === 'collection') {
+      if (tab.kind === 'environment' || tab.collectionPath !== collectionPath || tab.kind === 'collection') {
         return tab;
       }
       return { ...tab, path: remapPathAfterDuplicate(tab.path, original, created) };
@@ -1113,7 +1437,7 @@ export default function App() {
         {
           id: 'duplicate-tab',
           label: 'Duplicate Tab',
-          disabled: target.tab.kind === 'collection'
+          disabled: target.tab.kind === 'collection' || target.tab.kind === 'environment'
         },
         {
           id: 'close-tab',
@@ -1136,6 +1460,17 @@ export default function App() {
         }
       ];
     }
+    if (target.kind === 'environment') {
+      const isActive = activeEnvironmentPath === target.environmentPath;
+      return [
+        {
+          id: isActive ? 'clear-active-environment' : 'set-active-environment',
+          label: isActive ? 'Clear active' : 'Set active'
+        },
+        { id: 'rename', label: 'Rename' },
+        { id: 'delete', label: 'Close', danger: true, separatorBefore: true }
+      ];
+    }
     if (target.kind === 'collection') {
       return [
         { id: 'run', label: 'Run collection' },
@@ -1154,8 +1489,14 @@ export default function App() {
   })();
 
   const revealInSidebar = (tab: WorkspaceTab) => {
+    if (tab.kind === 'environment') {
+      setSidebar((current) => ({ ...current, environmentsExpanded: true }));
+      setActiveTab(tab);
+      return;
+    }
     if (tab.kind === 'collection') {
       updateUi(tab.collectionPath, (ui) => ({ ...ui, collectionExpanded: true }));
+      setSidebar((current) => ({ ...current, collectionsExpanded: true }));
       setActiveTab(tab);
       return;
     }
@@ -1170,7 +1511,32 @@ export default function App() {
       }
       return { ...ui, expanded, collectionExpanded: true };
     });
+    setSidebar((current) => ({ ...current, collectionsExpanded: true }));
     setActiveTab(tab);
+  };
+
+  const applyEnvironmentUpdate = (
+    environmentPath: string,
+    environment: PostmanEnvironment
+  ) => {
+    setEnvironments((list) =>
+      list.map((entry) =>
+        entry.filePath === environmentPath ? { ...entry, environment } : entry
+      )
+    );
+  };
+
+  const renameEnvironmentTarget = (environmentPath: string) => {
+    const entry = environments.find((candidate) => candidate.filePath === environmentPath);
+    if (!entry) {
+      return;
+    }
+    const current = entry.environment.name ?? '';
+    const next = window.prompt('Rename environment', current);
+    if (next == null || next.trim() === '' || next === current) {
+      return;
+    }
+    applyEnvironmentUpdate(environmentPath, renameEnvironment(entry.environment, next.trim()));
   };
 
   const handleContextAction = (id: string) => {
@@ -1181,7 +1547,11 @@ export default function App() {
     if (target.kind === 'tab') {
       if (id === 'new-request') {
         createNewRequestNear(target.tab);
-      } else if (id === 'duplicate-tab' && target.tab.kind !== 'collection') {
+      } else if (
+        id === 'duplicate-tab' &&
+        target.tab.kind !== 'collection' &&
+        target.tab.kind !== 'environment'
+      ) {
         duplicateTarget(target.tab);
       } else if (id === 'close-tab') {
         closeTab(target.tab);
@@ -1195,6 +1565,18 @@ export default function App() {
         closeAllTabs({ force: true });
       } else if (id === 'reveal-in-sidebar') {
         revealInSidebar(target.tab);
+      }
+      return;
+    }
+    if (target.kind === 'environment') {
+      if (id === 'set-active-environment') {
+        setActiveEnvironmentPath(target.environmentPath);
+      } else if (id === 'clear-active-environment') {
+        setActiveEnvironmentPath(null);
+      } else if (id === 'rename') {
+        renameEnvironmentTarget(target.environmentPath);
+      } else if (id === 'delete') {
+        closeEnvironment(target.environmentPath);
       }
       return;
     }
@@ -1265,14 +1647,74 @@ export default function App() {
   };
 
   const titlebarName =
-    activeCollection?.collection.info?.name ??
-    (collections.length === 0
+    activeEnvironment?.environment.name?.trim() ||
+    activeCollection?.collection.info?.name ||
+    (collections.length === 0 && environments.length === 0
       ? 'Postman collection editor'
-      : collections.length === 1
+      : collections.length === 1 && environments.length === 0
         ? (collections[0]?.collection.info?.name ?? 'Untitled collection')
-        : `${collections.length} collections`);
+        : environments.length === 1 && collections.length === 0
+          ? (environments[0]?.environment.name ?? 'Untitled environment')
+          : [
+              collections.length > 0
+                ? `${collections.length} collection${collections.length === 1 ? '' : 's'}`
+                : null,
+              environments.length > 0
+                ? `${environments.length} environment${environments.length === 1 ? '' : 's'}`
+                : null
+            ]
+              .filter(Boolean)
+              .join(' · '));
 
   const statusbarCollection = activeCollection ?? collections[0] ?? null;
+  const statusbarEnvironment =
+    activeEnvironment ??
+    selectedActiveEnvironment ??
+    environments[0] ??
+    null;
+
+  const onSidebarResizePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const handle = event.currentTarget;
+    handle.setPointerCapture(event.pointerId);
+    sidebarResizeRef.current = {
+      startX: event.clientX,
+      startWidth: sidebar.width
+    };
+  };
+
+  const onSidebarResizePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const drag = sidebarResizeRef.current;
+    if (!drag) {
+      return;
+    }
+    const next = clampSidebarWidth(drag.startWidth + (event.clientX - drag.startX));
+    setSidebar((current) =>
+      current.width === next ? current : { ...current, width: next }
+    );
+  };
+
+  const onSidebarResizePointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    if (sidebarResizeRef.current) {
+      sidebarResizeRef.current = null;
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      } catch {
+        // ignore if already released
+      }
+    }
+  };
+
+  const onSidebarResizeKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      const delta = event.key === 'ArrowRight' ? 10 : -10;
+      setSidebar((current) => ({
+        ...current,
+        width: clampSidebarWidth(current.width + delta)
+      }));
+    }
+  };
 
   return (
     <div className={`app ${navigator.userAgent.includes('Mac') ? 'platform-mac' : ''}`}>
@@ -1293,8 +1735,8 @@ export default function App() {
           <button
             type="button"
             className={anyDirty ? 'save-dirty' : ''}
-            disabled={collections.length === 0}
-            onClick={() => void saveCollection()}
+            disabled={!hasResources}
+            onClick={() => void saveActiveResource()}
             title="⌘S / Ctrl+S"
           >
             Save
@@ -1302,138 +1744,301 @@ export default function App() {
         </div>
       </header>
 
-      {collections.length === 0 && (
+      {!hasResources && (
         <main className="welcome">
           <div className="welcome-mark" aria-hidden>
             C
           </div>
           <h1>Open a Postman collection</h1>
           <p>Edit the JSON in your repository directly. No import or export cycle.</p>
-          <button type="button" className="primary" onClick={() => void openCollection()}>
-            Open collection
-          </button>
+          <div className="welcome-actions">
+            <button type="button" className="primary" onClick={() => void openCollection()}>
+              Open collection
+            </button>
+            <button type="button" onClick={() => void openEnvironment()}>
+              Open environment
+            </button>
+          </div>
           {sessionHome ? (
             <p className="welcome-session">Session data: {sessionHome}</p>
           ) : null}
         </main>
       )}
 
-      {collections.length > 0 && (
+      {hasResources && (
         <div className="workspace">
-          <aside className="sidebar">
-            <div className="sidebar-section-title">
-              <span className="sidebar-chevron" aria-hidden>
-                ⌄
-              </span>
-              <strong>Collections</strong>
-              <span className="sidebar-count">{totalRequests}</span>
-              <button
-                type="button"
-                className="sidebar-add"
-                aria-label="Open collection"
-                title="Open collection"
-                onClick={() => void openCollection()}
-              >
-                +
-              </button>
+          <aside
+            className="sidebar"
+            style={{ width: sidebar.width, flexBasis: sidebar.width }}
+          >
+            <div className="sidebar-section">
+              <div className="sidebar-section-title">
+                <button
+                  type="button"
+                  className="sidebar-section-toggle"
+                  aria-expanded={sidebar.collectionsExpanded}
+                  aria-label={
+                    sidebar.collectionsExpanded
+                      ? 'Collapse collections'
+                      : 'Expand collections'
+                  }
+                  onClick={() =>
+                    setSidebar((current) => ({
+                      ...current,
+                      collectionsExpanded: !current.collectionsExpanded
+                    }))
+                  }
+                >
+                  <span className="sidebar-chevron" aria-hidden>
+                    {sidebar.collectionsExpanded ? '▾' : '▸'}
+                  </span>
+                  <strong>Collections</strong>
+                  <span className="sidebar-count">{totalRequests}</span>
+                </button>
+                <button
+                  type="button"
+                  className="sidebar-add"
+                  aria-label="Open collection"
+                  title="Open collection"
+                  onClick={() => void openCollection()}
+                >
+                  +
+                </button>
+              </div>
+
+              {sidebar.collectionsExpanded
+                ? collections.map((entry) => {
+                    const ui = uiByPath[entry.filePath] ?? EMPTY_UI;
+                    const counts = countsByPath[entry.filePath] ?? {
+                      folders: 0,
+                      requests: 0
+                    };
+                    const target: CollectionTarget = {
+                      kind: 'collection',
+                      collectionPath: entry.filePath
+                    };
+                    const headingSelected =
+                      activeTab?.kind === 'collection' &&
+                      activeTab.collectionPath === entry.filePath;
+                    const treeSelectedPath =
+                      activeTab &&
+                      activeTab.kind !== 'environment' &&
+                      activeTab.collectionPath === entry.filePath &&
+                      (activeTab.kind === 'request' || activeTab.kind === 'folder')
+                        ? activeTab.path
+                        : null;
+
+                    return (
+                      <div className="sidebar-collection" key={entry.filePath}>
+                        <div
+                          className={`collection-heading ${headingSelected ? 'selected' : ''} ${
+                            ui.collectionExpanded ? 'expanded' : 'collapsed'
+                          }`}
+                          onContextMenu={(event) => openContextMenu(event, target)}
+                        >
+                          <button
+                            type="button"
+                            className="collection-chevron-button"
+                            aria-label={
+                              ui.collectionExpanded
+                                ? 'Collapse collection'
+                                : 'Expand collection'
+                            }
+                            aria-expanded={ui.collectionExpanded}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              updateUi(entry.filePath, (current) => ({
+                                ...current,
+                                collectionExpanded: !current.collectionExpanded
+                              }));
+                            }}
+                          >
+                            <span className="collection-chevron" aria-hidden>
+                              {ui.collectionExpanded ? '▾' : '▸'}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            className="collection-heading-select"
+                            onClick={() =>
+                              openTab({
+                                kind: 'collection',
+                                collectionPath: entry.filePath
+                              })
+                            }
+                            title={entry.filePath}
+                          >
+                            <span className="collection-icon" aria-hidden>
+                              ◇
+                            </span>
+                            <div>
+                              <strong>
+                                {entry.collection.info?.name ?? 'Untitled collection'}
+                              </strong>
+                              <span>
+                                {counts.folders} folders · {counts.requests} requests
+                              </span>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            className="tree-more collection-more"
+                            aria-label="Collection actions"
+                            title="Collection actions"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              openContextMenu(event, target);
+                            }}
+                          >
+                            ···
+                          </button>
+                        </div>
+                        {ui.collectionExpanded ? (
+                          <CollectionTree
+                            collectionPath={entry.filePath}
+                            items={entry.collection.item}
+                            expanded={ui.expanded}
+                            selectedPath={treeSelectedPath}
+                            onToggleFolder={(path) => toggleFolder(entry.filePath, path)}
+                            onSelectFolder={(path) => openFolderTab(entry.filePath, path)}
+                            onSelectRequest={(path) => openRequestTab(entry.filePath, path)}
+                            onContextMenu={(event, treeTarget) =>
+                              openContextMenu(event, treeTarget)
+                            }
+                          />
+                        ) : null}
+                      </div>
+                    );
+                  })
+                : null}
             </div>
 
-            {collections.map((entry) => {
-              const ui = uiByPath[entry.filePath] ?? EMPTY_UI;
-              const counts = countsByPath[entry.filePath] ?? { folders: 0, requests: 0 };
-              const target: CollectionTarget = {
-                kind: 'collection',
-                collectionPath: entry.filePath
-              };
-              const headingSelected =
-                activeTab?.kind === 'collection' &&
-                activeTab.collectionPath === entry.filePath;
-              const treeSelectedPath =
-                activeTab &&
-                activeTab.collectionPath === entry.filePath &&
-                (activeTab.kind === 'request' || activeTab.kind === 'folder')
-                  ? activeTab.path
-                  : null;
+            <div className="sidebar-section">
+              <div className="sidebar-section-title">
+                <button
+                  type="button"
+                  className="sidebar-section-toggle"
+                  aria-expanded={sidebar.environmentsExpanded}
+                  aria-label={
+                    sidebar.environmentsExpanded
+                      ? 'Collapse environments'
+                      : 'Expand environments'
+                  }
+                  onClick={() =>
+                    setSidebar((current) => ({
+                      ...current,
+                      environmentsExpanded: !current.environmentsExpanded
+                    }))
+                  }
+                >
+                  <span className="sidebar-chevron" aria-hidden>
+                    {sidebar.environmentsExpanded ? '▾' : '▸'}
+                  </span>
+                  <strong>Environments</strong>
+                  <span className="sidebar-count">{environments.length}</span>
+                </button>
+                <button
+                  type="button"
+                  className="sidebar-add"
+                  aria-label="Open environment"
+                  title="Open environment"
+                  onClick={() => void openEnvironment()}
+                >
+                  +
+                </button>
+              </div>
 
-              return (
-                <div className="sidebar-collection" key={entry.filePath}>
-                  <div
-                    className={`collection-heading ${headingSelected ? 'selected' : ''} ${
-                      ui.collectionExpanded ? 'expanded' : 'collapsed'
-                    }`}
-                    onContextMenu={(event) => openContextMenu(event, target)}
-                  >
-                    <button
-                      type="button"
-                      className="collection-chevron-button"
-                      aria-label={
-                        ui.collectionExpanded ? 'Collapse collection' : 'Expand collection'
-                      }
-                      aria-expanded={ui.collectionExpanded}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        updateUi(entry.filePath, (current) => ({
-                          ...current,
-                          collectionExpanded: !current.collectionExpanded
-                        }));
-                      }}
-                    >
-                      <span className="collection-chevron" aria-hidden>
-                        {ui.collectionExpanded ? '▾' : '▸'}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      className="collection-heading-select"
-                      onClick={() =>
-                        openTab({ kind: 'collection', collectionPath: entry.filePath })
-                      }
-                      title={entry.filePath}
-                    >
-                      <span className="collection-icon" aria-hidden>
-                        ◇
-                      </span>
-                      <div>
-                        <strong>
-                          {entry.collection.info?.name ?? 'Untitled collection'}
-                        </strong>
-                        <span>
-                          {counts.folders} folders · {counts.requests} requests
-                        </span>
+              {sidebar.environmentsExpanded
+                ? environments.map((entry) => {
+                    const target: EnvironmentTarget = {
+                      kind: 'environment',
+                      environmentPath: entry.filePath
+                    };
+                    const selected =
+                      activeTab?.kind === 'environment' &&
+                      activeTab.environmentPath === entry.filePath;
+                    const isActive = activeEnvironmentPath === entry.filePath;
+                    const dirty = isEnvironmentDirty(entry.environment, entry.originalRaw);
+                    return (
+                      <div
+                        key={entry.filePath}
+                        className={`environment-row-item ${selected ? 'selected' : ''}`}
+                        onContextMenu={(event) => openContextMenu(event, target)}
+                      >
+                        <button
+                          type="button"
+                          className={`environment-active ${isActive ? 'is-active' : ''}`}
+                          aria-label={
+                            isActive
+                              ? `Active environment ${entry.environment.name ?? fileName(entry.filePath)}`
+                              : `Set ${entry.environment.name ?? fileName(entry.filePath)} active`
+                          }
+                          aria-pressed={isActive}
+                          title={isActive ? 'Clear active' : 'Set active'}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setActiveEnvironmentPath((current) =>
+                              current === entry.filePath ? null : entry.filePath
+                            );
+                          }}
+                        >
+                          <span aria-hidden>{isActive ? '●' : '○'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="environment-select"
+                          title={entry.filePath}
+                          onClick={() =>
+                            openTab({
+                              kind: 'environment',
+                              environmentPath: entry.filePath
+                            })
+                          }
+                        >
+                          <strong>
+                            {entry.environment.name?.trim() || 'Untitled environment'}
+                          </strong>
+                          <span>{fileName(entry.filePath)}</span>
+                        </button>
+                        {dirty ? (
+                          <span className="dirty-dot" title="Unsaved changes" />
+                        ) : null}
+                        <button
+                          type="button"
+                          className="tree-more environment-more"
+                          aria-label="Environment actions"
+                          title="Environment actions"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            openContextMenu(event, target);
+                          }}
+                        >
+                          ···
+                        </button>
                       </div>
-                    </button>
-                    <button
-                      type="button"
-                      className="tree-more collection-more"
-                      aria-label="Collection actions"
-                      title="Collection actions"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        openContextMenu(event, target);
-                      }}
-                    >
-                      ···
-                    </button>
-                  </div>
-                  {ui.collectionExpanded ? (
-                    <CollectionTree
-                      collectionPath={entry.filePath}
-                      items={entry.collection.item}
-                      expanded={ui.expanded}
-                      selectedPath={treeSelectedPath}
-                      onToggleFolder={(path) => toggleFolder(entry.filePath, path)}
-                      onSelectFolder={(path) => openFolderTab(entry.filePath, path)}
-                      onSelectRequest={(path) => openRequestTab(entry.filePath, path)}
-                      onContextMenu={(event, treeTarget) =>
-                        openContextMenu(event, treeTarget)
-                      }
-                    />
-                  ) : null}
-                </div>
-              );
-            })}
+                    );
+                  })
+                : null}
+            </div>
           </aside>
+
+          <div
+            className="sidebar-resize"
+            role="separator"
+            aria-orientation="vertical"
+            aria-valuemin={SIDEBAR_MIN_WIDTH}
+            aria-valuemax={SIDEBAR_MAX_WIDTH}
+            aria-valuenow={sidebar.width}
+            aria-label="Resize sidebar"
+            tabIndex={0}
+            onPointerDown={onSidebarResizePointerDown}
+            onPointerMove={onSidebarResizePointerMove}
+            onPointerUp={onSidebarResizePointerUp}
+            onPointerCancel={onSidebarResizePointerUp}
+            onKeyDown={onSidebarResizeKeyDown}
+          />
 
           <section className="main-workspace">
             <RequestTabs
@@ -1454,9 +2059,66 @@ export default function App() {
                   <span className="empty-state-icon" aria-hidden>
                     ↖
                   </span>
-                  <h2>Select a collection, folder, or request</h2>
+                  <h2>Select a collection, folder, request, or environment</h2>
                   <p>Open a tab from the sidebar to edit or run.</p>
                 </div>
+              )}
+
+              {activeTab?.kind === 'environment' && activeEnvironment && (
+                <EnvironmentPane
+                  name={activeEnvironment.environment.name?.trim() || 'Untitled environment'}
+                  filePath={activeEnvironment.filePath}
+                  values={getEnvironmentValues(activeEnvironment.environment)}
+                  onAdd={() =>
+                    applyEnvironmentUpdate(
+                      activeEnvironment.filePath,
+                      setEnvironmentValues(
+                        activeEnvironment.environment,
+                        addEnvironmentValue(
+                          getEnvironmentValues(activeEnvironment.environment)
+                        )
+                      )
+                    )
+                  }
+                  onChange={(index, patch) =>
+                    applyEnvironmentUpdate(
+                      activeEnvironment.filePath,
+                      setEnvironmentValues(
+                        activeEnvironment.environment,
+                        updateEnvironmentValue(
+                          getEnvironmentValues(activeEnvironment.environment),
+                          index,
+                          patch
+                        )
+                      )
+                    )
+                  }
+                  onToggleEnabled={(index, enabled) =>
+                    applyEnvironmentUpdate(
+                      activeEnvironment.filePath,
+                      setEnvironmentValues(
+                        activeEnvironment.environment,
+                        setEnvironmentValueEnabled(
+                          getEnvironmentValues(activeEnvironment.environment),
+                          index,
+                          enabled
+                        )
+                      )
+                    )
+                  }
+                  onRemove={(index) =>
+                    applyEnvironmentUpdate(
+                      activeEnvironment.filePath,
+                      setEnvironmentValues(
+                        activeEnvironment.environment,
+                        removeEnvironmentValue(
+                          getEnvironmentValues(activeEnvironment.environment),
+                          index
+                        )
+                      )
+                    )
+                  }
+                />
               )}
 
               {activeTab?.kind === 'collection' && activeCollection && activeCounts && (
@@ -1653,13 +2315,22 @@ export default function App() {
         <span className={`status-indicator ${status.kind}`} aria-hidden />
         <span role="status">
           {status.kind === 'idle'
-            ? collections.length > 0
+            ? hasResources
               ? anyDirty
                 ? 'Unsaved changes'
                 : 'Ready'
               : 'No collection open'
             : status.message}
         </span>
+        {statusbarEnvironment ? (
+          <>
+            <span className="statusbar-spacer" />
+            <span title={statusbarEnvironment.filePath}>
+              env: {statusbarEnvironment.environment.name?.trim() || fileName(statusbarEnvironment.filePath)}
+              {activeEnvironmentPath === statusbarEnvironment.filePath ? ' · active' : ''}
+            </span>
+          </>
+        ) : null}
         {statusbarCollection ? (
           <>
             <span className="statusbar-spacer" />

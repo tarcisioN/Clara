@@ -9,9 +9,17 @@ export type OpenCollectionResult =
   | { canceled: true }
   | { canceled: false; files: Array<{ filePath: string; raw: string }> };
 
+export type OpenEnvironmentResult =
+  | { canceled: true }
+  | { canceled: false; files: Array<{ filePath: string; raw: string }> };
+
 export type ReadCollectionResult = { filePath: string; raw: string };
 
+export type ReadEnvironmentResult = { filePath: string; raw: string };
+
 export type SaveCollectionResult = { ok: true; filePath: string };
+
+export type SaveEnvironmentResult = { ok: true; filePath: string };
 
 const clara = {
   openCollection: (): Promise<OpenCollectionResult> =>
@@ -20,17 +28,27 @@ const clara = {
     ipcRenderer.invoke('collection:read', filePath),
   saveCollection: (filePath: string, contents: string): Promise<SaveCollectionResult> =>
     ipcRenderer.invoke('collection:save', { filePath, contents }),
+  openEnvironment: (): Promise<OpenEnvironmentResult> =>
+    ipcRenderer.invoke('environment:open'),
+  readEnvironment: (filePath: string): Promise<ReadEnvironmentResult> =>
+    ipcRenderer.invoke('environment:read', filePath),
+  saveEnvironment: (
+    filePath: string,
+    contents: string
+  ): Promise<SaveEnvironmentResult> =>
+    ipcRenderer.invoke('environment:save', { filePath, contents }),
   loadSession: (): Promise<SessionState> => ipcRenderer.invoke('session:load'),
   saveSession: (state: SessionState): Promise<SessionState> =>
     ipcRenderer.invoke('session:save', state),
   getSessionHome: (): Promise<string> => ipcRenderer.invoke('session:home'),
   runNewman: (
     collectionJson: string,
-    options?: { folder?: string }
+    options?: { folder?: string; environmentJson?: string }
   ): Promise<NewmanRunView> =>
     ipcRenderer.invoke('newman:run', {
       collectionJson,
-      folder: options?.folder
+      folder: options?.folder,
+      environmentJson: options?.environmentJson
     }),
   onCommand: (handler: (command: AppCommand) => void): (() => void) => {
     const listener = (_event: unknown, command: AppCommand) => {

@@ -87,7 +87,7 @@ try {
 
   const session = await import('../electron/session.ts');
   const migrated = await session.loadSession();
-  assert.equal(migrated.version, 3);
+  assert.equal(migrated.version, 4);
   assert.equal(migrated.collections.length, 1);
   assert.equal(migrated.collections[0]?.path, a);
   assert.deepEqual(migrated.collections[0]?.expandedPaths, ['0']);
@@ -97,9 +97,12 @@ try {
     parseTabKey(migrated.activeTabKey!),
     { kind: 'request', collectionPath: a, path: '0.1' }
   );
+  assert.deepEqual(migrated.openedEnvironments, []);
+  assert.equal(migrated.activeEnvironmentPath, null);
+  assert.equal(migrated.sidebar.width, 270);
 
   const saved = await session.saveSession({
-    version: 3,
+    version: 4,
     collections: [
       { path: a, expandedPaths: ['0'], collectionExpanded: true },
       { path: b, expandedPaths: [], collectionExpanded: false }
@@ -108,7 +111,14 @@ try {
       { kind: 'collection', collectionPath: a },
       { kind: 'request', collectionPath: b, path: '2' }
     ],
-    activeTabKey: tabKey({ kind: 'request', collectionPath: b, path: '2' })
+    activeTabKey: tabKey({ kind: 'request', collectionPath: b, path: '2' }),
+    openedEnvironments: [],
+    activeEnvironmentPath: null,
+    sidebar: {
+      collectionsExpanded: true,
+      environmentsExpanded: true,
+      width: 270
+    }
   });
   assert.equal(saved.collections.length, 2);
 

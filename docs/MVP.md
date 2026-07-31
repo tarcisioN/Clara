@@ -222,14 +222,14 @@ formulário genérico.
 Pode ficar para um mini-MVP 1.1 se atrasar o resto.
 
 ### Requisitos
-- [ ] Abrir `.postman_environment.json` separado
-- [ ] Listar `values[]` (key, value, enabled)
-- [ ] Seletor de environment ativo
+- [x] Abrir `.postman_environment.json` separado
+- [x] Listar `values[]` (key, value, enabled)
+- [x] Seletor de environment ativo
 - [ ] (Opcional) preview de `{{var}}` na URL — interpolação real fica com Newman
 
 ### Validação
-- [ ] Env do repo carrega e valores batem com Postman
-- [ ] Save do env (se editável) não corrompe o arquivo
+- [x] Env do repo carrega e valores batem com Postman
+- [x] Save do env (se editável) não corrompe o arquivo
 
 ---
 
@@ -263,7 +263,7 @@ Pressuposto: `newman` está no `PATH` do usuário. Ajuda de instalação fica pa
 - [x] Clicar numa pasta abre uma aba (Run folder via Newman `--folder`)
 - [x] Lista de resultados por request (status, tempo, testes)
 - [x] Expandir request para Body / Headers / Tests
-- [ ] `-e` com environment aberto
+- [x] `-e` com environment aberto
 - [ ] Detectar Newman ausente e orientar instalação
 
 ### Etapa R2 — Variables + explorer context menu
@@ -290,28 +290,39 @@ Pressuposto: `newman` está no `PATH` do usuário. Ajuda de instalação fica pa
 - [x] Drag da árvore para a barra de abas leva `{ collectionPath, path }` no payload
 - [x] `make check-etapa10`
 
-### Sessão v3
+### Etapa R4 — Environments + sidebar
+- [x] Seção Environments na sidebar (collapse independente + Collections)
+- [x] Largura da sidebar redimensionável (220–520px), persistida na sessão
+- [x] Abrir/editar/salvar `.postman_environment.json`; aba ENV; dirty semântico
+- [x] Environment ativo global (persistido); Newman `-e` com estado em memória
+- [x] Sessão v4 (`openedEnvironments`, `activeEnvironmentPath`, `sidebar`)
+- [x] `make check-etapa11`
 
-`~/.clara/session.json` passou a guardar uma lista de collections:
+### Sessão v4
+
+`~/.clara/session.json` passou a guardar environments e layout da sidebar:
 
 ```
-{ "version": 3,
+{ "version": 4,
   "collections": [ { "path", "expandedPaths", "collectionExpanded" } ],
-  "openTabs":    [ { "kind", "collectionPath", "path"? } ],
-  "activeTabKey": "request:<encoded path>:<item path>" }
+  "openTabs":    [ { "kind", "collectionPath"|"environmentPath", "path"? } ],
+  "activeTabKey": "…",
+  "openedEnvironments": [ "…/env.postman_environment.json" ],
+  "activeEnvironmentPath": "…"|null,
+  "sidebar": { "collectionsExpanded", "environmentsExpanded", "width" } }
 ```
 
-Sessões v1 e v2 migram automaticamente para uma única entrada em `collections`. No hydrate,
-cada path é lido via `readCollection`; collections que falham são reportadas na status bar e
-as demais continuam abrindo normalmente.
+Sessões v1–v3 migram automaticamente para v4 (environments vazios, sidebar default).
+No hydrate, falhas ao ler environments não impedem as collections.
 
 ### Validação
 - [x] Resultado alinhado ao `newman` no terminal para o mesmo request _(parse + temp collection; smoke manual na UI)_
 - [x] Edits não salvos entram no run (temp usa memória)
 - [x] Collection/folder run reporta N executions (`make check-etapa8`)
-- [x] Sessão v3 persiste múltiplas collections + abas de collection / folder / request
+- [x] Sessão v3/v4 persiste múltiplas collections + abas de collection / folder / request / environment
 - [x] Variables + tree mutations (`make check-etapa9`)
 - [x] `tabKey` roundtrip com paths contendo `:`, espaço, `%` e unicode (`make check-etapa10`)
+- [x] Environment parse/edit/dirty + migração v3→v4 (`make check-etapa11`)
 
 ---
 

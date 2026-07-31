@@ -1,6 +1,19 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import {
+  DEFAULT_SIDEBAR,
+  normalizeSidebar,
+  type SessionSidebar
+} from '../src/workspace/sidebar.ts';
+
+export type { SessionSidebar };
+export {
+  DEFAULT_SIDEBAR,
+  SIDEBAR_DEFAULT_WIDTH,
+  SIDEBAR_MAX_WIDTH,
+  SIDEBAR_MIN_WIDTH
+} from '../src/workspace/sidebar.ts';
 
 /** Developer-tool convention: keep app metadata under ~/.clara */
 export const CLARA_HOME = path.join(os.homedir(), '.clara');
@@ -9,7 +22,8 @@ export const SESSION_FILE = path.join(CLARA_HOME, 'session.json');
 export type SessionTab =
   | { kind: 'collection'; collectionPath: string }
   | { kind: 'folder'; collectionPath: string; path: string }
-  | { kind: 'request'; collectionPath: string; path: string };
+  | { kind: 'request'; collectionPath: string; path: string }
+  | { kind: 'environment'; environmentPath: string };
 
 export type SessionCollectionEntry = {
   path: string;
@@ -18,17 +32,23 @@ export type SessionCollectionEntry = {
 };
 
 export type SessionState = {
-  version: 3;
+  version: 4;
   collections: SessionCollectionEntry[];
   openTabs: SessionTab[];
   activeTabKey: string | null;
+  openedEnvironments: string[];
+  activeEnvironmentPath: string | null;
+  sidebar: SessionSidebar;
 };
 
 export const EMPTY_SESSION: SessionState = {
-  version: 3,
+  version: 4,
   collections: [],
   openTabs: [],
-  activeTabKey: null
+  activeTabKey: null,
+  openedEnvironments: [],
+  activeEnvironmentPath: null,
+  sidebar: { ...DEFAULT_SIDEBAR }
 };
 
 function isSessionTab(value: unknown): value is SessionTab {
@@ -36,6 +56,9 @@ function isSessionTab(value: unknown): value is SessionTab {
     return false;
   }
   const candidate = value as Record<string, unknown>;
+  if (candidate.kind === 'environment') {
+    return typeof candidate.environmentPath === 'string';
+  }
   if (typeof candidate.collectionPath !== 'string') {
     return false;
   }
@@ -59,6 +82,25 @@ function isSessionCollectionEntry(value: unknown): value is SessionCollectionEnt
     candidate.expandedPaths.every((entry) => typeof entry === 'string') &&
     typeof candidate.collectionExpanded === 'boolean'
   );
+}
+
+function withSessionDefaults(partial: {
+  collections: SessionCollectionEntry[];
+  openTabs: SessionTab[];
+  activeTabKey: string | null;
+  openedEnvironments?: string[];
+  activeEnvironmentPath?: string | null;
+  sidebar?: SessionSidebar;
+}): SessionState {
+  return {
+    version: 4,
+    collections: partial.collections,
+    openTabs: partial.openTabs,
+    activeTabKey: partial.activeTabKey,
+    openedEnvironments: partial.openedEnvironments ?? [],
+    activeEnvironmentPath: partial.activeEnvironmentPath ?? null,
+    sidebar: partial.sidebar ?? { ...DEFAULT_SIDEBAR }
+  };
 }
 
 function migrateV1(value: Record<string, unknown>): SessionState | null {
@@ -88,8 +130,7 @@ function migrateV1(value: Record<string, unknown>): SessionState | null {
   }));
   const activePath = value.activePath as string | null;
 
-  return {
-    version: 3,
+  return withSessionDefaults({
     collections: [
       {
         path: collectionPath,
@@ -101,7 +142,7 @@ function migrateV1(value: Record<string, unknown>): SessionState | null {
     activeTabKey: activePath
       ? `request:${encodeURIComponent(collectionPath)}:${activePath}`
       : null
-  };
+  });
 }
 
 function migrateV2(value: Record<string, unknown>): SessionState | null {
@@ -156,8 +197,7 @@ function migrateV2(value: Record<string, unknown>): SessionState | null {
     activeTabKey = `request:${encoded}:${rawActive.slice('request:'.length)}`;
   }
 
-  return {
-    version: 3,
+  return withSessionDefaults({
     collections: [
       {
         path: collectionPath,
@@ -167,7 +207,38 @@ function migrateV2(value: Record<string, unknown>): SessionState | null {
     ],
     openTabs,
     activeTabKey
-  };
+  });
+}
+
+function migrateV3(value: Record<string, unknown>): SessionState | null {
+  if (value.version !== 3) {
+    return null;
+  }
+  if (
+    !Array.isArray(value.collections) ||
+    !value.collections.every(isSessionCollectionEntry) ||
+    !Array.isArray(value.openTabs) ||
+    !value.openTabs.every(isSessionTab) ||
+    !(value.activeTabKey === null || typeof value.activeTabKey === 'string')
+  ) {
+    return null;
+  }
+
+  return withSessionDefaults({
+    collections: value.collections as SessionCollectionEntry[],
+    openTabs: value.openTabs as SessionTab[],
+    activeTabKey: value.activeTabKey as string | null,
+    openedEnvironments: Array.isArray(value.openedEnvironments)
+      ? (value.openedEnvironments as unknown[]).filter(
+          (entry): entry is string => typeof entry === 'string'
+        )
+      : [],
+    activeEnvironmentPath:
+      value.activeEnvironmentPath === null || typeof value.activeEnvironmentPath === 'string'
+        ? (value.activeEnvironmentPath as string | null)
+        : null,
+    sidebar: normalizeSidebar(value.sidebar)
+  });
 }
 
 function isSessionState(value: unknown): value is SessionState {
@@ -176,12 +247,18 @@ function isSessionState(value: unknown): value is SessionState {
   }
   const candidate = value as Record<string, unknown>;
   return (
-    candidate.version === 3 &&
+    candidate.version === 4 &&
     Array.isArray(candidate.collections) &&
     candidate.collections.every(isSessionCollectionEntry) &&
     Array.isArray(candidate.openTabs) &&
     candidate.openTabs.every(isSessionTab) &&
-    (candidate.activeTabKey === null || typeof candidate.activeTabKey === 'string')
+    (candidate.activeTabKey === null || typeof candidate.activeTabKey === 'string') &&
+    Array.isArray(candidate.openedEnvironments) &&
+    candidate.openedEnvironments.every((entry) => typeof entry === 'string') &&
+    (candidate.activeEnvironmentPath === null ||
+      typeof candidate.activeEnvironmentPath === 'string') &&
+    !!candidate.sidebar &&
+    typeof candidate.sidebar === 'object'
   );
 }
 
@@ -195,10 +272,17 @@ export async function loadSession(): Promise<SessionState> {
     const raw = await readFile(SESSION_FILE, 'utf8');
     const parsed: unknown = JSON.parse(raw);
     if (isSessionState(parsed)) {
-      return parsed;
+      return {
+        ...parsed,
+        sidebar: normalizeSidebar(parsed.sidebar)
+      };
     }
     if (parsed && typeof parsed === 'object') {
       const asRecord = parsed as Record<string, unknown>;
+      const migratedV3 = migrateV3(asRecord);
+      if (migratedV3) {
+        return migratedV3;
+      }
       const migratedV2 = migrateV2(asRecord);
       if (migratedV2) {
         return migratedV2;
@@ -208,11 +292,11 @@ export async function loadSession(): Promise<SessionState> {
         return migratedV1;
       }
     }
-    return { ...EMPTY_SESSION };
+    return { ...EMPTY_SESSION, sidebar: { ...DEFAULT_SIDEBAR } };
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') {
-      return { ...EMPTY_SESSION };
+      return { ...EMPTY_SESSION, sidebar: { ...DEFAULT_SIDEBAR } };
     }
     throw error;
   }
@@ -221,10 +305,13 @@ export async function loadSession(): Promise<SessionState> {
 export async function saveSession(state: SessionState): Promise<SessionState> {
   await ensureClaraHome();
   const normalized: SessionState = {
-    version: 3,
+    version: 4,
     collections: state.collections ?? [],
     openTabs: state.openTabs ?? [],
-    activeTabKey: state.activeTabKey ?? null
+    activeTabKey: state.activeTabKey ?? null,
+    openedEnvironments: state.openedEnvironments ?? [],
+    activeEnvironmentPath: state.activeEnvironmentPath ?? null,
+    sidebar: normalizeSidebar(state.sidebar)
   };
   await writeFile(SESSION_FILE, `${JSON.stringify(normalized, null, 2)}\n`, 'utf8');
   return normalized;

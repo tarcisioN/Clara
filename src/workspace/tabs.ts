@@ -3,23 +3,28 @@ import type { ItemPath } from '../postman/tree.ts';
 export type WorkspaceTab =
   | { kind: 'collection'; collectionPath: string }
   | { kind: 'folder'; collectionPath: string; path: ItemPath }
-  | { kind: 'request'; collectionPath: string; path: ItemPath };
+  | { kind: 'request'; collectionPath: string; path: ItemPath }
+  | { kind: 'environment'; environmentPath: string };
 
 export type SessionTab =
   | { kind: 'collection'; collectionPath: string }
   | { kind: 'folder'; collectionPath: string; path: string }
-  | { kind: 'request'; collectionPath: string; path: string };
+  | { kind: 'request'; collectionPath: string; path: string }
+  | { kind: 'environment'; environmentPath: string };
 
-function enc(collectionPath: string): string {
-  return encodeURIComponent(collectionPath);
+function enc(filePath: string): string {
+  return encodeURIComponent(filePath);
 }
 
 function dec(value: string): string {
   return decodeURIComponent(value);
 }
 
-/** Encode a stable tab identity that includes the collection file path. */
+/** Encode a stable tab identity that includes the collection or environment file path. */
 export function tabKey(tab: WorkspaceTab): string {
+  if (tab.kind === 'environment') {
+    return `environment:${enc(tab.environmentPath)}`;
+  }
   const collection = enc(tab.collectionPath);
   if (tab.kind === 'collection') {
     return `collection:${collection}`;
@@ -32,6 +37,16 @@ export function sameTab(a: WorkspaceTab, b: WorkspaceTab): boolean {
 }
 
 export function parseTabKey(key: string): WorkspaceTab | null {
+  if (key.startsWith('environment:')) {
+    try {
+      return {
+        kind: 'environment',
+        environmentPath: dec(key.slice('environment:'.length))
+      };
+    } catch {
+      return null;
+    }
+  }
   if (key.startsWith('collection:')) {
     try {
       return { kind: 'collection', collectionPath: dec(key.slice('collection:'.length)) };
@@ -61,6 +76,9 @@ export function parseTabKey(key: string): WorkspaceTab | null {
 }
 
 export function toSessionTab(tab: WorkspaceTab): SessionTab {
+  if (tab.kind === 'environment') {
+    return { kind: 'environment', environmentPath: tab.environmentPath };
+  }
   if (tab.kind === 'collection') {
     return { kind: 'collection', collectionPath: tab.collectionPath };
   }
@@ -72,6 +90,9 @@ export function toSessionTab(tab: WorkspaceTab): SessionTab {
 }
 
 export function fromSessionTab(tab: SessionTab): WorkspaceTab {
+  if (tab.kind === 'environment') {
+    return { kind: 'environment', environmentPath: tab.environmentPath };
+  }
   if (tab.kind === 'collection') {
     return { kind: 'collection', collectionPath: tab.collectionPath };
   }

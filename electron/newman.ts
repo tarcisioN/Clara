@@ -13,6 +13,8 @@ export type NewmanRunRequest = {
   collectionJson: string;
   /** Newman `--folder` name; runs only that folder when set. */
   folder?: string;
+  /** Serialized Postman environment JSON for Newman `-e`. */
+  environmentJson?: string;
 };
 
 const RUNS_DIR = path.join(CLARA_HOME, 'runs');
@@ -70,10 +72,15 @@ export async function runNewmanCollection(
   const id = randomUUID();
   const collectionPath = path.join(RUNS_DIR, `${id}.collection.json`);
   const reportPath = path.join(RUNS_DIR, `${id}.result.json`);
+  const environmentPath =
+    typeof payload.environmentJson === 'string' && payload.environmentJson.length > 0
+      ? path.join(RUNS_DIR, `${id}.environment.json`)
+      : null;
   const args = [
     'run',
     collectionPath,
     ...(payload.folder ? ['--folder', payload.folder] : []),
+    ...(environmentPath ? ['--environment', environmentPath] : []),
     '--reporters',
     'json',
     '--reporter-json-export',
@@ -84,6 +91,9 @@ export async function runNewmanCollection(
 
   try {
     await writeFile(collectionPath, payload.collectionJson, 'utf8');
+    if (environmentPath && payload.environmentJson) {
+      await writeFile(environmentPath, payload.environmentJson, 'utf8');
+    }
 
     let spawned;
     try {
@@ -132,6 +142,10 @@ export async function runNewmanCollection(
       stderr: spawned.stderr
     });
   } finally {
-    await Promise.allSettled([rm(collectionPath, { force: true }), rm(reportPath, { force: true })]);
+    await Promise.allSettled([
+      rm(collectionPath, { force: true }),
+      rm(reportPath, { force: true }),
+      ...(environmentPath ? [rm(environmentPath, { force: true })] : [])
+    ]);
   }
 }

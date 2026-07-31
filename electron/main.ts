@@ -64,6 +64,11 @@ function buildMenu() {
           click: () => sendCommand({ type: 'open' })
         },
         {
+          label: 'Open Environment…',
+          accelerator: 'CmdOrCtrl+Shift+O',
+          click: () => sendCommand({ type: 'open-environment' })
+        },
+        {
           label: 'Save',
           accelerator: 'CmdOrCtrl+S',
           click: () => sendCommand({ type: 'save' })
@@ -222,6 +227,54 @@ ipcMain.handle('collection:read', async (_event, filePath: string) => {
 
 ipcMain.handle(
   'collection:save',
+  async (_event, payload: { filePath: string; contents: string }) => {
+    const { filePath, contents } = payload;
+    if (!filePath || typeof contents !== 'string') {
+      throw new Error('filePath and contents are required');
+    }
+
+    await writeFile(filePath, contents, 'utf8');
+    return { ok: true as const, filePath };
+  }
+);
+
+ipcMain.handle('environment:open', async () => {
+  const result = await dialog.showOpenDialog(mainWindow!, {
+    title: 'Open Postman environment(s)',
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: 'Postman Environment', extensions: ['json'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return { canceled: true as const };
+  }
+
+  const files = await Promise.all(
+    result.filePaths.map(async (filePath) => ({
+      filePath,
+      raw: await readFile(filePath, 'utf8')
+    }))
+  );
+
+  return {
+    canceled: false as const,
+    files
+  };
+});
+
+ipcMain.handle('environment:read', async (_event, filePath: string) => {
+  if (!filePath || typeof filePath !== 'string') {
+    throw new Error('filePath is required');
+  }
+  const raw = await readFile(filePath, 'utf8');
+  return { filePath, raw };
+});
+
+ipcMain.handle(
+  'environment:save',
   async (_event, payload: { filePath: string; contents: string }) => {
     const { filePath, contents } = payload;
     if (!filePath || typeof contents !== 'string') {

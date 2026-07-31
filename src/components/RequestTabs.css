@@ -89,7 +89,8 @@
 }
 
 .request-tab-method.badge-collection,
-.request-tab-method.badge-folder {
+.request-tab-method.badge-folder,
+.request-tab-method.badge-environment {
   color: var(--brand-text);
   font-weight: 700;
   letter-spacing: 0.02em;
