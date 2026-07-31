@@ -1,0 +1,33 @@
+.code-editor {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  flex: 1;
+  /* Must not force a height: overflowing the request section hides the editor
+     behind the response pane, making it unclickable. */
+  min-height: 0;
+  border: 1px solid var(--border-1);
+  border-radius: 6px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.code-editor:focus-within {
+  border-color: var(--border-2);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.04);
+}
+
+/* @monaco-editor/react wraps the editor in a <section>; it must follow the flex height. */
+.code-editor > section {
+  flex: 1;
+  min-height: 0;
+}
+
+.code-editor-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-faint);
+  font-size: 0.82rem;
+}

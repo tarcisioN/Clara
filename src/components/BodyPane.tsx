@@ -1,4 +1,6 @@
 import type { PostmanBody, PostmanBodyMode, PostmanUrlEncodedParam } from '../postman/body.ts';
+import { resolveRawLanguage } from '../postman/body.ts';
+import CodeEditor from './CodeEditor.tsx';
 import './BodyPane.css';
 
 const EDITABLE_MODES: Array<{ value: PostmanBodyMode; label: string }> = [
@@ -84,17 +86,17 @@ export default function BodyPane({
         <>
           {language && (
             <p className="body-hint">
-              Language <code>{language}</code> in <code>body.options</code> is preserved (not
-              edited here).
+              Language <code>{language}</code> in <code>body.options</code> drives highlighting
+              and is preserved on save.
             </p>
           )}
-          <textarea
+          <CodeEditor
             className="body-raw"
-            spellCheck={false}
             value={body?.raw ?? ''}
-            onChange={(event) => onChangeRaw(event.target.value)}
-            aria-label="Raw body"
-            rows={10}
+            onChange={onChangeRaw}
+            language={resolveRawLanguage(body)}
+            ariaLabel="Raw body"
+            wrap
           />
         </>
       )}

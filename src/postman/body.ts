@@ -17,6 +17,8 @@ export type PostmanFormdataParam = {
 
 export type PostmanBodyMode = 'raw' | 'urlencoded' | 'formdata' | 'file' | 'graphql' | 'none';
 
+export type RawBodyLanguage = 'json' | 'javascript' | 'text';
+
 export type PostmanBody = {
   mode?: PostmanBodyMode | string;
   raw?: string;
@@ -30,3 +32,24 @@ export type PostmanBody = {
   };
   [key: string]: unknown;
 };
+
+/**
+ * Highlighting language for a raw body: the language declared by Postman wins, and an
+ * undeclared body falls back to sniffing so JSON payloads still highlight.
+ */
+export function resolveRawLanguage(body: PostmanBody | undefined): RawBodyLanguage {
+  const declared = body?.options?.raw?.language;
+  if (typeof declared === 'string' && declared.trim()) {
+    const normalized = declared.trim().toLowerCase();
+    if (normalized === 'json') {
+      return 'json';
+    }
+    if (normalized === 'javascript') {
+      return 'javascript';
+    }
+    return 'text';
+  }
+
+  const raw = (body?.raw ?? '').trimStart();
+  return raw.startsWith('{') || raw.startsWith('[') ? 'json' : 'text';
+}

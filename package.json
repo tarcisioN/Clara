@@ -35,8 +35,8 @@
     "check:stage19": "node --experimental-strip-types scripts/check-stage19.ts"
   },
   "dependencies": {
-    "@codemirror/lang-javascript": "^6.2.5",
-    "@uiw/react-codemirror": "^4.25.11",
+    "@monaco-editor/react": "^4.7.0",
+    "monaco-editor": "^0.56.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

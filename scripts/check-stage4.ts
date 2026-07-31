@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveRawLanguage } from '../src/postman/body.ts';
 import { assertPostmanCollection, serializeCollection } from '../src/postman/types.ts';
 import { getItemByPath, getRequestByPath } from '../src/postman/tree.ts';
 import {
@@ -120,5 +121,23 @@ assert.throws(
     updateCollectionItem(collection, '2', (item) => removeRequestUrlEncodedParam(item, 9)),
   /out of range/
 );
+
+// raw editor highlighting language: declared wins, undeclared sniffs JSON
+assert.equal(resolveRawLanguage(echoBody), 'json');
+assert.equal(
+  resolveRawLanguage({ mode: 'raw', raw: '{}', options: { raw: { language: 'JSON' } } }),
+  'json'
+);
+assert.equal(
+  resolveRawLanguage({ mode: 'raw', raw: 'x', options: { raw: { language: 'javascript' } } }),
+  'javascript'
+);
+assert.equal(
+  resolveRawLanguage({ mode: 'raw', raw: '{"a":1}', options: { raw: { language: 'xml' } } }),
+  'text'
+);
+assert.equal(resolveRawLanguage({ mode: 'raw', raw: '\n  [1, 2]' }), 'json');
+assert.equal(resolveRawLanguage({ mode: 'raw', raw: 'plain text' }), 'text');
+assert.equal(resolveRawLanguage(undefined), 'text');
 
 console.log('stage4 checks passed');

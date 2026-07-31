@@ -106,10 +106,11 @@ Modes used in the real flow.
 
 ### Requirements
 - [x] Read/write `request.body.mode`
-- [x] Support `raw` (text/JSON editor)
+- [x] Support `raw` (code editor with line numbers; JSON highlighting)
 - [x] Support `urlencoded` (key/value/disabled list)
 - [ ] (Optional MVP) `formdata` without file upload _(deferred)_
 - [x] Preserve `body.options` / language when they exist and are not edited
+- [x] `body.options.raw.language` drives highlighting; undeclared bodies sniff JSON
 
 ### Validation
 - [x] Collection with real bodies from the repo: save does not corrupt body _(fixture + `make check-stage4`)_
@@ -178,7 +179,7 @@ Changing the type does **not delete** sibling arrays (`bearer` remains when swit
 ### Requirements
 - [x] **Pre-request** and **Tests** tabs in the request pane
 - [x] Edit `item.event[]` with `listen: prerequest` and `listen: test`
-- [x] `script.exec[]` ↔ textarea (join/split by `\n`)
+- [x] `script.exec[]` ↔ code editor (join/split by `\n`)
 - [x] Preserve sibling fields (`id`, `type`, other events)
 - [x] Indicator on the tab when the script has content
 

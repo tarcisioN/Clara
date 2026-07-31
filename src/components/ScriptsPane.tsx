@@ -1,6 +1,5 @@
-import CodeMirror from '@uiw/react-codemirror';
-import { javascript } from '@codemirror/lang-javascript';
 import type { PostmanScriptListen } from '../postman/scripts.ts';
+import CodeEditor from './CodeEditor.tsx';
 import './ScriptsPane.css';
 
 type ScriptsPaneProps = {
@@ -34,25 +33,13 @@ export default function ScriptsPane({ listen, source, onChange }: ScriptsPanePro
         <h3>{copy.title}</h3>
       </div>
       <p className="scripts-hint">{copy.hint}</p>
-      <CodeMirror
+      <CodeEditor
         className="scripts-editor"
         value={source}
         placeholder={copy.placeholder}
-        height="100%"
-        theme="light"
-        extensions={[javascript()]}
-        basicSetup={{
-          lineNumbers: true,
-          highlightActiveLineGutter: true,
-          highlightActiveLine: true,
-          foldGutter: true,
-          bracketMatching: true,
-          closeBrackets: true,
-          autocompletion: true,
-          indentOnInput: true
-        }}
+        language="javascript"
         onChange={onChange}
-        aria-label={copy.title}
+        ariaLabel={copy.title}
       />
     </section>
   );

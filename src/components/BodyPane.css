@@ -3,6 +3,8 @@
   flex-direction: column;
   gap: 10px;
   margin-top: 4px;
+  flex: 1;
+  min-height: 0;
 }
 
 .body-pane-title {
@@ -52,20 +54,10 @@
 }
 
 .body-raw {
-  width: 100%;
-  min-height: 180px;
-  resize: vertical;
-  border: 1px solid #c3cfb9;
-  border-radius: 8px;
-  padding: 10px 12px;
-  background: #fff;
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: 0.82rem;
-  color: inherit;
-  line-height: 1.45;
+  flex: 1;
+  min-height: 0;
 }
 
-.body-raw:focus,
 .body-row input[type='text']:focus,
 .body-mode select:focus {
   outline: 2px solid #2f5d3a;
