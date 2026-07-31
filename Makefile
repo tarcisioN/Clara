@@ -1,4 +1,4 @@
-.PHONY: help install dev build typecheck check check-stage0 check-stage1 check-stage2 check-stage3 check-stage4 check-stage5 check-stage6 check-stage7 check-stage8 check-stage9 check-stage10 check-stage11 check-stage12 check-stage13 check-stage14
+.PHONY: help install dev build typecheck check check-stage0 check-stage1 check-stage2 check-stage3 check-stage4 check-stage5 check-stage6 check-stage7 check-stage8 check-stage9 check-stage10 check-stage11 check-stage12 check-stage13 check-stage14 check-stage15
 
 help:
 	@echo "Clara — available targets:"
@@ -22,6 +22,7 @@ help:
 	@echo "  make check-stage12 Git compare plumbing (discover / show at ref)"
 	@echo "  make check-stage13 Git structural tree diff (markers / changed-only)"
 	@echo "  make check-stage14 Git semantic request diff (section badges)"
+	@echo "  make check-stage15 Git change list flatten / navigation order"
 
 install:
 	npm install
@@ -35,7 +36,7 @@ build:
 typecheck:
 	npm run typecheck
 
-check: typecheck check-stage0 check-stage1 check-stage2 check-stage3 check-stage4 check-stage5 check-stage6 check-stage7 check-stage8 check-stage9 check-stage10 check-stage11 check-stage12 check-stage13 check-stage14
+check: typecheck check-stage0 check-stage1 check-stage2 check-stage3 check-stage4 check-stage5 check-stage6 check-stage7 check-stage8 check-stage9 check-stage10 check-stage11 check-stage12 check-stage13 check-stage14 check-stage15
 
 check-stage0:
 	npm run check:stage0
@@ -81,3 +82,6 @@ check-stage13:
 
 check-stage14:
 	npm run check:stage14
+
+check-stage15:
+	npm run check:stage15

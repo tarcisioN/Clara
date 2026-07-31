@@ -8,4 +8,6 @@ export type AppCommand =
   | { type: 'new-request' }
   | { type: 'next-tab' }
   | { type: 'prev-tab' }
-  | { type: 'select-tab'; index: number };
+  | { type: 'select-tab'; index: number }
+  | { type: 'next-change' }
+  | { type: 'prev-change' };

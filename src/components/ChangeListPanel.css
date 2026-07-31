@@ -1,0 +1,176 @@
+.sidebar-section-changes {
+  flex: 0 1 auto;
+  max-height: 32%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border-0);
+  overflow: hidden;
+}
+
+.change-list-header {
+  flex: 0 0 auto;
+}
+
+.change-list-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.change-list-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.change-list-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.change-list-nav:hover:not(:disabled) {
+  background: var(--surface-1);
+  color: var(--text);
+}
+
+.change-list-nav:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.change-list-summary {
+  display: flex;
+  gap: 10px;
+  padding: 0 12px 8px;
+  font-size: 0.7rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.change-list-stat.added {
+  color: #1f6b3a;
+}
+
+.change-list-stat.modified {
+  color: #8a5a00;
+}
+
+.change-list-stat.removed {
+  color: #8a2f2f;
+}
+
+.change-list-empty {
+  margin: 0;
+  padding: 4px 12px 12px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+.change-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 6px 10px;
+  overflow: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.change-list-group {
+  padding: 8px 6px 3px;
+  color: var(--text-faint);
+  font-size: 0.65rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.change-list-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 1px 0;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.change-list-row:hover {
+  background: rgba(47, 93, 58, 0.08);
+}
+
+.change-list-row.selected {
+  background: rgba(47, 93, 58, 0.16);
+  font-weight: 600;
+}
+
+.change-list-row.removed .change-list-name {
+  text-decoration: line-through;
+  color: #6a7563;
+}
+
+.change-list-badge {
+  flex: 0 0 auto;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+}
+
+.change-list-badge-added {
+  color: #1f6b3a;
+  background: rgba(47, 133, 90, 0.16);
+}
+
+.change-list-badge-modified {
+  color: #8a5a00;
+  background: rgba(212, 136, 26, 0.18);
+}
+
+.change-list-badge-removed {
+  color: #8a2f2f;
+  background: rgba(180, 60, 60, 0.14);
+}
+
+.change-list-folder-icon {
+  flex: 0 0 auto;
+  width: 28px;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.change-list-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+}
+
+.change-list-row .tree-method {
+  flex: 0 0 auto;
+}

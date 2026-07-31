@@ -25,7 +25,8 @@
     "check:stage11": "node --experimental-strip-types scripts/check-stage11.ts",
     "check:stage12": "node --experimental-strip-types scripts/check-stage12.ts",
     "check:stage13": "node --experimental-strip-types scripts/check-stage13.ts",
-    "check:stage14": "node --experimental-strip-types scripts/check-stage14.ts"
+    "check:stage14": "node --experimental-strip-types scripts/check-stage14.ts",
+    "check:stage15": "node --experimental-strip-types scripts/check-stage15.ts"
   },
   "dependencies": {
     "@codemirror/lang-javascript": "^6.2.5",

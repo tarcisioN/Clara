@@ -156,6 +156,17 @@ function buildMenu() {
         { role: 'forceReload' },
         { role: 'toggleDevTools' },
         { type: 'separator' },
+        {
+          label: 'Next Change',
+          accelerator: 'Alt+CmdOrCtrl+]',
+          click: () => sendCommand({ type: 'next-change' })
+        },
+        {
+          label: 'Previous Change',
+          accelerator: 'Alt+CmdOrCtrl+[',
+          click: () => sendCommand({ type: 'prev-change' })
+        },
+        { type: 'separator' },
         { role: 'resetZoom' },
         { role: 'zoomIn' },
         { role: 'zoomOut' },

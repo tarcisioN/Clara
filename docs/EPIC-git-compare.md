@@ -78,7 +78,7 @@ When a changed request is open, show field-level differences vs the base version
 ### Validation
 - [x] Edit only headers → Headers tab badged; Body not
 - [x] Base missing request (added) → clear “new in current” empty state
-- [ ] Request removed from current → reachable from change list (G3) as removed
+- [x] Request removed from current → reachable from change list (G3) as removed
 
 ### Policy (this stage)
 - Resolve base via the same kind+name pairing as G1 (`findPairedBaseItem`), not raw path indexes alone.
@@ -93,15 +93,21 @@ When a changed request is open, show field-level differences vs the base version
 A navigable index of all collection changes.
 
 ### Requirements
-- [ ] Panel or section listing changed requests/folders (grouped by folder path)
-- [ ] Click → open/focus that node and show its diff (G2)
-- [ ] Shortcuts: next / previous change
-- [ ] Counts: added / removed / modified
+- [x] Panel or section listing changed requests/folders (grouped by folder path)
+- [x] Click → open/focus that node and show its diff (G2)
+- [x] Shortcuts: next / previous change
+- [x] Counts: added / removed / modified
 
 ### Validation
-- [ ] Order is stable and matches tree order
-- [ ] Next/prev wraps or stops at ends (document behavior)
-- [ ] Works with Changed only filter on
+- [x] Order is stable and matches tree order
+- [x] Next/prev wraps or stops at ends (document behavior)
+- [x] Works with Changed only filter on
+
+### Policy (this stage)
+- Change list order matches CollectionTree DFS (current nodes, then removed ghosts under each parent).
+- Next/prev **wraps** (same as tab cycling).
+- Removed entries focus the ghost row in the tree (parent expanded); G2 request pane still N/A for removed.
+- Changed only filters the tree only; the Changes panel always lists all changes.
 
 ---
 

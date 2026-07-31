@@ -30,6 +30,8 @@ type CollectionTreeProps = {
   filterQuery?: string;
   changedOnly?: boolean;
   structuralDiff?: StructuralDiff | null;
+  focusedRemovedKey?: string | null;
+  onSelectRemoved?: (ghost: RemovedGhost) => void;
   onToggleFolder: (path: ItemPath) => void;
   onSelectFolder: (path: ItemPath) => void;
   onSelectRequest: (path: ItemPath) => void;
@@ -46,6 +48,8 @@ type TreeNodeProps = {
   filterQuery: string;
   changedOnly: boolean;
   structuralDiff: StructuralDiff | null;
+  focusedRemovedKey: string | null;
+  onSelectRemoved?: (ghost: RemovedGhost) => void;
   onToggleFolder: (path: ItemPath) => void;
   onSelectFolder: (path: ItemPath) => void;
   onSelectRequest: (path: ItemPath) => void;
@@ -73,17 +77,37 @@ function ChangeMarker({ kind, count }: { kind: ChangeKind | 'removed'; count?: n
 
 function RemovedRow({
   ghost,
-  depth
+  depth,
+  focused,
+  onSelect
 }: {
   ghost: RemovedGhost;
   depth: number;
+  focused: boolean;
+  onSelect?: (ghost: RemovedGhost) => void;
 }) {
   return (
     <li className="tree-node tree-node-removed">
       <div
-        className={`tree-row ${ghost.kind} removed`}
+        className={`tree-row ${ghost.kind} removed ${focused ? 'selected' : ''} ${
+          onSelect ? 'clickable' : ''
+        }`}
         style={{ paddingLeft: 10 + depth * 14 }}
         title={`Removed vs base: ${ghost.name}`}
+        data-sidebar-key={ghost.key}
+        onClick={onSelect ? () => onSelect(ghost) : undefined}
+        role={onSelect ? 'button' : undefined}
+        tabIndex={onSelect ? 0 : undefined}
+        onKeyDown={
+          onSelect
+            ? (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onSelect(ghost);
+                }
+              }
+            : undefined
+        }
       >
         <span className="tree-chevron spacer" aria-hidden />
         {ghost.kind === 'request' && ghost.method ? (
@@ -134,6 +158,8 @@ function TreeNode({
   filterQuery,
   changedOnly,
   structuralDiff,
+  focusedRemovedKey,
+  onSelectRemoved,
   onToggleFolder,
   onSelectFolder,
   onSelectRequest,
@@ -228,6 +254,8 @@ function TreeNode({
                 filterQuery={filterQuery}
                 changedOnly={changedOnly}
                 structuralDiff={structuralDiff}
+                focusedRemovedKey={focusedRemovedKey}
+                onSelectRemoved={onSelectRemoved}
                 onToggleFolder={onToggleFolder}
                 onSelectFolder={onSelectFolder}
                 onSelectRequest={onSelectRequest}
@@ -235,7 +263,13 @@ function TreeNode({
               />
             ))}
             {ghosts.map((ghost) => (
-              <RemovedRow key={ghost.key} ghost={ghost} depth={depth + 1} />
+              <RemovedRow
+                key={ghost.key}
+                ghost={ghost}
+                depth={depth + 1}
+                focused={focusedRemovedKey === ghost.key}
+                onSelect={onSelectRemoved}
+              />
             ))}
           </ul>
         )}
@@ -304,6 +338,8 @@ export default function CollectionTree({
   filterQuery = '',
   changedOnly = false,
   structuralDiff = null,
+  focusedRemovedKey = null,
+  onSelectRemoved,
   onToggleFolder,
   onSelectFolder,
   onSelectRequest,
@@ -344,6 +380,8 @@ export default function CollectionTree({
           filterQuery={filterQuery}
           changedOnly={changedOnly}
           structuralDiff={structuralDiff}
+          focusedRemovedKey={focusedRemovedKey}
+          onSelectRemoved={onSelectRemoved}
           onToggleFolder={onToggleFolder}
           onSelectFolder={onSelectFolder}
           onSelectRequest={onSelectRequest}
@@ -351,7 +389,13 @@ export default function CollectionTree({
         />
       ))}
       {rootGhosts.map((ghost) => (
-        <RemovedRow key={ghost.key} ghost={ghost} depth={0} />
+        <RemovedRow
+          key={ghost.key}
+          ghost={ghost}
+          depth={0}
+          focused={focusedRemovedKey === ghost.key}
+          onSelect={onSelectRemoved}
+        />
       ))}
     </ul>
   );

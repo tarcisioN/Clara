@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import type { AppCommand } from '../electron/commands.ts';
 import CollectionTree, { type TreeTarget } from './components/CollectionTree.tsx';
+import ChangeListPanel from './components/ChangeListPanel.tsx';
 import CollectionRunPane from './components/CollectionRunPane.tsx';
 import ContextMenu, { type ContextMenuItem } from './components/ContextMenu.tsx';
 import EnvironmentPane from './components/EnvironmentPane.tsx';
@@ -117,6 +118,11 @@ import {
 import { resolveBaseRequestItem } from './git/resolveBaseItem.ts';
 import { computeSemanticDiff } from './git/semanticDiff.ts';
 import {
+  flattenStructuralChanges,
+  type ChangeListEntry
+} from './git/changeList.ts';
+import type { RemovedGhost } from './git/structuralDiff.ts';
+import {
   clampSidebarWidth,
   DEFAULT_SIDEBAR,
   SIDEBAR_MAX_WIDTH,
@@ -217,6 +223,7 @@ export default function App() {
   const [compareByPath, setCompareByPath] = useState<Record<string, CollectionCompareState | null>>(
     {}
   );
+  const [focusedChangeKey, setFocusedChangeKey] = useState<string | null>(null);
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
   const [openTabs, setOpenTabs] = useState<WorkspaceTab[]>([]);
   const [activeTab, setActiveTab] = useState<WorkspaceTab | null>(null);
@@ -404,6 +411,13 @@ export default function App() {
     }
     return computeSemanticDiff(selectedItem, resolution.item);
   }, [activeCollection, activeCompare, activeRequestPath, selectedItem]);
+
+  const changeList = useMemo(() => {
+    if (!activeCollection || !activeCompare) {
+      return [] as ChangeListEntry[];
+    }
+    return flattenStructuralChanges(activeCollection.collection, activeCompare.diff);
+  }, [activeCollection, activeCompare]);
 
   const activeFolder =
     activeTab?.kind === 'folder' && activeCollection
@@ -1801,6 +1815,108 @@ export default function App() {
     [scrollSidebarTargetIntoView, updateUi]
   );
 
+  const focusChangeEntry = useCallback(
+    (collectionPath: string, entry: ChangeListEntry) => {
+      setFocusedChangeKey(entry.key);
+      setSidebar((current) =>
+        current.collectionsExpanded ? current : { ...current, collectionsExpanded: true }
+      );
+      updateUi(collectionPath, (ui) =>
+        ui.collectionExpanded ? ui : { ...ui, collectionExpanded: true }
+      );
+
+      if (entry.type === 'current') {
+        if (entry.nodeKind === 'request') {
+          openRequestTab(collectionPath, entry.path);
+          revealInSidebar(
+            { kind: 'request', collectionPath, path: entry.path },
+            { activate: false }
+          );
+        } else {
+          openFolderTab(collectionPath, entry.path);
+          revealInSidebar(
+            { kind: 'folder', collectionPath, path: entry.path },
+            { activate: false }
+          );
+        }
+        return;
+      }
+
+      const parentPath = entry.parentPath;
+      if (parentPath) {
+        openFolderTab(collectionPath, parentPath);
+        updateUi(collectionPath, (ui) => {
+          const expanded = new Set(ui.expanded);
+          const parts = parentPath.split('.');
+          let changed = false;
+          for (let depth = 1; depth <= parts.length; depth += 1) {
+            const ancestor = parts.slice(0, depth).join('.');
+            if (!expanded.has(ancestor)) {
+              expanded.add(ancestor);
+              changed = true;
+            }
+          }
+          return changed ? { ...ui, expanded } : ui;
+        });
+      } else {
+        updateUi(collectionPath, (ui) =>
+          ui.collectionExpanded ? ui : { ...ui, collectionExpanded: true }
+        );
+      }
+
+      window.requestAnimationFrame(() => {
+        const element = document.querySelector(
+          `[data-sidebar-key="${CSS.escape(entry.key)}"]`
+        );
+        if (element instanceof HTMLElement) {
+          element.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      });
+    },
+    [openFolderTab, openRequestTab, revealInSidebar, updateUi]
+  );
+
+  const cycleChange = useCallback(
+    (delta: number) => {
+      if (!activeCollection || changeList.length === 0) {
+        return;
+      }
+      const currentIndex = focusedChangeKey
+        ? changeList.findIndex((entry) => entry.key === focusedChangeKey)
+        : -1;
+      const nextIndex =
+        currentIndex === -1
+          ? delta > 0
+            ? 0
+            : changeList.length - 1
+          : (currentIndex + delta + changeList.length) % changeList.length;
+      focusChangeEntry(activeCollection.filePath, changeList[nextIndex]);
+    },
+    [activeCollection, changeList, focusChangeEntry, focusedChangeKey]
+  );
+
+  useEffect(() => {
+    return window.clara.onCommand((command: AppCommand) => {
+      if (command.type === 'next-change') {
+        cycleChange(1);
+      } else if (command.type === 'prev-change') {
+        cycleChange(-1);
+      }
+    });
+  }, [cycleChange]);
+
+  const selectRemovedGhost = useCallback(
+    (collectionPath: string, ghost: RemovedGhost) => {
+      const entry = changeList.find(
+        (candidate) => candidate.type === 'removed' && candidate.key === ghost.key
+      );
+      if (entry) {
+        focusChangeEntry(collectionPath, entry);
+      }
+    },
+    [changeList, focusChangeEntry]
+  );
+
   useEffect(() => {
     if (!sessionHydrated || !sidebar.followActiveTab || !activeTab) {
       return;
@@ -2308,6 +2424,14 @@ export default function App() {
                             onSelectRequest={(path) =>
                               openRequestTab(entry.filePath, path)
                             }
+                            focusedRemovedKey={
+                              compare && focusedChangeKey?.startsWith('__removed__')
+                                ? focusedChangeKey
+                                : null
+                            }
+                            onSelectRemoved={(ghost) =>
+                              selectRemovedGhost(entry.filePath, ghost)
+                            }
                             onContextMenu={(event, treeTarget) =>
                               openContextMenu(event, treeTarget)
                             }
@@ -2332,6 +2456,20 @@ export default function App() {
                 <p className="sidebar-empty">No matching collections</p>
               ) : null}
             </div>
+
+            {activeCompare && activeCollection ? (
+              <ChangeListPanel
+                baseRef={activeCompare.baseRef}
+                collection={activeCollection.collection}
+                entries={changeList}
+                activeKey={focusedChangeKey}
+                onSelect={(entry) => {
+                  focusChangeEntry(activeCollection.filePath, entry);
+                }}
+                onPrev={() => cycleChange(-1)}
+                onNext={() => cycleChange(1)}
+              />
+            ) : null}
 
             <div className="sidebar-section sidebar-section-environments">
               <div className="sidebar-section-title">
