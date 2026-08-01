@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  CLARA_TOOLTIP_EVENT,
+  type ClaraTooltipDetail
+} from './claraTooltip.ts';
 import './GlobalTooltip.css';
 
 const SHOW_DELAY_MS = 100;
@@ -19,6 +23,7 @@ export default function GlobalTooltip() {
   const timerRef = useRef<number | null>(null);
   const activeTargetRef = useRef<HTMLElement | null>(null);
   const originalTitleRef = useRef<string | null>(null);
+  const shownTextRef = useRef<string | null>(null);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current != null) {
@@ -30,6 +35,7 @@ export default function GlobalTooltip() {
   const hide = useCallback(() => {
     clearTimer();
     setTooltip(null);
+    shownTextRef.current = null;
     if (activeTargetRef.current && originalTitleRef.current != null) {
       activeTargetRef.current.setAttribute('title', originalTitleRef.current);
     }
@@ -38,24 +44,34 @@ export default function GlobalTooltip() {
   }, [clearTimer]);
 
   const show = useCallback(
-    (target: HTMLElement) => {
-      if (activeTargetRef.current === target) {
-        return;
-      }
-      hide();
-      const text = target.getAttribute('title');
+    (target: HTMLElement, options?: { text?: string; delayMs?: number }) => {
+      const text = options?.text ?? target.getAttribute('title');
       if (!text) {
         return;
       }
+      if (activeTargetRef.current === target && shownTextRef.current === text) {
+        return;
+      }
+      hide();
 
-      // Suppress the OS tooltip while the faster Clara tooltip is active.
-      target.removeAttribute('title');
+      const existing = target.getAttribute('title');
+      if (existing) {
+        // Suppress the OS tooltip while the faster Clara tooltip is active.
+        target.removeAttribute('title');
+        originalTitleRef.current = existing;
+      } else if (options?.text) {
+        originalTitleRef.current = null;
+      } else {
+        return;
+      }
+
       activeTargetRef.current = target;
-      originalTitleRef.current = text;
+      shownTextRef.current = text;
+      const delay = options?.delayMs ?? SHOW_DELAY_MS;
       timerRef.current = window.setTimeout(() => {
         timerRef.current = null;
         setTooltip({ text, target });
-      }, SHOW_DELAY_MS);
+      }, delay);
     },
     [hide]
   );
@@ -84,16 +100,36 @@ export default function GlobalTooltip() {
         hide();
       }
     };
+    const onProgrammatic = (event: Event) => {
+      const detail = (event as CustomEvent<ClaraTooltipDetail>).detail;
+      if (!detail?.selector) {
+        return;
+      }
+      const target = document.querySelector(detail.selector);
+      if (!(target instanceof HTMLElement)) {
+        return;
+      }
+      // Force a fresh show even if the same control was already active.
+      if (activeTargetRef.current === target) {
+        hide();
+      }
+      show(target, {
+        text: detail.text,
+        delayMs: detail.delayMs ?? 0
+      });
+    };
 
     document.addEventListener('pointerover', onPointerOver, true);
     document.addEventListener('pointerout', onPointerOut, true);
     document.addEventListener('focusin', onFocusIn, true);
     document.addEventListener('focusout', onFocusOut, true);
+    window.addEventListener(CLARA_TOOLTIP_EVENT, onProgrammatic);
     return () => {
       document.removeEventListener('pointerover', onPointerOver, true);
       document.removeEventListener('pointerout', onPointerOut, true);
       document.removeEventListener('focusin', onFocusIn, true);
       document.removeEventListener('focusout', onFocusOut, true);
+      window.removeEventListener(CLARA_TOOLTIP_EVENT, onProgrammatic);
       hide();
     };
   }, [hide, show]);

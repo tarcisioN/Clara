@@ -12,6 +12,7 @@ import PromptDialog, { type PromptRequest } from './components/PromptDialog.tsx'
 import ResponsePane from './components/ResponsePane.tsx';
 import VariablesPane from './components/VariablesPane.tsx';
 import { decodeItemDrag, ITEM_PATH_MIME } from './components/dnd.ts';
+import { showClaraTooltip } from './components/claraTooltip.ts';
 import {
   buildSingleRequestCollection,
   resolveInheritedVariables
@@ -301,6 +302,7 @@ export default function App() {
   const [sidebar, setSidebar] = useState<SessionSidebar>({ ...DEFAULT_SIDEBAR });
   const [environmentPanelHeight, setEnvironmentPanelHeight] =
     useState(CHANGES_DEFAULT_HEIGHT);
+  const [changedOnlyNudge, setChangedOnlyNudge] = useState(0);
   const [sidebarQuery, setSidebarQuery] = useState('');
   const [sessionHydrated, setSessionHydrated] = useState(false);
   const [sessionHome, setSessionHome] = useState<string | null>(null);
@@ -3186,16 +3188,42 @@ export default function App() {
     });
   };
 
+  const nudgeChangedOnlyMode = useCallback(() => {
+    setChangedOnlyNudge((current) => current + 1);
+    showClaraTooltip({
+      selector: '[data-changed-only-toggle]',
+      text: 'Changed only is on — only changed items are shown. Click Δ to show all.',
+      delayMs: 0
+    });
+  }, []);
+
+  useEffect(() => {
+    if (changedOnlyNudge === 0) {
+      return;
+    }
+    const timer = window.setTimeout(() => setChangedOnlyNudge(0), 1200);
+    return () => window.clearTimeout(timer);
+  }, [changedOnlyNudge]);
+
   const toggleFolder = (collectionPath: string, path: ItemPath) => {
-    updateUi(collectionPath, (ui) => {
-      const expanded = new Set(ui.expanded);
+    const ui = uiByPathRef.current[collectionPath] ?? EMPTY_UI;
+    const expanding = !ui.expanded.has(path);
+    updateUi(collectionPath, (current) => {
+      const expanded = new Set(current.expanded);
       if (expanded.has(path)) {
         expanded.delete(path);
       } else {
         expanded.add(path);
       }
-      return { ...ui, expanded };
+      return { ...current, expanded };
     });
+    if (
+      expanding &&
+      sidebarRef.current.changedOnly &&
+      Boolean(compareByPathRef.current[collectionPath])
+    ) {
+      nudgeChangedOnlyMode();
+    }
   };
 
   const titlebarName =
@@ -3495,7 +3523,10 @@ export default function App() {
                 </button>
                 <button
                   type="button"
-                  className={`sidebar-changed-only ${sidebar.changedOnly ? 'is-active' : ''}`}
+                  data-changed-only-toggle
+                  className={`sidebar-changed-only ${sidebar.changedOnly ? 'is-active' : ''} ${
+                    changedOnlyNudge > 0 ? 'is-nudged' : ''
+                  }`}
                   aria-label={
                     sidebar.changedOnly
                       ? 'Show all collection items'
@@ -3503,7 +3534,9 @@ export default function App() {
                   }
                   aria-pressed={sidebar.changedOnly}
                   title={
-                    sidebar.changedOnly ? 'Changed only (on)' : 'Changed only'
+                    sidebar.changedOnly
+                      ? 'Changed only is on — only changed items are shown. Click to show all.'
+                      : 'Changed only — hide unchanged items vs base'
                   }
                   onClick={() =>
                     setSidebar((current) => ({
@@ -3645,10 +3678,14 @@ export default function App() {
                             aria-expanded={collectionExpanded}
                             onClick={(event) => {
                               event.stopPropagation();
+                              const expanding = !collectionExpanded;
                               updateUi(entry.filePath, (current) => ({
                                 ...current,
                                 collectionExpanded: !current.collectionExpanded
                               }));
+                              if (expanding && sidebar.changedOnly && compare) {
+                                nudgeChangedOnlyMode();
+                              }
                             }}
                           >
                             <span className="collection-chevron" aria-hidden>
