@@ -494,8 +494,8 @@ button.primary {
 }
 
 .sidebar-collection + .sidebar-collection {
-  margin-top: 6px;
-  padding-top: 6px;
+  margin-top: 2px;
+  padding-top: 2px;
   border-top: 1px solid var(--surface-1);
 }
 
@@ -504,7 +504,7 @@ button.primary {
   align-items: center;
   gap: 4px;
   margin: 0 6px;
-  padding: 6px 6px 6px 4px;
+  padding: 2px 6px 2px 4px;
   border-radius: 6px;
 }
 
@@ -544,10 +544,10 @@ button.primary {
 .collection-heading-select {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
   flex: 1;
-  padding: 4px 4px 4px 2px;
+  padding: 2px 4px 2px 2px;
   border: 0;
   border-radius: 4px;
   background: transparent;
@@ -557,36 +557,18 @@ button.primary {
 }
 
 .collection-icon {
+  flex: 0 0 auto;
   color: var(--brand-text);
-  font-size: 1rem;
-}
-
-.collection-heading-select > div {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
+  font-size: 0.875rem;
 }
 
 .collection-heading-select strong {
+  min-width: 0;
   overflow: hidden;
   font-size: 0.75rem;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.collection-heading-select span:last-child {
-  margin-top: 2px;
-  color: var(--text-faint);
-  font-size: 0.625rem;
-}
-
-.collection-compare-cue {
-  display: block;
-  margin-top: 2px;
-  color: var(--brand-text);
-  font-size: 0.65rem;
-  font-weight: 550;
 }
 
 .collection-more {

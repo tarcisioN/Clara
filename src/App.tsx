@@ -149,7 +149,11 @@ import {
   restoreAllEnvironmentValuesFromBase,
   restoreEnvironmentValueFromBase
 } from './git/environmentDiff.ts';
-import { computeVariableDiff } from './git/variableDiff.ts';
+import {
+  computeVariableDiff,
+  restoreAllVariablesFromBase,
+  restoreVariableFromBase
+} from './git/variableDiff.ts';
 import type { KeyedDiff } from './git/keyedDiff.ts';
 import {
   clampSidebarWidth,
@@ -398,13 +402,23 @@ export default function App() {
       }
       const ui = uiByPath[tab.collectionPath] ?? EMPTY_UI;
       if (tab.kind === 'collection') {
+        const name = entry.collection.info?.name?.trim() || 'Collection';
+        const requestCount = countsByPath[entry.filePath]?.requests ?? 0;
+        const dirty = ui.collectionDirty || ui.structureDirty;
         return [
           {
             tab,
-            name: entry.collection.info?.name?.trim() || 'Collection',
+            name,
             badge: 'COL',
             badgeClass: 'badge-collection',
-            dirty: ui.collectionDirty || ui.structureDirty
+            dirty,
+            tooltip: [
+              name,
+              'Collection',
+              entry.filePath,
+              `${requestCount} request${requestCount === 1 ? '' : 's'}`,
+              dirty ? 'Unsaved changes' : 'Saved'
+            ].join('\n')
           }
         ];
       }
@@ -440,7 +454,7 @@ export default function App() {
         }
       ];
     });
-  }, [collections, environments, uiByPath, openTabs]);
+  }, [collections, countsByPath, environments, uiByPath, openTabs]);
 
   const activeRequestPath = activeTab?.kind === 'request' ? activeTab.path : null;
 
@@ -3425,9 +3439,18 @@ export default function App() {
                         : null;
                     const collectionExpanded = ui.collectionExpanded;
                     const compare = compareByPath[entry.filePath];
-                    const compareCue = compare
-                      ? `vs ${compare.baseRef} · ${compare.diff.changedCount} changed`
-                      : null;
+                    const collectionDirty = ui.collectionDirty || ui.structureDirty;
+                    const collectionTooltip = [
+                      collectionName,
+                      entry.filePath,
+                      `${counts.folders} folder${counts.folders === 1 ? '' : 's'} · ${counts.requests} request${counts.requests === 1 ? '' : 's'}`,
+                      compare
+                        ? `vs ${compare.baseRef} · ${compare.diff.changedCount} changed`
+                        : null,
+                      collectionDirty ? 'Unsaved changes' : null
+                    ]
+                      .filter(Boolean)
+                      .join('\n');
 
                     return [
                       <div className="sidebar-collection" key={entry.filePath}>
@@ -3512,20 +3535,12 @@ export default function App() {
                                   : undefined
                               )
                             }
-                            title={entry.filePath}
+                            title={collectionTooltip}
                           >
                             <span className="collection-icon" aria-hidden>
                               ◇
                             </span>
-                            <div>
-                              <strong>{collectionName}</strong>
-                              <span>
-                                {counts.folders} folders · {counts.requests} requests
-                              </span>
-                              {compareCue ? (
-                                <span className="collection-compare-cue">{compareCue}</span>
-                              ) : null}
-                            </div>
+                            <strong>{collectionName}</strong>
                           </button>
                           <button
                             type="button"
@@ -3998,6 +4013,68 @@ export default function App() {
                       }
                       valueStatusByIndex={collectionVariableDiff?.byCurrentIndex ?? null}
                       removedKeys={collectionVariableDiff?.removed ?? null}
+                      onRestoreAll={
+                        activeCompare
+                          ? async () => {
+                              if (
+                                !window.confirm(
+                                  `Restore all collection variables from ${activeCompare.baseRef}? This writes the file.`
+                                )
+                              ) {
+                                return;
+                              }
+                              try {
+                                await persistCollection(
+                                  activeCollection.filePath,
+                                  setCollectionVariables(
+                                    activeCollection.collection,
+                                    restoreAllVariablesFromBase(
+                                      getCollectionVariables(activeCompare.baseCollection)
+                                    )
+                                  )
+                                );
+                                setStatus({
+                                  kind: 'ok',
+                                  message: `Restored collection variables from ${activeCompare.baseRef} · saved`
+                                });
+                              } catch (error) {
+                                setStatus({ kind: 'error', message: errorMessage(error) });
+                              }
+                            }
+                          : null
+                      }
+                      onRestoreKey={
+                        activeCompare
+                          ? async (key) => {
+                              if (
+                                !window.confirm(
+                                  `Restore “${key}” from ${activeCompare.baseRef}? This writes the file.`
+                                )
+                              ) {
+                                return;
+                              }
+                              try {
+                                await persistCollection(
+                                  activeCollection.filePath,
+                                  setCollectionVariables(
+                                    activeCollection.collection,
+                                    restoreVariableFromBase(
+                                      getCollectionVariables(activeCollection.collection),
+                                      getCollectionVariables(activeCompare.baseCollection),
+                                      key
+                                    )
+                                  )
+                                );
+                                setStatus({
+                                  kind: 'ok',
+                                  message: `Restored “${key}” from ${activeCompare.baseRef} · saved`
+                                });
+                              } catch (error) {
+                                setStatus({ kind: 'error', message: errorMessage(error) });
+                              }
+                            }
+                          : null
+                      }
                       onAdd={() => editCollectionVariables((vars) => addVariable(vars))}
                       onChange={(index, patch) =>
                         editCollectionVariables((vars) => updateVariable(vars, index, patch))
@@ -4017,6 +4094,7 @@ export default function App() {
 
               {!showingRemovedDiff &&
                 activeTab?.kind === 'folder' &&
+                activeCollection &&
                 activeFolder &&
                 isFolder(activeFolder) && (
                 <CollectionRunPane
@@ -4052,6 +4130,78 @@ export default function App() {
                       }
                       valueStatusByIndex={folderVariableDiff?.byCurrentIndex ?? null}
                       removedKeys={folderVariableDiff?.removed ?? null}
+                      onRestoreAll={
+                        activeCompare && folderBaseItem
+                          ? async () => {
+                              if (
+                                !window.confirm(
+                                  `Restore all folder variables from ${activeCompare.baseRef}? This writes the file.`
+                                )
+                              ) {
+                                return;
+                              }
+                              try {
+                                await persistCollection(activeCollection.filePath, {
+                                  ...activeCollection.collection,
+                                  item: updateItemByPath(
+                                    activeCollection.collection.item,
+                                    activeTab.path,
+                                    (item) =>
+                                      setItemVariables(
+                                        item,
+                                        restoreAllVariablesFromBase(
+                                          getItemVariables(folderBaseItem)
+                                        )
+                                      )
+                                  )
+                                });
+                                setStatus({
+                                  kind: 'ok',
+                                  message: `Restored folder variables from ${activeCompare.baseRef} · saved`
+                                });
+                              } catch (error) {
+                                setStatus({ kind: 'error', message: errorMessage(error) });
+                              }
+                            }
+                          : null
+                      }
+                      onRestoreKey={
+                        activeCompare && folderBaseItem
+                          ? async (key) => {
+                              if (
+                                !window.confirm(
+                                  `Restore “${key}” from ${activeCompare.baseRef}? This writes the file.`
+                                )
+                              ) {
+                                return;
+                              }
+                              try {
+                                await persistCollection(activeCollection.filePath, {
+                                  ...activeCollection.collection,
+                                  item: updateItemByPath(
+                                    activeCollection.collection.item,
+                                    activeTab.path,
+                                    (item) =>
+                                      setItemVariables(
+                                        item,
+                                        restoreVariableFromBase(
+                                          getItemVariables(item),
+                                          getItemVariables(folderBaseItem),
+                                          key
+                                        )
+                                      )
+                                  )
+                                });
+                                setStatus({
+                                  kind: 'ok',
+                                  message: `Restored “${key}” from ${activeCompare.baseRef} · saved`
+                                });
+                              } catch (error) {
+                                setStatus({ kind: 'error', message: errorMessage(error) });
+                              }
+                            }
+                          : null
+                      }
                       onAdd={() =>
                         editFolderVariables(activeTab.path, (vars) => addVariable(vars))
                       }

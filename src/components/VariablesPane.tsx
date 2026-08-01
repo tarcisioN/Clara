@@ -16,6 +16,8 @@ type VariablesPaneProps = {
   onChange: (index: number, patch: Pick<PostmanVariable, 'key' | 'value'>) => void;
   onToggleDisabled: (index: number, disabled: boolean) => void;
   onRemove: (index: number) => void;
+  onRestoreAll?: (() => void) | null;
+  onRestoreKey?: ((key: string) => void) | null;
 };
 
 function statusClass(kind: KeyChangeKind | undefined): string {
@@ -46,7 +48,9 @@ export default function VariablesPane({
   onAdd,
   onChange,
   onToggleDisabled,
-  onRemove
+  onRemove,
+  onRestoreAll = null,
+  onRestoreKey = null
 }: VariablesPaneProps) {
   const baseLabel = compareBaseRef ?? 'base';
   const hasCompare =
@@ -89,6 +93,11 @@ export default function VariablesPane({
               </button>
             </div>
           ) : null}
+          {(hasCompare || hasRemoved) && onRestoreAll ? (
+            <button type="button" className="compare-restore" onClick={onRestoreAll}>
+              Restore all from {baseLabel}
+            </button>
+          ) : null}
           {viewMode === 'edit' ? (
             <button type="button" onClick={onAdd}>
               Add variable
@@ -105,7 +114,7 @@ export default function VariablesPane({
               ? ` · ${keyedDiff.rows.filter((row) => row.change !== 'unchanged').length} changed`
               : ' · no changes'}
           </p>
-          <KeyedDiffView rows={keyedDiff.rows} />
+          <KeyedDiffView rows={keyedDiff.rows} onRestoreKey={onRestoreKey} />
         </div>
       ) : variables.length === 0 && !(removedKeys?.length) ? (
         <p className="variables-empty">No variables on this {scopeLabel}.</p>
@@ -159,14 +168,25 @@ export default function VariablesPane({
                   onChange={(event) => onChange(index, { value: event.target.value })}
                   aria-label="Variable value"
                 />
-                <button
-                  type="button"
-                  className="variables-col-actions"
-                  onClick={() => onRemove(index)}
-                  aria-label="Remove variable"
-                >
-                  ✕
-                </button>
+                <span className="variables-col-actions">
+                  {kind === 'modified' && variable.key && onRestoreKey ? (
+                    <button
+                      type="button"
+                      className="compare-restore-key"
+                      onClick={() => onRestoreKey(variable.key!)}
+                      title={`Restore ${variable.key} from ${baseLabel}`}
+                    >
+                      ↻
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => onRemove(index)}
+                    aria-label="Remove variable"
+                  >
+                    ✕
+                  </button>
+                </span>
               </div>
             );
           })}
@@ -180,7 +200,18 @@ export default function VariablesPane({
               <span className="variables-col-enabled" />
               <span className="variables-removed-key">{entry.key || '(empty)'}</span>
               <span className="variables-removed-value">removed in current</span>
-              <span className="variables-col-actions" />
+              <span className="variables-col-actions">
+                {entry.key && onRestoreKey ? (
+                  <button
+                    type="button"
+                    className="compare-restore-key"
+                    onClick={() => onRestoreKey(entry.key)}
+                    title={`Restore ${entry.key} from ${baseLabel}`}
+                  >
+                    ↻
+                  </button>
+                ) : null}
+              </span>
             </div>
           ))}
         </div>

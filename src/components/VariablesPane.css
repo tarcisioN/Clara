@@ -103,7 +103,7 @@
 
 .variables-row {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) minmax(0, 1.4fr) 32px;
+  grid-template-columns: 36px minmax(0, 1fr) minmax(0, 1.4fr) 56px;
   gap: 6px;
   align-items: center;
   padding: 6px 8px;
@@ -165,12 +165,36 @@
 }
 
 .variables-col-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
   border: 0;
   background: transparent;
   color: var(--text-faint);
   cursor: pointer;
 }
 
-.variables-col-actions:hover {
+.variables-col-actions button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+}
+
+.variables-col-actions:hover,
+.variables-col-actions button:hover {
   color: var(--text);
+}
+
+.variables-pane-actions .compare-restore {
+  border-color: rgba(212, 136, 26, 0.45);
+  color: #8a5a00;
+}
+
+.compare-restore-key {
+  color: #8a5a00;
+  font-size: 0.8125rem;
 }

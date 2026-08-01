@@ -10,6 +10,7 @@ export type WorkspaceTabView = {
   badge: string;
   badgeClass?: string;
   dirty: boolean;
+  tooltip?: string;
 };
 
 type RequestTabsProps = {
@@ -22,7 +23,7 @@ type RequestTabsProps = {
   onContextMenu: (event: MouseEvent, tab: WorkspaceTab) => void;
 };
 
-function TabLabel({ children }: { children: string }) {
+function TabLabel({ children, tooltip }: { children: string; tooltip?: string }) {
   const ref = useRef<HTMLSpanElement>(null);
   const [overflowing, setOverflowing] = useState(false);
 
@@ -42,7 +43,7 @@ function TabLabel({ children }: { children: string }) {
     <span
       ref={ref}
       className={`request-tab-name ${overflowing ? 'faded' : ''}`}
-      title={children}
+      title={tooltip ?? children}
     >
       {children}
     </span>
@@ -125,6 +126,7 @@ export default function RequestTabs({
             key={key}
             className={[
               'request-tab',
+              entry.tab.kind === 'collection' ? 'request-tab-collection' : '',
               active ? 'active' : '',
               reorderOver?.key === key ? `reorder-${reorderOver.place}` : ''
             ]
@@ -181,12 +183,14 @@ export default function RequestTabs({
               onReorder(fromTab, entry.tab, dropPlace(event));
             }}
           >
-            <span
-              className={`request-tab-method ${entry.badgeClass ?? ''}`.trim()}
-            >
-              {entry.badge}
-            </span>
-            <TabLabel>{entry.name}</TabLabel>
+            {entry.tab.kind !== 'collection' ? (
+              <span
+                className={`request-tab-method ${entry.badgeClass ?? ''}`.trim()}
+              >
+                {entry.badge}
+              </span>
+            ) : null}
+            <TabLabel tooltip={entry.tooltip}>{entry.name}</TabLabel>
             <button
               type="button"
               className={`request-tab-close ${entry.dirty ? 'dirty' : ''}`}

@@ -44,6 +44,14 @@
   user-select: none;
 }
 
+.request-tab-collection {
+  flex: 0 1 160px;
+  min-width: 76px;
+  max-width: 160px;
+  gap: 4px;
+  padding-left: 10px;
+}
+
 .request-tab:active {
   cursor: grabbing;
 }

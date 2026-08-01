@@ -12,7 +12,7 @@ import {
 } from '../src/git/restoreFromBase.ts';
 import { computeSemanticDiff } from '../src/git/semanticDiff.ts';
 import { computeStructuralDiff } from '../src/git/structuralDiff.ts';
-import { computeVariableDiff } from '../src/git/variableDiff.ts';
+import { computeVariableDiff, restoreVariableFromBase } from '../src/git/variableDiff.ts';
 import type { PostmanCollection, PostmanItem } from '../src/postman/types.ts';
 import type { PostmanEnvironment } from '../src/postman/environment.ts';
 
@@ -125,6 +125,33 @@ const folderVarDiff = computeVariableDiff(
   base.item![0]!.variable
 );
 assert.equal(folderVarDiff.byCurrentIndex.get(0), 'modified');
+
+// Restoring a removed collection variable re-inserts the base entry.
+const currentMissingHost = {
+  ...base,
+  variable: [{ key: 'other', value: 'x' }]
+};
+const baseWithHost = {
+  ...base,
+  variable: [
+    { key: 'host', value: 'https://example.com' },
+    { key: 'other', value: 'x' }
+  ]
+};
+const missingDiff = computeVariableDiff(currentMissingHost.variable, baseWithHost.variable);
+assert.equal(missingDiff.removedCount, 1);
+assert.equal(missingDiff.removed[0]?.key, 'host');
+const hostRestored = restoreVariableFromBase(
+  currentMissingHost.variable,
+  baseWithHost.variable,
+  'host'
+);
+assert.equal(hostRestored.some((entry) => entry.key === 'host'), true);
+assert.equal(
+  hostRestored.find((entry) => entry.key === 'host')?.value,
+  'https://example.com'
+);
+assert.equal(computeVariableDiff(hostRestored, baseWithHost.variable).removedCount, 0);
 
 // Duplicate-key encounter order + empty key handling in keyedDiff
 const keyed = computeKeyedDiff(
