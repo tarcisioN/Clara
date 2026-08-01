@@ -431,7 +431,9 @@ export default function ChangeListPanel({
                           ▸
                         </span>
                       )}
-                      <span className="change-list-name">{entry.name}</span>
+                      <span className="change-list-name" title={entry.name}>
+                        {entry.name}
+                      </span>
                       {entry.type === 'current' &&
                       entry.changeKind === 'moved' &&
                       entry.fromIndex != null &&

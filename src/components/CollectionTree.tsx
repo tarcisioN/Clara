@@ -171,7 +171,9 @@ function RemovedRow({
         ) : (
           <span className="tree-icon" aria-hidden />
         )}
-        <span className="tree-label">{ghost.name}</span>
+        <span className="tree-label" title={ghost.name}>
+          {ghost.name}
+        </span>
         <ChangeMarker kind="removed" />
       </div>
     </li>
@@ -385,7 +387,9 @@ function TreeNode({
             aria-current={isSelected ? 'true' : undefined}
           >
             <span className="tree-icon" aria-hidden />
-            <span className="tree-label">{name}</span>
+            <span className="tree-label" title={name}>
+              {name}
+            </span>
           </button>
           <ChangeMarker
             kind={treeChangeKind}
@@ -479,7 +483,9 @@ function TreeNode({
         >
           <span className="tree-chevron spacer" aria-hidden />
           <span className={`tree-method method-${method.toLowerCase()}`}>{method}</span>
-          <span className="tree-label">{name}</span>
+          <span className="tree-label" title={name}>
+            {name}
+          </span>
         </button>
         <ChangeMarker kind={changeKind} />
         <MoreButton
