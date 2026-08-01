@@ -3192,7 +3192,7 @@ export default function App() {
     setChangedOnlyNudge((current) => current + 1);
     showClaraTooltip({
       selector: '[data-changed-only-toggle]',
-      text: 'Changed only is on — only changed items are shown. Click Δ to show all.',
+      text: 'Changed only is on — only changed items are shown. Click the source-control button to show all.',
       delayMs: 0
     });
   }, []);
@@ -3545,7 +3545,20 @@ export default function App() {
                     }))
                   }
                 >
-                  Δ
+                  <span className="sidebar-changed-only-icon" aria-hidden>
+                    <svg viewBox="0 0 16 16" width="14" height="14" fill="none">
+                      <circle cx="5" cy="3.25" r="1.55" stroke="currentColor" strokeWidth="1.25" />
+                      <circle cx="5" cy="12.75" r="1.55" stroke="currentColor" strokeWidth="1.25" />
+                      <circle cx="11.75" cy="8" r="1.55" stroke="currentColor" strokeWidth="1.25" />
+                      <path
+                        d="M5 4.8v6.4M5 9.1c0-2.2 1.55-3.35 5.2-3.35"
+                        stroke="currentColor"
+                        strokeWidth="1.25"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </span>
                 </button>
                 <button
                   type="button"
