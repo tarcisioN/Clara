@@ -146,7 +146,7 @@ function RemovedRow({
         className={`tree-row ${ghost.kind} removed ${focused ? 'selected' : ''} ${
           onSelect ? 'clickable' : ''
         }`}
-        style={{ paddingLeft: 10 + depth * 14 }}
+        style={{ paddingLeft: 6 + depth * 10 }}
         title={`Removed vs base: ${ghost.name}`}
         data-sidebar-key={ghost.key}
         onClick={onSelect ? () => onSelect(ghost) : undefined}
@@ -349,7 +349,7 @@ function TreeNode({
           } ${treeChangeKind !== 'unchanged' ? `change-${treeChangeKind}` : ''} ${
             isDragSource ? 'dragging' : ''
           } ${dropClass(dropIndicator, collectionPath, path)}`.trim()}
-          style={{ paddingLeft: 10 + depth * 14 }}
+          style={{ paddingLeft: 6 + depth * 10 }}
           onContextMenu={(event) => {
             event.preventDefault();
             onContextMenu(event, { kind: 'folder', collectionPath, path });
@@ -442,7 +442,7 @@ function TreeNode({
           collectionPath,
           path
         )}`.trim()}
-        style={{ paddingLeft: 10 + depth * 14 }}
+        style={{ paddingLeft: 6 + depth * 10 }}
         onContextMenu={(event) => {
           event.preventDefault();
           onContextMenu(event, { kind: 'request', collectionPath, path });

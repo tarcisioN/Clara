@@ -6,22 +6,26 @@
 }
 
 .tree-empty {
-  margin: 0;
+  margin: 2px 8px;
   color: #5c6756;
-  font-size: 0.92rem;
+  font-size: 0.6875rem;
 }
 
 .tree-row {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   width: 100%;
+  min-height: 20px;
   border: 0;
   background: transparent;
   text-align: left;
-  padding: 6px 6px 6px 10px;
-  border-radius: 8px;
+  padding: 1px 4px 1px 6px;
+  border-radius: 4px;
   color: inherit;
+  font-size: 0.75rem;
+  line-height: 1.15;
 }
 
 .tree-row:hover,
@@ -39,8 +43,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   padding: 0;
   border: 0;
   border-radius: 4px;
@@ -57,7 +61,7 @@
 .tree-request-select {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   min-width: 0;
   flex: 1;
   padding: 0;
@@ -74,19 +78,21 @@
 }
 
 .tree-more {
-  flex: 0 0 auto;
+  position: absolute;
+  right: 2px;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  margin-left: auto;
+  width: 17px;
+  height: 17px;
+  margin-left: 0;
   padding: 0;
   border: 0;
   border-radius: 4px;
   background: transparent;
   color: var(--text-faint, #6a7563);
-  font-size: 0.875rem;
+  font-size: 0.75rem;
   letter-spacing: 0.02em;
   line-height: 1;
   opacity: 0;
@@ -106,13 +112,13 @@
 
 .tree-change {
   flex: 0 0 auto;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  border-radius: 4px;
-  font-size: 0.65rem;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 2px;
+  border-radius: 3px;
+  font-size: 0.59375rem;
   font-weight: 700;
-  line-height: 14px;
+  line-height: 13px;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
@@ -155,9 +161,9 @@
 }
 
 .tree-chevron {
-  width: 12px;
+  width: 8px;
   flex-shrink: 0;
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   color: #6a7563;
 }
 
@@ -166,7 +172,7 @@
 }
 
 .tree-icon {
-  font-size: 0.9rem;
+  font-size: 0.75rem;
 }
 
 .tree-label {
@@ -177,9 +183,9 @@
 
 .tree-method {
   flex-shrink: 0;
-  min-width: 3.2rem;
+  min-width: 2.25rem;
   font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: 0.68rem;
+  font-size: 0.59375rem;
   font-weight: 700;
   letter-spacing: 0.02em;
   color: #3f6b4d;
@@ -196,10 +202,6 @@
 
 .method-delete {
   color: #8a2b24;
-}
-
-.tree-row {
-  position: relative;
 }
 
 .tree-row.dragging {
