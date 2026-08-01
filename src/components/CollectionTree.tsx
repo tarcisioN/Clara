@@ -108,7 +108,13 @@ function ChangeMarker({ kind, count }: { kind: ChangeKind | 'removed'; count?: n
     return null;
   }
   const label =
-    kind === 'added' ? 'Added' : kind === 'removed' ? 'Removed' : 'Modified';
+    kind === 'added'
+      ? 'Added'
+      : kind === 'removed'
+        ? 'Removed'
+        : kind === 'moved'
+          ? 'Moved'
+          : 'Modified';
   const badge =
     typeof count === 'number' && count > 0 && kind === 'modified' ? String(count) : null;
   return (
@@ -117,7 +123,8 @@ function ChangeMarker({ kind, count }: { kind: ChangeKind | 'removed'; count?: n
       title={badge ? `${label} · ${badge} under` : label}
       aria-label={badge ? `${label}, ${badge} changes under` : label}
     >
-      {badge ?? (kind === 'added' ? '+' : kind === 'removed' ? '−' : '~')}
+      {badge ??
+        (kind === 'added' ? '+' : kind === 'removed' ? '−' : kind === 'moved' ? '↕' : '~')}
     </span>
   );
 }

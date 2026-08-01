@@ -95,6 +95,7 @@ A navigable index of all collection changes.
 ### Requirements
 - [x] Panel or section listing changed requests/folders (grouped by folder path)
 - [x] Folders appear in the list only when the folder itself changed (name / variables / auth / events); nested-only folders are group headers, not rows
+- [x] Sibling reorder (same content, new index) appears as **moved** (`↕`) with `#from → #to`
 - [x] Click → open/focus that node and show its diff (G2)
 - [x] Shortcuts: next / previous change
 - [x] Counts: added / removed / modified

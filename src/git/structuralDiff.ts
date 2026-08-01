@@ -6,7 +6,7 @@ import {
   type ItemPath
 } from '../postman/tree.ts';
 
-export type ChangeKind = 'added' | 'removed' | 'modified' | 'unchanged';
+export type ChangeKind = 'added' | 'removed' | 'modified' | 'moved' | 'unchanged';
 
 export type RemovedGhost = {
   /** Synthetic key for React lists; not a real ItemPath in the current tree. */
@@ -26,12 +26,15 @@ export type StructuralDiff = {
   removed: RemovedGhost[];
   /** Changed descendants under each current folder path (excludes self-only meta). */
   descendantChangeCount: Map<ItemPath, number>;
+  /** For `moved` nodes: sibling index in the base parent. */
+  movedFromIndex: Map<ItemPath, number>;
   /** Collection-level `variable[]` differs from base. */
   collectionVariablesChanged: boolean;
   added: number;
   removedCount: number;
   modified: number;
-  /** added + removed + modified (+1 when collection variables differ). */
+  moved: number;
+  /** added + removed + modified + moved (+1 when collection variables differ). */
   changedCount: number;
 };
 
@@ -153,9 +156,11 @@ export function computeStructuralDiff(
   const statusByPath = new Map<ItemPath, ChangeKind>();
   const removed: RemovedGhost[] = [];
   const descendantChangeCount = new Map<ItemPath, number>();
+  const movedFromIndex = new Map<ItemPath, number>();
   let added = 0;
   let removedCount = 0;
   let modified = 0;
+  let moved = 0;
   let removedSeq = 0;
 
   const parentOf = (path: ItemPath): ItemPath | null => {
@@ -243,9 +248,16 @@ export function computeStructuralDiff(
       if (isFolder(node) && isFolder(original)) {
         const metaChanged = stable(folderMeta(node)) !== stable(folderMeta(original));
         walk(node.item, original.item, path);
+        const reordered =
+          pair.baseIndex !== undefined && pair.currentIndex !== pair.baseIndex;
         if (metaChanged) {
           statusByPath.set(path, 'modified');
           modified += 1;
+          bumpContainingFolders(parentOf(path), 1);
+        } else if (reordered) {
+          statusByPath.set(path, 'moved');
+          moved += 1;
+          movedFromIndex.set(path, pair.baseIndex!);
           bumpContainingFolders(parentOf(path), 1);
         } else {
           // Nested-only changes stay on the folder via descendantChangeCount
@@ -257,9 +269,19 @@ export function computeStructuralDiff(
       }
 
       if (isRequest(node) && isRequest(original)) {
+        const reordered =
+          pair.baseIndex !== undefined && pair.currentIndex !== pair.baseIndex;
         if (requestEqual(node, original)) {
-          statusByPath.set(path, 'unchanged');
+          if (reordered) {
+            statusByPath.set(path, 'moved');
+            moved += 1;
+            movedFromIndex.set(path, pair.baseIndex!);
+            bumpContainingFolders(parentOf(path), 1);
+          } else {
+            statusByPath.set(path, 'unchanged');
+          }
         } else {
+          // Content change wins over reorder-only marking.
           statusByPath.set(path, 'modified');
           modified += 1;
           bumpContainingFolders(parentOf(path), 1);
@@ -287,11 +309,13 @@ export function computeStructuralDiff(
     statusByPath,
     removed,
     descendantChangeCount,
+    movedFromIndex,
     collectionVariablesChanged,
     added,
     removedCount,
     modified,
-    changedCount: added + removedCount + modified + extra
+    moved,
+    changedCount: added + removedCount + modified + moved + extra
   };
 }
 

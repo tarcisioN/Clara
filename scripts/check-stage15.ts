@@ -75,5 +75,33 @@ const counts = changeListCounts(entries);
 assert.equal(counts.added, 1);
 assert.equal(counts.modified, 1);
 assert.equal(counts.removed, 1);
+assert.equal(counts.moved, 0);
+
+// Reorder-only siblings appear as moved with from/to indices.
+const baseOrder: PostmanCollection = {
+  info: { name: 'O', schema: base.info.schema },
+  item: [
+    { name: 'A', request: { method: 'GET', url: 'https://example.com/a' } },
+    { name: 'B', request: { method: 'GET', url: 'https://example.com/b' } }
+  ]
+};
+const currentOrder: PostmanCollection = {
+  info: baseOrder.info,
+  item: [
+    { name: 'B', request: { method: 'GET', url: 'https://example.com/b' } },
+    { name: 'A', request: { method: 'GET', url: 'https://example.com/a' } }
+  ]
+};
+const orderDiff = computeStructuralDiff(currentOrder, baseOrder);
+const orderEntries = flattenStructuralChanges(currentOrder, orderDiff);
+assert.deepEqual(
+  orderEntries.map((entry) =>
+    entry.type === 'current' && entry.changeKind === 'moved'
+      ? `${entry.name}:${entry.fromIndex}→${entry.toIndex}`
+      : `${entry.changeKind}:${entry.name}`
+  ),
+  ['B:1→0', 'A:0→1']
+);
+assert.equal(changeListCounts(orderEntries).moved, 2);
 
 console.log('stage15 checks passed');

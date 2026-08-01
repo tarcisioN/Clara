@@ -21,6 +21,10 @@ export type ChangeListEntry =
       nodeKind: 'folder' | 'request';
       method?: string;
       parentPath: ItemPath | null;
+      /** Sibling index in base (moved only). */
+      fromIndex?: number;
+      /** Sibling index in current (moved only). */
+      toIndex?: number;
     }
   | {
       type: 'removed';
@@ -76,6 +80,8 @@ export function flattenStructuralChanges(
       const status = diff.statusByPath.get(path);
       if (status && status !== 'unchanged') {
         const described = describeItem(item);
+        const toIndex = parseInt(path.slice(path.lastIndexOf('.') + 1), 10);
+        const fromIndex = diff.movedFromIndex.get(path);
         entries.push({
           type: 'current',
           key: `current:${path}`,
@@ -84,7 +90,10 @@ export function flattenStructuralChanges(
           name: described.name,
           nodeKind: described.nodeKind,
           method: described.method,
-          parentPath
+          parentPath,
+          ...(status === 'moved'
+            ? { fromIndex: fromIndex ?? toIndex, toIndex }
+            : {})
         });
       }
       if (isFolder(item)) {
@@ -131,20 +140,24 @@ export function changeListCounts(entries: ChangeListEntry[]): {
   added: number;
   modified: number;
   removed: number;
+  moved: number;
 } {
   let added = 0;
   let modified = 0;
   let removed = 0;
+  let moved = 0;
   for (const entry of entries) {
     if (entry.changeKind === 'added') {
       added += 1;
     } else if (entry.changeKind === 'modified') {
       modified += 1;
+    } else if (entry.changeKind === 'moved') {
+      moved += 1;
     } else {
       removed += 1;
     }
   }
-  return { added, modified, removed };
+  return { added, modified, removed, moved };
 }
 
 export function folderLabelForEntry(

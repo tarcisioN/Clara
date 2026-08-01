@@ -138,4 +138,32 @@ assert.equal(metaDiff.statusByPath.get('0'), 'modified');
 assert.equal(metaDiff.statusByPath.get('0.0'), 'unchanged');
 assert.equal(metaDiff.modified, 1);
 
+// Sibling reorder with identical content → moved (not modified).
+const baseOrder: PostmanCollection = {
+  info: base.info,
+  item: [
+    { name: 'A', request: { method: 'GET', url: 'https://example.com/a' } },
+    { name: 'B', request: { method: 'GET', url: 'https://example.com/b' } },
+    { name: 'C', request: { method: 'GET', url: 'https://example.com/c' } }
+  ]
+};
+const currentOrder: PostmanCollection = {
+  info: base.info,
+  item: [
+    { name: 'C', request: { method: 'GET', url: 'https://example.com/c' } },
+    { name: 'A', request: { method: 'GET', url: 'https://example.com/a' } },
+    { name: 'B', request: { method: 'GET', url: 'https://example.com/b' } }
+  ]
+};
+const orderDiff = computeStructuralDiff(currentOrder, baseOrder);
+assert.equal(orderDiff.statusByPath.get('0'), 'moved'); // C was 2
+assert.equal(orderDiff.statusByPath.get('1'), 'moved'); // A was 0
+assert.equal(orderDiff.statusByPath.get('2'), 'moved'); // B was 1
+assert.equal(orderDiff.movedFromIndex.get('0'), 2);
+assert.equal(orderDiff.movedFromIndex.get('1'), 0);
+assert.equal(orderDiff.movedFromIndex.get('2'), 1);
+assert.equal(orderDiff.moved, 3);
+assert.equal(orderDiff.modified, 0);
+assert.equal(orderDiff.changedCount, 3);
+
 console.log('stage13 checks passed');

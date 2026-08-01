@@ -280,6 +280,24 @@
   background: rgba(180, 60, 60, 0.14);
 }
 
+.change-list-badge-moved {
+  color: #1f4f8a;
+  background: rgba(31, 79, 138, 0.14);
+}
+
+.change-list-stat.moved {
+  color: #1f4f8a;
+}
+
+.change-list-move-hint {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--text-faint, #6a7563);
+  font-size: 0.65rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .change-list-folder-icon {
   flex: 0 0 auto;
   width: 28px;

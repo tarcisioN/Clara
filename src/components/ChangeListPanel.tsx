@@ -36,7 +36,8 @@ type ChangeListPanelProps = {
 };
 
 function ChangeBadge({ kind }: { kind: ChangeListEntry['changeKind'] }) {
-  const label = kind === 'added' ? '+' : kind === 'removed' ? '−' : '~';
+  const label =
+    kind === 'added' ? '+' : kind === 'removed' ? '−' : kind === 'moved' ? '↕' : '~';
   return (
     <span className={`change-list-badge change-list-badge-${kind}`} aria-hidden>
       {label}
@@ -194,6 +195,7 @@ export default function ChangeListPanel({
   const added = entries.filter((entry) => entry.changeKind === 'added').length;
   const modified = entries.filter((entry) => entry.changeKind === 'modified').length;
   const removed = entries.filter((entry) => entry.changeKind === 'removed').length;
+  const moved = entries.filter((entry) => entry.changeKind === 'moved').length;
   const [height, setHeight] = useState(CHANGES_DEFAULT_HEIGHT);
   const panelRef = useRef<HTMLDivElement>(null);
   const resizeRef = useRef<{ startY: number; startHeight: number } | null>(null);
@@ -325,7 +327,7 @@ export default function ChangeListPanel({
             </span>
           ) : null}
           <span className="sidebar-count" title="Change counts">
-            +{added} ~{modified} −{removed}
+            +{added} ~{modified} ↕{moved} −{removed}
           </span>
         </button>
         <div className="change-list-actions">
@@ -388,6 +390,7 @@ export default function ChangeListPanel({
           <div className="change-list-summary">
             <span className="change-list-stat added">+{added}</span>
             <span className="change-list-stat modified">~{modified}</span>
+            <span className="change-list-stat moved">↕{moved}</span>
             <span className="change-list-stat removed">−{removed}</span>
           </div>
 
@@ -421,6 +424,14 @@ export default function ChangeListPanel({
                         </span>
                       )}
                       <span className="change-list-name">{entry.name}</span>
+                      {entry.type === 'current' &&
+                      entry.changeKind === 'moved' &&
+                      entry.fromIndex != null &&
+                      entry.toIndex != null ? (
+                        <span className="change-list-move-hint">
+                          #{entry.fromIndex} → #{entry.toIndex}
+                        </span>
+                      ) : null}
                     </button>
                   </li>
                 );
