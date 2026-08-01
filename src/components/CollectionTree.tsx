@@ -1,4 +1,4 @@
-import type { MouseEvent } from 'react';
+import { useState, type DragEvent, type MouseEvent } from 'react';
 import type { PostmanItem } from '../postman/types.ts';
 import {
   childPath,
@@ -6,6 +6,7 @@ import {
   isRequest,
   type ItemPath
 } from '../postman/tree.ts';
+import type { MoveTarget } from '../postman/structure.ts';
 import {
   pathVisibleWhenChangedOnly,
   removedUnderParent,
@@ -14,13 +15,18 @@ import {
   type StructuralDiff
 } from '../git/structuralDiff.ts';
 import { itemMatchesQuery } from '../workspace/sidebarSearch.ts';
-import { encodeItemDrag, ITEM_PATH_MIME } from './dnd.ts';
+import { decodeItemDrag, encodeItemDrag, ITEM_PATH_MIME } from './dnd.ts';
 import { tabKey } from '../workspace/tabs.ts';
 import './CollectionTree.css';
 
 export type TreeTarget =
   | { kind: 'folder'; collectionPath: string; path: ItemPath }
   | { kind: 'request'; collectionPath: string; path: ItemPath };
+
+export type TreeDropTarget = {
+  collectionPath: string;
+  target: MoveTarget;
+};
 
 type CollectionTreeProps = {
   collectionPath: string;
@@ -36,6 +42,12 @@ type CollectionTreeProps = {
   onSelectFolder: (path: ItemPath, options?: { forceNew?: boolean }) => void;
   onSelectRequest: (path: ItemPath, options?: { forceNew?: boolean }) => void;
   onContextMenu: (event: MouseEvent, target: TreeTarget) => void;
+  onMoveItem?: (
+    fromCollectionPath: string,
+    fromPath: ItemPath,
+    toCollectionPath: string,
+    target: MoveTarget
+  ) => void;
 };
 
 type TreeNodeProps = {
@@ -49,17 +61,46 @@ type TreeNodeProps = {
   changedOnly: boolean;
   structuralDiff: StructuralDiff | null;
   focusedRemovedKey: string | null;
+  dropIndicator: TreeDropTarget | null;
+  draggingPath: { collectionPath: string; path: ItemPath } | null;
   onSelectRemoved?: (ghost: RemovedGhost) => void;
   onToggleFolder: (path: ItemPath) => void;
   onSelectFolder: (path: ItemPath, options?: { forceNew?: boolean }) => void;
   onSelectRequest: (path: ItemPath, options?: { forceNew?: boolean }) => void;
   onContextMenu: (event: MouseEvent, target: TreeTarget) => void;
+  onDragPath: (payload: { collectionPath: string; path: ItemPath } | null) => void;
+  onDropIndicator: (indicator: TreeDropTarget | null) => void;
+  onMoveItem?: CollectionTreeProps['onMoveItem'];
 };
 
 function openModifiers(event: { metaKey: boolean; ctrlKey: boolean }): {
   forceNew?: boolean;
 } {
   return event.metaKey || event.ctrlKey ? { forceNew: true } : {};
+}
+
+function hasItemDrag(event: DragEvent): boolean {
+  return Array.from(event.dataTransfer.types).includes(ITEM_PATH_MIME);
+}
+
+/** Vertical place for a row: folders expose a middle "into" band. */
+function rowDropRelation(
+  event: DragEvent<HTMLElement>,
+  folder: boolean
+): MoveTarget['relation'] {
+  const rect = event.currentTarget.getBoundingClientRect();
+  const y = event.clientY - rect.top;
+  const ratio = rect.height > 0 ? y / rect.height : 0.5;
+  if (folder) {
+    if (ratio < 0.25) {
+      return 'before';
+    }
+    if (ratio > 0.75) {
+      return 'after';
+    }
+    return 'into';
+  }
+  return ratio < 0.5 ? 'before' : 'after';
 }
 
 function ChangeMarker({ kind, count }: { kind: ChangeKind | 'removed'; count?: number }) {
@@ -154,6 +195,24 @@ function MoreButton({
   );
 }
 
+function dropClass(
+  dropIndicator: TreeDropTarget | null,
+  collectionPath: string,
+  path: ItemPath
+): string {
+  if (!dropIndicator || dropIndicator.collectionPath !== collectionPath) {
+    return '';
+  }
+  const { target } = dropIndicator;
+  if (target.relation === 'into') {
+    return target.path === path ? 'drop-into' : '';
+  }
+  if (target.path !== path) {
+    return '';
+  }
+  return target.relation === 'before' ? 'drop-before' : 'drop-after';
+}
+
 function TreeNode({
   collectionPath,
   item,
@@ -165,11 +224,16 @@ function TreeNode({
   changedOnly,
   structuralDiff,
   focusedRemovedKey,
+  dropIndicator,
+  draggingPath,
   onSelectRemoved,
   onToggleFolder,
   onSelectFolder,
   onSelectRequest,
-  onContextMenu
+  onContextMenu,
+  onDragPath,
+  onDropIndicator,
+  onMoveItem
 }: TreeNodeProps) {
   if (filterQuery && !itemMatchesQuery(item, filterQuery)) {
     return null;
@@ -194,9 +258,77 @@ function TreeNode({
   const isSelected = selectedPath === path;
   const changeKind = structuralDiff?.statusByPath.get(path) ?? 'unchanged';
   const nestedCount = structuralDiff?.descendantChangeCount.get(path) ?? 0;
-  // Nested-only folders stay status=unchanged but still show a descendant badge.
   const treeChangeKind: ChangeKind =
     changeKind === 'unchanged' && nestedCount > 0 ? 'modified' : changeKind;
+  const isDragSource =
+    draggingPath?.collectionPath === collectionPath && draggingPath.path === path;
+
+  const acceptDrop = (event: DragEvent<HTMLElement>) => {
+    if (!onMoveItem || !hasItemDrag(event)) {
+      return false;
+    }
+    if (
+      draggingPath &&
+      draggingPath.collectionPath === collectionPath &&
+      (draggingPath.path === path || path.startsWith(`${draggingPath.path}.`))
+    ) {
+      // Never highlight self / own descendants as a drop target.
+      return false;
+    }
+    return true;
+  };
+
+  const onRowDragOver = (event: DragEvent<HTMLElement>) => {
+    if (!acceptDrop(event)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'move';
+    const relation = rowDropRelation(event, folder);
+    const target: MoveTarget =
+      relation === 'into' ? { relation: 'into', path } : { relation, path };
+    onDropIndicator({ collectionPath, target });
+  };
+
+  const onRowDrop = (event: DragEvent<HTMLElement>) => {
+    if (!onMoveItem || !hasItemDrag(event)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const payload = decodeItemDrag(event.dataTransfer.getData(ITEM_PATH_MIME));
+    onDropIndicator(null);
+    onDragPath(null);
+    if (!payload) {
+      return;
+    }
+    const relation = rowDropRelation(event, folder);
+    const target: MoveTarget =
+      relation === 'into' ? { relation: 'into', path } : { relation, path };
+    onMoveItem(payload.collectionPath, payload.path, collectionPath, target);
+  };
+
+  const sharedNodeProps = {
+    collectionPath,
+    depth: depth + 1,
+    expanded,
+    selectedPath,
+    filterQuery,
+    changedOnly,
+    structuralDiff,
+    focusedRemovedKey,
+    dropIndicator,
+    draggingPath,
+    onSelectRemoved,
+    onToggleFolder,
+    onSelectFolder,
+    onSelectRequest,
+    onContextMenu,
+    onDragPath,
+    onDropIndicator,
+    onMoveItem
+  };
 
   if (folder) {
     const ghosts = structuralDiff
@@ -207,12 +339,22 @@ function TreeNode({
         <div
           className={`tree-row folder ${isExpanded ? 'expanded' : ''} ${
             isSelected ? 'selected' : ''
-          } ${treeChangeKind !== 'unchanged' ? `change-${treeChangeKind}` : ''}`}
+          } ${treeChangeKind !== 'unchanged' ? `change-${treeChangeKind}` : ''} ${
+            isDragSource ? 'dragging' : ''
+          } ${dropClass(dropIndicator, collectionPath, path)}`.trim()}
           style={{ paddingLeft: 10 + depth * 14 }}
           onContextMenu={(event) => {
             event.preventDefault();
             onContextMenu(event, { kind: 'folder', collectionPath, path });
           }}
+          onDragOver={onRowDragOver}
+          onDragLeave={(event) => {
+            if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              return;
+            }
+            onDropIndicator(null);
+          }}
+          onDrop={onRowDrop}
           data-sidebar-key={tabKey({ kind: 'folder', collectionPath, path })}
         >
           <button
@@ -254,21 +396,9 @@ function TreeNode({
             {(item.item ?? []).map((child, index) => (
               <TreeNode
                 key={childPath(path, index)}
-                collectionPath={collectionPath}
+                {...sharedNodeProps}
                 item={child}
                 path={childPath(path, index)}
-                depth={depth + 1}
-                expanded={expanded}
-                selectedPath={selectedPath}
-                filterQuery={filterQuery}
-                changedOnly={changedOnly}
-                structuralDiff={structuralDiff}
-                focusedRemovedKey={focusedRemovedKey}
-                onSelectRemoved={onSelectRemoved}
-                onToggleFolder={onToggleFolder}
-                onSelectFolder={onSelectFolder}
-                onSelectRequest={onSelectRequest}
-                onContextMenu={onContextMenu}
               />
             ))}
             {ghosts.map((ghost) => (
@@ -300,12 +430,24 @@ function TreeNode({
       <div
         className={`tree-row request ${isSelected ? 'selected' : ''} ${
           changeKind !== 'unchanged' ? `change-${changeKind}` : ''
-        }`}
+        } ${isDragSource ? 'dragging' : ''} ${dropClass(
+          dropIndicator,
+          collectionPath,
+          path
+        )}`.trim()}
         style={{ paddingLeft: 10 + depth * 14 }}
         onContextMenu={(event) => {
           event.preventDefault();
           onContextMenu(event, { kind: 'request', collectionPath, path });
         }}
+        onDragOver={onRowDragOver}
+        onDragLeave={(event) => {
+          if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            return;
+          }
+          onDropIndicator(null);
+        }}
+        onDrop={onRowDrop}
         data-sidebar-key={tabKey({ kind: 'request', collectionPath, path })}
       >
         <button
@@ -320,7 +462,12 @@ function TreeNode({
               encodeItemDrag({ collectionPath, path })
             );
             event.dataTransfer.setData('text/plain', name);
-            event.dataTransfer.effectAllowed = 'copy';
+            event.dataTransfer.effectAllowed = onMoveItem ? 'copyMove' : 'copy';
+            onDragPath({ collectionPath, path });
+          }}
+          onDragEnd={() => {
+            onDragPath(null);
+            onDropIndicator(null);
           }}
         >
           <span className="tree-chevron spacer" aria-hidden />
@@ -352,13 +499,20 @@ export default function CollectionTree({
   onToggleFolder,
   onSelectFolder,
   onSelectRequest,
-  onContextMenu
+  onContextMenu,
+  onMoveItem
 }: CollectionTreeProps) {
+  const [dropIndicator, setDropIndicator] = useState<TreeDropTarget | null>(null);
+  const [draggingPath, setDraggingPath] = useState<{
+    collectionPath: string;
+    path: ItemPath;
+  } | null>(null);
+
   if (!items || items.length === 0) {
     const rootGhosts = structuralDiff
       ? removedUnderParent(structuralDiff.removed, null)
       : [];
-    if (rootGhosts.length === 0) {
+    if (rootGhosts.length === 0 && !onMoveItem) {
       return <p className="tree-empty">Collection has no items.</p>;
     }
   }
@@ -375,8 +529,55 @@ export default function CollectionTree({
     ? removedUnderParent(structuralDiff.removed, null)
     : [];
 
+  const rootDropInto =
+    dropIndicator?.collectionPath === collectionPath &&
+    dropIndicator.target.relation === 'into' &&
+    dropIndicator.target.path === null;
+
   return (
-    <ul className="tree-root">
+    <ul
+      className={`tree-root ${rootDropInto ? 'drop-into-root' : ''}`.trim()}
+      onDragOver={(event) => {
+        if (!onMoveItem || !hasItemDrag(event)) {
+          return;
+        }
+        // Empty / below-list drop: nest at collection root.
+        if ((items ?? []).length > 0 && event.target !== event.currentTarget) {
+          return;
+        }
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'move';
+        setDropIndicator({
+          collectionPath,
+          target: { relation: 'into', path: null }
+        });
+      }}
+      onDragLeave={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          return;
+        }
+        setDropIndicator(null);
+      }}
+      onDrop={(event) => {
+        if (!onMoveItem || !hasItemDrag(event)) {
+          return;
+        }
+        if ((items ?? []).length > 0 && event.target !== event.currentTarget) {
+          return;
+        }
+        event.preventDefault();
+        const payload = decodeItemDrag(event.dataTransfer.getData(ITEM_PATH_MIME));
+        setDropIndicator(null);
+        setDraggingPath(null);
+        if (!payload) {
+          return;
+        }
+        onMoveItem(payload.collectionPath, payload.path, collectionPath, {
+          relation: 'into',
+          path: null
+        });
+      }}
+    >
       {(items ?? []).map((item, index) => (
         <TreeNode
           key={childPath(null, index)}
@@ -390,11 +591,16 @@ export default function CollectionTree({
           changedOnly={changedOnly}
           structuralDiff={structuralDiff}
           focusedRemovedKey={focusedRemovedKey}
+          dropIndicator={dropIndicator}
+          draggingPath={draggingPath}
           onSelectRemoved={onSelectRemoved}
           onToggleFolder={onToggleFolder}
           onSelectFolder={onSelectFolder}
           onSelectRequest={onSelectRequest}
           onContextMenu={onContextMenu}
+          onDragPath={setDraggingPath}
+          onDropIndicator={setDropIndicator}
+          onMoveItem={onMoveItem}
         />
       ))}
       {rootGhosts.map((ghost) => (
@@ -406,6 +612,9 @@ export default function CollectionTree({
           onSelect={onSelectRemoved}
         />
       ))}
+      {(!items || items.length === 0) && rootGhosts.length === 0 ? (
+        <p className="tree-empty">Drop requests here</p>
+      ) : null}
     </ul>
   );
 }

@@ -11,6 +11,7 @@ import RequestTabs, { type WorkspaceTabView } from './components/RequestTabs.tsx
 import PromptDialog, { type PromptRequest } from './components/PromptDialog.tsx';
 import ResponsePane from './components/ResponsePane.tsx';
 import VariablesPane from './components/VariablesPane.tsx';
+import { decodeItemDrag, ITEM_PATH_MIME } from './components/dnd.ts';
 import { buildSingleRequestCollection } from './newman/buildRunCollection.ts';
 import type { NewmanRunView } from './newman/parseResult.ts';
 import {
@@ -50,11 +51,14 @@ import {
   deleteItem,
   duplicateItem,
   insertItem,
+  moveItem,
   parentPathOf,
   remapPathAfterDelete,
   remapPathAfterDuplicate,
+  remapPathAfterInsert,
   renameCollection,
-  renameItem
+  renameItem,
+  type MoveTarget
 } from './postman/structure.ts';
 import {
   addVariable,
@@ -263,6 +267,7 @@ export default function App() {
     Record<string, EnvironmentCompareState | null>
   >({});
   const [focusedChangeKey, setFocusedChangeKey] = useState<string | null>(null);
+  const [collectionDropPath, setCollectionDropPath] = useState<string | null>(null);
   /** Per-request edit vs read-only diff pane (ephemeral; not in session). */
   const [requestViewModeByKey, setRequestViewModeByKey] = useState<
     Record<string, 'edit' | 'diff'>
@@ -2271,6 +2276,141 @@ export default function App() {
     });
   };
 
+  const remapTabsAfterMove = (
+    fromCollectionPath: string,
+    fromPath: ItemPath,
+    toCollectionPath: string,
+    newPath: ItemPath
+  ) => {
+    const remap = (tab: WorkspaceTab): WorkspaceTab | null => {
+      if (tab.kind === 'environment') {
+        return tab;
+      }
+      if (tab.collectionPath === fromCollectionPath && tab.kind !== 'collection') {
+        if (tab.path === fromPath || tab.path.startsWith(`${fromPath}.`)) {
+          if (tab.path === fromPath) {
+            return { ...tab, collectionPath: toCollectionPath, path: newPath };
+          }
+          // Descendant of a moved folder — close (requests-only move for now).
+          return null;
+        }
+        if (fromCollectionPath === toCollectionPath) {
+          // Same collection: delete then insert. Remap via delete then insert.
+          const afterDelete = remapPathAfterDelete(tab.path, fromPath);
+          if (afterDelete == null) {
+            return null;
+          }
+          return { ...tab, path: remapPathAfterInsert(afterDelete, newPath) };
+        }
+        const afterDelete = remapPathAfterDelete(tab.path, fromPath);
+        return afterDelete == null ? null : { ...tab, path: afterDelete };
+      }
+      if (
+        tab.collectionPath === toCollectionPath &&
+        fromCollectionPath !== toCollectionPath &&
+        tab.kind !== 'collection'
+      ) {
+        return { ...tab, path: remapPathAfterInsert(tab.path, newPath) };
+      }
+      return tab;
+    };
+
+    setOpenTabs((current) => current.flatMap((tab) => remap(tab) ?? []));
+    setActiveTab((active) => (active ? remap(active) : active));
+  };
+
+  const moveTreeItem = useCallback(
+    (
+      fromCollectionPath: string,
+      fromPath: ItemPath,
+      toCollectionPath: string,
+      target: MoveTarget
+    ) => {
+      const fromEntry = collectionsRef.current.find(
+        (candidate) => candidate.filePath === fromCollectionPath
+      );
+      const toEntry = collectionsRef.current.find(
+        (candidate) => candidate.filePath === toCollectionPath
+      );
+      if (!fromEntry || !toEntry) {
+        return;
+      }
+      const source = getItemByPath(fromEntry.collection.item, fromPath);
+      if (!source || !isRequest(source)) {
+        return;
+      }
+
+      try {
+        if (fromCollectionPath === toCollectionPath) {
+          const result = moveItem(fromEntry.collection, fromPath, target);
+          if (result.newPath === fromPath && result.collection === fromEntry.collection) {
+            return;
+          }
+          applyCollectionUpdate(fromCollectionPath, result.collection);
+          remapTabsAfterMove(
+            fromCollectionPath,
+            fromPath,
+            toCollectionPath,
+            result.newPath
+          );
+          if (target.relation === 'into' && target.path) {
+            updateUi(toCollectionPath, (ui) => ({
+              ...ui,
+              expanded: new Set(ui.expanded).add(target.path!),
+              collectionExpanded: true
+            }));
+          }
+          return;
+        }
+
+        const moved = JSON.parse(JSON.stringify(source)) as PostmanItem;
+        const without = deleteItem(fromEntry.collection, fromPath);
+        let inserted: { collection: PostmanCollection; newPath: ItemPath };
+        if (target.relation === 'into') {
+          inserted = insertItem(toEntry.collection, target.path, moved);
+        } else if (target.relation === 'after') {
+          inserted = insertItem(
+            toEntry.collection,
+            parentPathOf(target.path),
+            moved,
+            target.path
+          );
+        } else {
+          const index = Number(target.path.split('.').at(-1));
+          inserted = insertItem(
+            toEntry.collection,
+            parentPathOf(target.path),
+            moved,
+            undefined,
+            index
+          );
+        }
+        applyCollectionUpdate(fromCollectionPath, without);
+        applyCollectionUpdate(toCollectionPath, inserted.collection);
+        remapTabsAfterMove(
+          fromCollectionPath,
+          fromPath,
+          toCollectionPath,
+          inserted.newPath
+        );
+        if (target.relation === 'into' && target.path) {
+          updateUi(toCollectionPath, (ui) => ({
+            ...ui,
+            expanded: new Set(ui.expanded).add(target.path!),
+            collectionExpanded: true
+          }));
+        } else {
+          updateUi(toCollectionPath, (ui) =>
+            ui.collectionExpanded ? ui : { ...ui, collectionExpanded: true }
+          );
+        }
+      } catch (error) {
+        setStatus({ kind: 'error', message: errorMessage(error) });
+      }
+    },
+    [applyCollectionUpdate, updateUi]
+  );
+
   const runTarget = (target: TreeTarget | CollectionTarget) => {
     const { collectionPath } = target;
     if (target.kind === 'collection') {
@@ -3197,12 +3337,48 @@ export default function App() {
                         <div
                           className={`collection-heading ${headingSelected ? 'selected' : ''} ${
                             collectionExpanded ? 'expanded' : 'collapsed'
-                          }`}
+                          } ${
+                            collectionDropPath === entry.filePath ? 'drop-into' : ''
+                          }`.trim()}
                           data-sidebar-key={tabKey({
                             kind: 'collection',
                             collectionPath: entry.filePath
                           })}
                           onContextMenu={(event) => openContextMenu(event, target)}
+                          onDragOver={(event) => {
+                            if (!Array.from(event.dataTransfer.types).includes(ITEM_PATH_MIME)) {
+                              return;
+                            }
+                            event.preventDefault();
+                            event.dataTransfer.dropEffect = 'move';
+                            setCollectionDropPath(entry.filePath);
+                          }}
+                          onDragLeave={(event) => {
+                            if (
+                              event.currentTarget.contains(event.relatedTarget as Node | null)
+                            ) {
+                              return;
+                            }
+                            setCollectionDropPath((current) =>
+                              current === entry.filePath ? null : current
+                            );
+                          }}
+                          onDrop={(event) => {
+                            const payload = decodeItemDrag(
+                              event.dataTransfer.getData(ITEM_PATH_MIME)
+                            );
+                            setCollectionDropPath(null);
+                            if (!payload) {
+                              return;
+                            }
+                            event.preventDefault();
+                            moveTreeItem(
+                              payload.collectionPath,
+                              payload.path,
+                              entry.filePath,
+                              { relation: 'into', path: null }
+                            );
+                          }}
                         >
                           <button
                             type="button"
@@ -3295,6 +3471,7 @@ export default function App() {
                             onContextMenu={(event, treeTarget) =>
                               openContextMenu(event, treeTarget)
                             }
+                            onMoveItem={moveTreeItem}
                           />
                         ) : null}
                       </div>

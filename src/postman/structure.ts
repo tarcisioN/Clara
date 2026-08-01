@@ -204,25 +204,29 @@ export function createRequestItem(name = 'New Request'): PostmanItem {
 /**
  * Insert an item under `parentPath` (null = collection root).
  * When `afterPath` is set (must be a direct child of the parent), inserts after it.
+ * When `index` is set, inserts at that 0-based position (clamped).
  */
 export function insertItem(
   collection: PostmanCollection,
   parentPath: ItemPath | null,
   item: PostmanItem,
-  afterPath?: ItemPath | null
+  afterPath?: ItemPath | null,
+  index?: number
 ): { collection: PostmanCollection; newPath: ItemPath } {
   const insertInto = (nodes: PostmanItem[]): { nodes: PostmanItem[]; newPath: ItemPath } => {
     const next = nodes.slice();
-    let index = next.length;
-    if (afterPath) {
+    let at = next.length;
+    if (typeof index === 'number' && Number.isFinite(index)) {
+      at = Math.max(0, Math.min(Math.floor(index), next.length));
+    } else if (afterPath) {
       const afterIndexes = parseItemPath(afterPath);
       const afterIndex = afterIndexes[afterIndexes.length - 1];
       if (afterIndex != null && afterIndex >= 0 && afterIndex < next.length) {
-        index = afterIndex + 1;
+        at = afterIndex + 1;
       }
     }
-    next.splice(index, 0, item);
-    return { nodes: next, newPath: childPath(parentPath, index) };
+    next.splice(at, 0, item);
+    return { nodes: next, newPath: childPath(parentPath, at) };
   };
 
   if (parentPath == null) {
@@ -244,6 +248,123 @@ export function insertItem(
   });
 
   return { collection: { ...collection, item: itemTree }, newPath };
+}
+
+export type MoveTarget =
+  | { relation: 'before'; path: ItemPath }
+  | { relation: 'after'; path: ItemPath }
+  /** `path: null` = collection root; otherwise a folder path. */
+  | { relation: 'into'; path: ItemPath | null };
+
+function isSelfOrDescendant(path: ItemPath, ancestor: ItemPath): boolean {
+  return path === ancestor || path.startsWith(`${ancestor}.`);
+}
+
+/**
+ * Move an item within a collection. Returns the new path of the moved node.
+ * No-op (same collection + path) when the drop would not change position.
+ */
+export function moveItem(
+  collection: PostmanCollection,
+  fromPath: ItemPath,
+  target: MoveTarget
+): { collection: PostmanCollection; newPath: ItemPath } {
+  const source = getItemByPath(collection.item, fromPath);
+  if (!source) {
+    throw new Error(`Item path out of range: ${fromPath}`);
+  }
+
+  if (target.relation === 'into') {
+    if (target.path != null && isSelfOrDescendant(target.path, fromPath)) {
+      throw new Error('Cannot move an item into itself or a descendant');
+    }
+  } else if (isSelfOrDescendant(target.path, fromPath)) {
+    // Dropping before/after self is a no-op; before/after a descendant is invalid.
+    if (target.path === fromPath) {
+      return { collection, newPath: fromPath };
+    }
+    throw new Error('Cannot move an item relative to its own descendant');
+  }
+
+  // Same-parent no-ops: before next sibling / after previous sibling.
+  if (target.relation === 'before' || target.relation === 'after') {
+    const fromParent = parentPathOf(fromPath);
+    const targetParent = parentPathOf(target.path);
+    if (fromParent === targetParent) {
+      const fromIndex = parseItemPath(fromPath).at(-1)!;
+      const targetIndex = parseItemPath(target.path).at(-1)!;
+      if (target.relation === 'before' && targetIndex === fromIndex + 1) {
+        return { collection, newPath: fromPath };
+      }
+      if (target.relation === 'after' && targetIndex === fromIndex - 1) {
+        return { collection, newPath: fromPath };
+      }
+    }
+  }
+
+  if (target.relation === 'into') {
+    const fromParent = parentPathOf(fromPath);
+    if (fromParent === target.path) {
+      const siblings =
+        target.path == null
+          ? (collection.item ?? [])
+          : (getItemByPath(collection.item, target.path)?.item ?? []);
+      const fromIndex = parseItemPath(fromPath).at(-1)!;
+      if (fromIndex === siblings.length - 1) {
+        return { collection, newPath: fromPath };
+      }
+    }
+  }
+
+  const moved = cloneJson(source);
+  const without = deleteItem(collection, fromPath);
+
+  if (target.relation === 'into') {
+    const parent =
+      target.path == null ? null : remapPathAfterDelete(target.path, fromPath);
+    if (target.path != null && parent == null) {
+      throw new Error('Invalid move target');
+    }
+    return insertItem(without, parent, moved);
+  }
+
+  const remappedAnchor = remapPathAfterDelete(target.path, fromPath);
+  if (remappedAnchor == null) {
+    throw new Error('Invalid move target');
+  }
+  const parent = parentPathOf(remappedAnchor);
+  if (target.relation === 'after') {
+    return insertItem(without, parent, moved, remappedAnchor);
+  }
+  const index = parseItemPath(remappedAnchor).at(-1)!;
+  return insertItem(without, parent, moved, undefined, index);
+}
+
+/**
+ * After inserting at `inserted` under the same parent, shift later sibling tab paths.
+ */
+export function remapPathAfterInsert(path: ItemPath, inserted: ItemPath): ItemPath {
+  const pathParts = parseItemPath(path);
+  const insertedParts = parseItemPath(inserted);
+  if (pathParts.length < insertedParts.length) {
+    return path;
+  }
+
+  const parentLen = insertedParts.length - 1;
+  for (let i = 0; i < parentLen; i += 1) {
+    if (pathParts[i] !== insertedParts[i]) {
+      return path;
+    }
+  }
+
+  const insertedIndex = insertedParts[parentLen]!;
+  const pathIndex = pathParts[parentLen]!;
+  if (pathIndex >= insertedIndex) {
+    const next = pathParts.slice();
+    next[parentLen] = pathIndex + 1;
+    return next.join('.');
+  }
+  return path;
 }
 
 /** Parent folder path for an item path, or null at collection root. */

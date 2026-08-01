@@ -19,8 +19,10 @@ import {
   deleteItem,
   duplicateItem,
   insertItem,
+  moveItem,
   remapPathAfterDelete,
   remapPathAfterDuplicate,
+  remapPathAfterInsert,
   renameItem
 } from '../src/postman/structure.ts';
 import { getItemByPath } from '../src/postman/tree.ts';
@@ -112,6 +114,41 @@ assert.equal(getItemByPath(inserted.collection.item, '1')?.name, 'Root echo');
 const underFolder = insertItem(collection, '0', createRequestItem('Nested'));
 assert.equal(underFolder.newPath, '0.1');
 assert.equal(getItemByPath(underFolder.collection.item, '0.1')?.name, 'Nested');
+
+const insertedAt = insertItem(collection, null, createRequestItem('First'), undefined, 0);
+assert.equal(insertedAt.newPath, '0');
+assert.equal(getItemByPath(insertedAt.collection.item, '0')?.name, 'First');
+assert.equal(getItemByPath(insertedAt.collection.item, '1')?.name, 'Health');
+
+// moveItem: reorder at root and nest under a folder
+const movedDown = moveItem(collection, '1', { relation: 'after', path: '2' });
+assert.equal(getItemByPath(movedDown.collection.item, '2')?.name, 'Root echo');
+assert.equal(movedDown.newPath, '2');
+assert.equal(getItemByPath(movedDown.collection.item, '1')?.name, 'Form login');
+
+const movedUp = moveItem(collection, '2', { relation: 'before', path: '0' });
+assert.equal(getItemByPath(movedUp.collection.item, '0')?.name, 'Form login');
+assert.equal(movedUp.newPath, '0');
+assert.equal(getItemByPath(movedUp.collection.item, '1')?.name, 'Health');
+
+const nestedMove = moveItem(collection, '1', { relation: 'into', path: '0' });
+assert.equal(nestedMove.newPath, '0.1');
+assert.equal(getItemByPath(nestedMove.collection.item, '0.1')?.name, 'Root echo');
+assert.equal((getItemByPath(nestedMove.collection.item, '0')?.item ?? []).length, 2);
+
+const noop = moveItem(collection, '1', { relation: 'before', path: '1' });
+assert.equal(noop.newPath, '1');
+assert.equal(noop.collection, collection);
+
+assert.equal(remapPathAfterInsert('1', '0'), '2');
+assert.equal(remapPathAfterInsert('0', '0'), '1');
+assert.equal(remapPathAfterInsert('0.0', '0'), '1.0');
+assert.equal(remapPathAfterInsert('0.0', '0.1'), '0.0');
+
+assert.throws(
+  () => moveItem(collection, '0', { relation: 'into', path: '0' }),
+  /itself or a descendant/
+);
 
 // Dirty clears when edits are reverted to the baseline
 const clean = computeDirtyState(collection, collection);

@@ -2,7 +2,7 @@
 
 Goal: open a `*.postman_collection.json` from the repo, edit basic HTTP in memory on the Postman schema, save to the same file. No Newman in this phase.
 
-**Out of scope for MVP 1:** drag-drop, scripts/tests, advanced OAuth, GraphQL/gRPC, autosave, workspaces, cloud sync, multipart with file.
+**Out of scope for MVP 1:** advanced OAuth, GraphQL/gRPC, autosave, workspaces, cloud sync, multipart with file.
 
 **How to mark progress:** when a requirement + validation is done, change `- [ ]` to `- [x]`.
 
@@ -272,6 +272,7 @@ Assumption: `newman` is on the user's `PATH`. Installation help comes later.
 - [x] Single-request Newman merges variables from collection + ancestor folders
 - [x] Right-click in the explorer: collection, folders, and requests
 - [x] Actions: Run, Rename, Delete (collection = Close), Duplicate (folder/request)
+- [x] Drag requests in the sidebar to reorder or move across folders/collections (before/after guide line; drop on folder middle = into)
 - [x] Dirty dot on COL / DIR tabs
 - [x] Context menu on tabs (New / Duplicate / Close / Reveal)
 - [x] `···` button in the explorer + collapse collection
