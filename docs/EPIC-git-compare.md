@@ -98,6 +98,8 @@ A navigable index of all collection changes.
 - [x] Sibling reorder (same content, new index) appears as **moved** (`↕`) with `#from → #to`
 - [x] Counts: added / removed / modified / moved
 - [x] Click → open/focus that node and show its diff (G2)
+- [x] Collection `variable[]` changes appear as a **Variables** row
+- [x] Context menu on a change → Restore from base (request / folder / collection variables)
 - [x] Ordering epic closed for MVP (sidebar request drag + moved markers)
 
 ### Validation

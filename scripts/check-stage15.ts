@@ -77,6 +77,31 @@ assert.equal(counts.modified, 1);
 assert.equal(counts.removed, 1);
 assert.equal(counts.moved, 0);
 
+// Collection-level variables appear in Changes when they differ from base.
+const baseWithVars: PostmanCollection = {
+  ...base,
+  variable: [{ key: 'host', value: 'https://example.com' }]
+};
+const currentWithVars: PostmanCollection = {
+  ...base,
+  variable: [{ key: 'host', value: 'https://staging.example.com' }]
+};
+const varDiff = computeStructuralDiff(currentWithVars, baseWithVars);
+assert.equal(varDiff.collectionVariablesChanged, true);
+const varEntries = flattenStructuralChanges(currentWithVars, varDiff);
+assert.equal(varEntries[0]?.type, 'collection-variables');
+assert.equal(varEntries[0]?.name, 'Variables');
+assert.equal(changeListCounts(varEntries).modified, 1);
+
+const sameVars = flattenStructuralChanges(
+  baseWithVars,
+  computeStructuralDiff(baseWithVars, baseWithVars)
+);
+assert.equal(
+  sameVars.some((entry) => entry.type === 'collection-variables'),
+  false
+);
+
 // Reorder-only siblings appear as moved with from/to indices.
 const baseOrder: PostmanCollection = {
   info: { name: 'O', schema: base.info.schema },

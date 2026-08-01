@@ -35,6 +35,14 @@ export type ChangeListEntry =
       name: string;
       nodeKind: 'folder' | 'request';
       method?: string;
+    }
+  | {
+      type: 'collection-variables';
+      key: 'collection-variables';
+      changeKind: 'modified';
+      name: 'Variables';
+      nodeKind: 'variables';
+      parentPath: null;
     };
 
 function parentOf(path: ItemPath): ItemPath | null {
@@ -67,12 +75,24 @@ function describeItem(item: PostmanItem): {
 /**
  * Flatten structural changes in the same DFS order as CollectionTree
  * (current children, then removed ghosts under that parent).
+ * Collection-level `variable[]` changes appear first when present.
  */
 export function flattenStructuralChanges(
   collection: PostmanCollection,
   diff: StructuralDiff
 ): ChangeListEntry[] {
   const entries: ChangeListEntry[] = [];
+
+  if (diff.collectionVariablesChanged) {
+    entries.push({
+      type: 'collection-variables',
+      key: 'collection-variables',
+      changeKind: 'modified',
+      name: 'Variables',
+      nodeKind: 'variables',
+      parentPath: null
+    });
+  }
 
   const walk = (items: PostmanItem[] | undefined, parentPath: ItemPath | null) => {
     (items ?? []).forEach((item, index) => {

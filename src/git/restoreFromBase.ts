@@ -170,3 +170,18 @@ export function restoreFolderSubtreeFromBase(
     item: updateItemByPath(collection.item, path, () => cloneItem(baseItem))
   };
 }
+
+/** Replace collection-level `variable[]` with a deep clone from the base collection. */
+export function restoreCollectionVariablesFromBase(
+  collection: PostmanCollection,
+  baseCollection: PostmanCollection
+): PostmanCollection {
+  if (baseCollection.variable === undefined) {
+    const { variable: _removed, ...rest } = collection;
+    return rest;
+  }
+  return {
+    ...collection,
+    variable: cloneItem(baseCollection.variable)
+  };
+}

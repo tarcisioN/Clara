@@ -6,6 +6,7 @@ import {
 } from '../src/git/environmentDiff.ts';
 import { computeKeyedDiff } from '../src/git/keyedDiff.ts';
 import {
+  restoreCollectionVariablesFromBase,
   restoreItemFromBase,
   restoreRequestSectionFromBase
 } from '../src/git/restoreFromBase.ts';
@@ -65,6 +66,12 @@ assert.equal(afterRestore.isAdded, false);
 const stillDirty = computeStructuralDiff(restoredCollection, base);
 assert.equal(stillDirty.collectionVariablesChanged, true);
 assert.ok(stillDirty.changedCount >= 1);
+
+const varsRestored = restoreCollectionVariablesFromBase(restoredCollection, base);
+assert.equal(
+  computeStructuralDiff(varsRestored, base).collectionVariablesChanged,
+  false
+);
 
 // Section restore: headers only
 const headerOnly = structuredClone(edited) as PostmanCollection;

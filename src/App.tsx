@@ -139,6 +139,7 @@ import {
 } from './git/changeList.ts';
 import type { RemovedGhost } from './git/structuralDiff.ts';
 import {
+  restoreCollectionVariablesFromBase,
   restoreFolderSubtreeFromBase,
   restoreItemFromBase,
   restoreRequestSectionFromBase
@@ -202,7 +203,8 @@ type ContextTarget =
   | TreeTarget
   | CollectionTarget
   | EnvironmentTarget
-  | { kind: 'tab'; tab: WorkspaceTab };
+  | { kind: 'tab'; tab: WorkspaceTab }
+  | { kind: 'change'; collectionPath: string; entry: ChangeListEntry };
 
 type Status = { kind: 'idle' } | { kind: 'ok'; message: string } | { kind: 'error'; message: string };
 
@@ -2501,6 +2503,27 @@ export default function App() {
         { id: 'delete', label: 'Close', danger: true, separatorBefore: true }
       ];
     }
+    if (target.kind === 'change') {
+      const { entry } = target;
+      const compare = compareByPath[target.collectionPath];
+      const canRestore =
+        Boolean(compare) &&
+        (entry.type === 'collection-variables' ||
+          (entry.type === 'current' &&
+            (entry.changeKind === 'modified' || entry.changeKind === 'moved')));
+      return [
+        { id: 'open-change', label: 'Open' },
+        ...(canRestore
+          ? [
+              {
+                id: 'restore-from-base',
+                label: `Restore from ${compare!.baseRef}`,
+                separatorBefore: true
+              }
+            ]
+          : [])
+      ];
+    }
     if (target.kind === 'collection') {
       return [
         { id: 'new-request', label: 'New Request', shortcut: `${shortcutMod} T` },
@@ -2637,6 +2660,16 @@ export default function App() {
         ui.collectionExpanded ? ui : { ...ui, collectionExpanded: true }
       );
 
+      if (entry.type === 'collection-variables') {
+        setRemovedDiffView(null);
+        openTab({ kind: 'collection', collectionPath });
+        revealInSidebar(
+          { kind: 'collection', collectionPath },
+          { activate: false }
+        );
+        return;
+      }
+
       if (entry.type === 'current') {
         setRemovedDiffView(null);
         if (entry.nodeKind === 'request') {
@@ -2714,7 +2747,7 @@ export default function App() {
         }
       });
     },
-    [openFolderTab, openRequestTab, revealInSidebar, updateUi]
+    [openFolderTab, openRequestTab, openTab, revealInSidebar, updateUi]
   );
 
   const cycleChange = useCallback(
@@ -2900,6 +2933,38 @@ export default function App() {
     [persistCollection]
   );
 
+  const restoreCollectionVariables = useCallback(
+    async (collectionPath: string) => {
+      const entry = collectionsRef.current.find(
+        (candidate) => candidate.filePath === collectionPath
+      );
+      const compare = compareByPathRef.current[collectionPath];
+      if (!entry || !compare) {
+        return;
+      }
+      if (
+        !window.confirm(
+          `Restore collection variables from ${compare.baseRef}? This writes the file.`
+        )
+      ) {
+        return;
+      }
+      try {
+        await persistCollection(
+          collectionPath,
+          restoreCollectionVariablesFromBase(entry.collection, compare.baseCollection)
+        );
+        setStatus({
+          kind: 'ok',
+          message: `Restored collection variables from ${compare.baseRef} · saved`
+        });
+      } catch (error) {
+        setStatus({ kind: 'error', message: errorMessage(error) });
+      }
+    },
+    [persistCollection]
+  );
+
   const renameEnvironmentTarget = async (environmentPath: string) => {
     const entry = environments.find((candidate) => candidate.filePath === environmentPath);
     if (!entry) {
@@ -2956,6 +3021,22 @@ export default function App() {
         void renameEnvironmentTarget(target.environmentPath);
       } else if (id === 'delete') {
         closeEnvironment(target.environmentPath);
+      }
+      return;
+    }
+    if (target.kind === 'change') {
+      if (id === 'open-change') {
+        focusChangeEntry(target.collectionPath, target.entry);
+      } else if (id === 'restore-from-base') {
+        if (target.entry.type === 'collection-variables') {
+          void restoreCollectionVariables(target.collectionPath);
+        } else if (target.entry.type === 'current') {
+          if (target.entry.nodeKind === 'folder') {
+            void restoreFolderFromBase(target.collectionPath, target.entry.path);
+          } else {
+            void restoreRequestFromBase(target.collectionPath, target.entry.path);
+          }
+        }
       }
       return;
     }
@@ -3529,6 +3610,13 @@ export default function App() {
                 }
                 onSelect={(entry) => {
                   focusChangeEntry(activeCollection.filePath, entry);
+                }}
+                onContextMenu={(event, entry) => {
+                  openContextMenu(event, {
+                    kind: 'change',
+                    collectionPath: activeCollection.filePath,
+                    entry
+                  });
                 }}
                 onPrev={() => cycleChange(-1)}
                 onNext={() => cycleChange(1)}

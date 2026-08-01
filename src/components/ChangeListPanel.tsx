@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type MouseEvent,
   type PointerEvent
 } from 'react';
 import type { ChangeListEntry } from '../git/changeList.ts';
@@ -28,6 +29,7 @@ type ChangeListPanelProps = {
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
   onSelect: (entry: ChangeListEntry) => void;
+  onContextMenu?: (event: MouseEvent<HTMLButtonElement>, entry: ChangeListEntry) => void;
   onPrev: () => void;
   onNext: () => void;
   onChangeBase: (baseRef: string) => void;
@@ -186,6 +188,7 @@ export default function ChangeListPanel({
   expanded,
   onExpandedChange,
   onSelect,
+  onContextMenu,
   onPrev,
   onNext,
   onChangeBase,
@@ -412,11 +415,16 @@ export default function ChangeListPanel({
                       type="button"
                       className={`change-list-row ${selected ? 'selected' : ''} ${entry.changeKind}`}
                       onClick={() => onSelect(entry)}
+                      onContextMenu={(event) => onContextMenu?.(event, entry)}
                     >
                       <ChangeBadge kind={entry.changeKind} />
                       {entry.nodeKind === 'request' && entry.method ? (
                         <span className={`tree-method method-${entry.method.toLowerCase()}`}>
                           {entry.method}
+                        </span>
+                      ) : entry.nodeKind === 'variables' ? (
+                        <span className="change-list-folder-icon" aria-hidden>
+                          {'{}'}
                         </span>
                       ) : (
                         <span className="change-list-folder-icon" aria-hidden>
