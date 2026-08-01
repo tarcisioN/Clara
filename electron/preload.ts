@@ -27,6 +27,10 @@ export type OpenEnvironmentResult =
   | { canceled: true }
   | { canceled: false; files: Array<{ filePath: string; raw: string }> };
 
+export type CreateEnvironmentResult =
+  | { canceled: true }
+  | { canceled: false; filePath: string; raw: string };
+
 export type ReadCollectionResult = { filePath: string; raw: string };
 
 export type ReadEnvironmentResult = { filePath: string; raw: string };
@@ -46,6 +50,8 @@ const clara = {
     ipcRenderer.invoke('collection:save', { filePath, contents }),
   openEnvironment: (): Promise<OpenEnvironmentResult> =>
     ipcRenderer.invoke('environment:open'),
+  createEnvironment: (name: string): Promise<CreateEnvironmentResult> =>
+    ipcRenderer.invoke('environment:create', { name }),
   readEnvironment: (filePath: string): Promise<ReadEnvironmentResult> =>
     ipcRenderer.invoke('environment:read', filePath),
   saveEnvironment: (

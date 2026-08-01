@@ -156,6 +156,10 @@ import {
 } from './git/variableDiff.ts';
 import type { KeyedDiff } from './git/keyedDiff.ts';
 import {
+  CHANGES_COLLAPSE_HEIGHT,
+  CHANGES_DEFAULT_HEIGHT,
+  CHANGES_MIN_HEIGHT,
+  clampChangesHeight,
   clampSidebarWidth,
   DEFAULT_SIDEBAR,
   SIDEBAR_MAX_WIDTH,
@@ -295,6 +299,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<WorkspaceTab | null>(null);
   const [activeEnvironmentPath, setActiveEnvironmentPath] = useState<string | null>(null);
   const [sidebar, setSidebar] = useState<SessionSidebar>({ ...DEFAULT_SIDEBAR });
+  const [environmentPanelHeight, setEnvironmentPanelHeight] =
+    useState(CHANGES_DEFAULT_HEIGHT);
   const [sidebarQuery, setSidebarQuery] = useState('');
   const [sessionHydrated, setSessionHydrated] = useState(false);
   const [sessionHome, setSessionHome] = useState<string | null>(null);
@@ -324,6 +330,11 @@ export default function App() {
   const sendingRef = useRef(sending);
   const runningKeyRef = useRef(runningKey);
   const sidebarResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const environmentPanelRef = useRef<HTMLDivElement>(null);
+  const environmentResizeRef = useRef<{
+    startY: number;
+    startHeight: number;
+  } | null>(null);
   collectionsRef.current = collections;
   environmentsRef.current = environments;
   uiByPathRef.current = uiByPath;
@@ -1272,6 +1283,49 @@ export default function App() {
       setStatus({ kind: 'error', message: errorMessage(error) });
     }
   }, [askText, mountCollectionFile]);
+
+  const createNewEnvironment = useCallback(async () => {
+    setStatus({ kind: 'idle' });
+    const name = await askText({
+      title: 'New environment',
+      label: 'Environment name',
+      defaultValue: 'New Environment',
+      confirmLabel: 'Choose location…'
+    });
+    if (name == null) {
+      return;
+    }
+    try {
+      const result = await window.clara.createEnvironment(name);
+      if (result.canceled) {
+        return;
+      }
+      const environment = parseEnvironment(result.raw);
+      setEnvironments((list) => {
+        const existing = list.some((entry) => entry.filePath === result.filePath);
+        const loaded = {
+          filePath: result.filePath,
+          originalRaw: result.raw,
+          environment
+        };
+        return existing
+          ? list.map((entry) => (entry.filePath === result.filePath ? loaded : entry))
+          : [...list, loaded];
+      });
+      openTab(
+        { kind: 'environment', environmentPath: result.filePath },
+        { forceNew: true }
+      );
+      setActiveEnvironmentPath(result.filePath);
+      void refreshEnvCompare(result.filePath, environment);
+      setStatus({
+        kind: 'ok',
+        message: `Created ${environment.name ?? fileName(result.filePath)}`
+      });
+    } catch (error) {
+      setStatus({ kind: 'error', message: errorMessage(error) });
+    }
+  }, [askText, openTab, refreshEnvCompare]);
 
   const openEnvironment = useCallback(async () => {
     setStatus({ kind: 'idle' });
@@ -3214,6 +3268,86 @@ export default function App() {
     }
   };
 
+  const maxEnvironmentPanelHeight = () => {
+    const sidebarElement = environmentPanelRef.current?.parentElement;
+    return sidebarElement
+      ? Math.max(
+          CHANGES_MIN_HEIGHT,
+          Math.floor(sidebarElement.clientHeight * 0.45)
+        )
+      : undefined;
+  };
+
+  const collapseEnvironmentPanel = () => {
+    setSidebar((current) =>
+      current.environmentsExpanded
+        ? { ...current, environmentsExpanded: false }
+        : current
+    );
+  };
+
+  const onEnvironmentResizePointerDown = (
+    event: PointerEvent<HTMLDivElement>
+  ) => {
+    event.preventDefault();
+    if (!sidebar.environmentsExpanded) {
+      return;
+    }
+    event.currentTarget.setPointerCapture(event.pointerId);
+    environmentResizeRef.current = {
+      startY: event.clientY,
+      startHeight: environmentPanelHeight
+    };
+  };
+
+  const onEnvironmentResizePointerMove = (
+    event: PointerEvent<HTMLDivElement>
+  ) => {
+    const drag = environmentResizeRef.current;
+    if (!drag) {
+      return;
+    }
+    const next = drag.startHeight + (drag.startY - event.clientY);
+    if (next <= CHANGES_COLLAPSE_HEIGHT) {
+      environmentResizeRef.current = null;
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      } catch {
+        // already released
+      }
+      collapseEnvironmentPanel();
+      return;
+    }
+    setEnvironmentPanelHeight(
+      clampChangesHeight(next, maxEnvironmentPanelHeight())
+    );
+  };
+
+  const onEnvironmentResizePointerUp = (
+    event: PointerEvent<HTMLDivElement>
+  ) => {
+    if (!environmentResizeRef.current) {
+      return;
+    }
+    environmentResizeRef.current = null;
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // already released
+    }
+  };
+
+  const toggleEnvironmentPanel = () => {
+    if (sidebar.environmentsExpanded) {
+      collapseEnvironmentPanel();
+      return;
+    }
+    setEnvironmentPanelHeight(
+      clampChangesHeight(CHANGES_DEFAULT_HEIGHT, maxEnvironmentPanelHeight())
+    );
+    setSidebar((current) => ({ ...current, environmentsExpanded: true }));
+  };
+
   return (
     <div className={`app ${navigator.userAgent.includes('Mac') ? 'platform-mac' : ''}`}>
       <header className="titlebar">
@@ -3647,7 +3781,54 @@ export default function App() {
               />
             ) : null}
 
-            <div className="sidebar-section sidebar-section-environments">
+            <div
+              ref={environmentPanelRef}
+              className={`sidebar-section sidebar-section-environments ${
+                environmentsSectionOpen ? '' : 'is-collapsed'
+              }`.trim()}
+              style={
+                environmentsSectionOpen
+                  ? { height: environmentPanelHeight }
+                  : undefined
+              }
+            >
+              <div
+                className="change-list-resize environment-list-resize"
+                role="separator"
+                aria-orientation="horizontal"
+                aria-valuemin={CHANGES_COLLAPSE_HEIGHT}
+                aria-valuemax={maxEnvironmentPanelHeight() ?? 800}
+                aria-valuenow={
+                  environmentsSectionOpen
+                    ? environmentPanelHeight
+                    : CHANGES_COLLAPSE_HEIGHT
+                }
+                aria-label="Resize environments panel"
+                aria-disabled={!environmentsSectionOpen}
+                tabIndex={environmentsSectionOpen ? 0 : -1}
+                onPointerDown={onEnvironmentResizePointerDown}
+                onPointerMove={onEnvironmentResizePointerMove}
+                onPointerUp={onEnvironmentResizePointerUp}
+                onPointerCancel={onEnvironmentResizePointerUp}
+                onKeyDown={(event) => {
+                  if (
+                    !environmentsSectionOpen ||
+                    (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')
+                  ) {
+                    return;
+                  }
+                  event.preventDefault();
+                  const delta = event.key === 'ArrowUp' ? 16 : -16;
+                  const next = environmentPanelHeight + delta;
+                  if (next <= CHANGES_COLLAPSE_HEIGHT) {
+                    collapseEnvironmentPanel();
+                    return;
+                  }
+                  setEnvironmentPanelHeight(
+                    clampChangesHeight(next, maxEnvironmentPanelHeight())
+                  );
+                }}
+              />
               <div className="sidebar-section-title">
                 <button
                   type="button"
@@ -3658,12 +3839,7 @@ export default function App() {
                       ? 'Collapse environments'
                       : 'Expand environments'
                   }
-                  onClick={() =>
-                    setSidebar((current) => ({
-                      ...current,
-                      environmentsExpanded: !current.environmentsExpanded
-                    }))
-                  }
+                  onClick={toggleEnvironmentPanel}
                 >
                   <span className="sidebar-chevron" aria-hidden>
                     {environmentsSectionOpen ? '▾' : '▸'}
@@ -3674,16 +3850,26 @@ export default function App() {
                 <button
                   type="button"
                   className="sidebar-add"
+                  aria-label="New environment"
+                  title="New environment"
+                  onClick={() => void createNewEnvironment()}
+                >
+                  +
+                </button>
+                <button
+                  type="button"
+                  className="sidebar-add"
                   aria-label="Open environment"
                   title="Open environment"
                   onClick={() => void openEnvironment()}
                 >
-                  +
+                  ↗
                 </button>
               </div>
 
-              {environmentsSectionOpen
-                ? environments.flatMap((entry) => {
+              {environmentsSectionOpen ? (
+                <div className="environment-list">
+                  {environments.flatMap((entry) => {
                     const envName =
                       entry.environment.name?.trim() || 'Untitled environment';
                     const envFile = fileName(entry.filePath);
@@ -3773,19 +3959,19 @@ export default function App() {
                         </button>
                       </div>
                     ];
-                  })
-                : null}
-              {environmentsSectionOpen &&
-              isSearching &&
-              environments.every((entry) => {
-                const envName =
-                  entry.environment.name?.trim() || 'Untitled environment';
-                return (
-                  !textMatchesQuery(envName, sidebarFilter) &&
-                  !textMatchesQuery(fileName(entry.filePath), sidebarFilter)
-                );
-              }) ? (
-                <p className="sidebar-empty">No matching environments</p>
+                  })}
+                  {isSearching &&
+                  environments.every((entry) => {
+                    const envName =
+                      entry.environment.name?.trim() || 'Untitled environment';
+                    return (
+                      !textMatchesQuery(envName, sidebarFilter) &&
+                      !textMatchesQuery(fileName(entry.filePath), sidebarFilter)
+                    );
+                  }) ? (
+                    <p className="sidebar-empty">No matching environments</p>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           </aside>

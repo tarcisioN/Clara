@@ -5,6 +5,7 @@ import path from 'node:path';
 import {
   addEnvironmentValue,
   assertPostmanEnvironment,
+  createEmptyEnvironment,
   environmentsEqual,
   isEnvironmentDirty,
   isPostmanEnvironment,
@@ -13,6 +14,7 @@ import {
   serializeEnvironment,
   setEnvironmentValueEnabled,
   setEnvironmentValues,
+  suggestEnvironmentFileName,
   updateEnvironmentValue,
   type PostmanEnvironment
 } from '../src/postman/environment.ts';
@@ -27,6 +29,18 @@ assert.equal(clampChangesHeight(CHANGES_DEFAULT_HEIGHT), CHANGES_DEFAULT_HEIGHT)
 assert.equal(clampChangesHeight(10), CHANGES_MIN_HEIGHT);
 assert.equal(clampChangesHeight(900, 300), 300);
 assert.equal(clampChangesHeight(Number.NaN), CHANGES_DEFAULT_HEIGHT);
+
+const emptyEnvironment = createEmptyEnvironment('Local Dev');
+assert.equal(emptyEnvironment.name, 'Local Dev');
+assert.deepEqual(emptyEnvironment.values, []);
+assert.equal(
+  suggestEnvironmentFileName('Local Dev'),
+  'Local Dev.postman_environment.json'
+);
+assert.equal(
+  suggestEnvironmentFileName('qa/postman_environment.json'),
+  'qa-postman_environment.postman_environment.json'
+);
 
 const sample: PostmanEnvironment = {
   id: 'env-1',

@@ -258,11 +258,32 @@ button.primary {
 }
 
 .sidebar-section-environments {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  min-height: 120px;
   max-height: 45%;
   margin-top: auto;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--mantle);
+}
+
+.sidebar-section-environments.is-collapsed {
+  min-height: 0;
+}
+
+.sidebar-section-environments.is-collapsed .environment-list-resize {
+  cursor: default;
+}
+
+.sidebar-section-environments.is-collapsed .environment-list-resize::after {
+  background: var(--border-0);
+}
+
+.environment-list {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
 }
 
 .sidebar-section-title {

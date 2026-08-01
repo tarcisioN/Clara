@@ -20,6 +20,31 @@ export type LoadedEnvironment = {
   environment: PostmanEnvironment;
 };
 
+/** Empty Postman environment used when creating a new file. */
+export function createEmptyEnvironment(name: string): PostmanEnvironment {
+  return {
+    name: name.trim() || 'New Environment',
+    values: []
+  };
+}
+
+/** Suggest a filesystem-safe environment filename from a display name. */
+export function suggestEnvironmentFileName(name: string): string {
+  let base =
+    name
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, '-')
+      .replace(/\s+/g, ' ')
+      .replace(/\.+$/g, '')
+      .slice(0, 80)
+      .trim() || 'New Environment';
+  base = base
+    .replace(/\.postman_environment\.json$/i, '')
+    .replace(/\.json$/i, '')
+    .trim() || 'New Environment';
+  return `${base}.postman_environment.json`;
+}
+
 export function isPostmanEnvironment(value: unknown): value is PostmanEnvironment {
   if (!value || typeof value !== 'object') {
     return false;

@@ -32,6 +32,11 @@ import {
   serializeCollection,
   suggestCollectionFileName
 } from '../src/postman/types.ts';
+import {
+  createEmptyEnvironment,
+  serializeEnvironment,
+  suggestEnvironmentFileName
+} from '../src/postman/environment.ts';
 import { NEWMAN_DOCS_URL } from '../src/newman/missing.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -364,6 +369,41 @@ ipcMain.handle('environment:open', async () => {
     files
   };
 });
+
+ipcMain.handle(
+  'environment:create',
+  async (_event, payload: { name?: string } | undefined) => {
+    const name =
+      typeof payload?.name === 'string' && payload.name.trim()
+        ? payload.name.trim()
+        : 'New Environment';
+    const result = await dialog.showSaveDialog(mainWindow!, {
+      title: 'Create Postman environment',
+      defaultPath: suggestEnvironmentFileName(name),
+      filters: [
+        { name: 'Postman Environment', extensions: ['json'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    });
+
+    if (result.canceled || !result.filePath) {
+      return { canceled: true as const };
+    }
+
+    let filePath = result.filePath;
+    if (!/\.json$/i.test(filePath)) {
+      filePath = `${filePath}.postman_environment.json`;
+    }
+
+    const raw = serializeEnvironment(createEmptyEnvironment(name));
+    await writeFile(filePath, raw, 'utf8');
+    return {
+      canceled: false as const,
+      filePath,
+      raw
+    };
+  }
+);
 
 ipcMain.handle('environment:read', async (_event, filePath: string) => {
   if (!filePath || typeof filePath !== 'string') {
