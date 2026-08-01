@@ -100,10 +100,49 @@
   color: var(--text-muted);
 }
 
+.request-url-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 24px 14px;
+}
+
 .request-line {
   display: flex;
   gap: 0;
-  padding: 0 24px 14px;
+  padding: 0;
+}
+
+.url-preview {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 2px;
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+}
+
+.url-preview-label {
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  font-size: 0.625rem;
+}
+
+.url-preview-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+}
+
+.url-preview-unresolved .url-preview-value {
+  color: var(--warning, #b45309);
 }
 
 .method-select,
@@ -139,12 +178,46 @@
   color: var(--method-delete);
 }
 
+.url-field {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}
+
 .url-input {
   flex: 1;
   border-left: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.75rem;
   min-width: 0;
+}
+
+/* Mirrors the input's text box so each {{var}} gets its own hover target. */
+.url-overlay {
+  position: absolute;
+  inset: 0;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-left: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  line-height: 16px;
+  white-space: pre;
+  overflow: hidden;
+  color: transparent;
+  pointer-events: none;
+}
+
+.url-token {
+  pointer-events: auto;
+  cursor: help;
+  border-radius: 3px;
+  box-shadow: inset 0 -1px 0 var(--brand);
+}
+
+.url-token-unresolved {
+  box-shadow: inset 0 -1px 0 var(--warning, #b45309);
 }
 
 .url-input:focus,

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type {
   PostmanHeader,
   PostmanItem,
@@ -11,6 +11,7 @@ import type { ItemPath } from '../postman/tree.ts';
 import { getUrlRaw, isUrlObject } from '../postman/url.ts';
 import { getItemScriptSource } from '../postman/edit.ts';
 import { hasScriptContent } from '../postman/scripts.ts';
+import { interpolateUrlPreview, splitUrlSegments } from '../postman/urlPreview.ts';
 import type { RequestSectionKey, RequestSemanticDiff } from '../git/semanticDiff.ts';
 import HeaderTable from './HeaderTable.tsx';
 import BodyPane from './BodyPane.tsx';
@@ -60,6 +61,8 @@ type RequestPaneProps = {
   onChangeTestScript: (source: string) => void;
   onSend: () => void;
   sending: boolean;
+  /** Collection + folder + active env values for display-only {{var}} preview. */
+  urlPreviewVariables?: Map<string, string>;
 };
 
 export default function RequestPane({
@@ -96,14 +99,23 @@ export default function RequestPane({
   onChangePrerequestScript,
   onChangeTestScript,
   onSend,
-  sending
+  sending,
+  urlPreviewVariables
 }: RequestPaneProps) {
   const [activeSection, setActiveSection] = useState<RequestSection>('params');
   const [renaming, setRenaming] = useState(false);
   const [draftName, setDraftName] = useState(item.name ?? '');
   const renameInputRef = useRef<HTMLInputElement>(null);
   const renamingRef = useRef(false);
+  const urlInputRef = useRef<HTMLInputElement>(null);
+  const urlOverlayRef = useRef<HTMLDivElement>(null);
   const displayName = item.name?.trim() || '(unnamed request)';
+
+  const syncUrlOverlayScroll = useCallback(() => {
+    if (urlOverlayRef.current && urlInputRef.current) {
+      urlOverlayRef.current.scrollLeft = urlInputRef.current.scrollLeft;
+    }
+  }, []);
 
   useEffect(() => {
     if (!renaming) {
@@ -149,6 +161,18 @@ export default function RequestPane({
     ? COMMON_METHODS
     : [method, ...COMMON_METHODS];
   const urlRaw = getUrlRaw(request.url);
+  const urlPreview = useMemo(
+    () => interpolateUrlPreview(urlRaw, urlPreviewVariables ?? new Map()),
+    [urlRaw, urlPreviewVariables]
+  );
+  const urlSegments = useMemo(
+    () => splitUrlSegments(urlRaw, urlPreviewVariables ?? new Map()),
+    [urlRaw, urlPreviewVariables]
+  );
+
+  useEffect(() => {
+    syncUrlOverlayScroll();
+  }, [urlRaw, syncUrlOverlayScroll]);
   const urlShape = typeof item.request === 'string'
     ? 'request string'
     : isUrlObject(request.url)
@@ -273,49 +297,93 @@ export default function RequestPane({
         </div>
       ) : null}
 
-      <div className="request-line">
-        <label className="visually-hidden" htmlFor="request-method">
-          Method
-        </label>
-        <select
-          id="request-method"
-          className={`method-select method-${method.toLowerCase()} ${
-            changed?.method ? 'compare-changed' : ''
-          }`}
-          value={method}
-          onChange={(event) => onChangeMethod(event.target.value)}
-          title={changed?.method ? `Method differs from ${baseLabel}` : undefined}
-        >
-          {methods.map((candidate) => (
-            <option key={candidate} value={candidate}>
-              {candidate}
-            </option>
-          ))}
-        </select>
+      <div className="request-url-block">
+        <div className="request-line">
+          <label className="visually-hidden" htmlFor="request-method">
+            Method
+          </label>
+          <select
+            id="request-method"
+            className={`method-select method-${method.toLowerCase()} ${
+              changed?.method ? 'compare-changed' : ''
+            }`}
+            value={method}
+            onChange={(event) => onChangeMethod(event.target.value)}
+            title={changed?.method ? `Method differs from ${baseLabel}` : undefined}
+          >
+            {methods.map((candidate) => (
+              <option key={candidate} value={candidate}>
+                {candidate}
+              </option>
+            ))}
+          </select>
 
-        <label className="visually-hidden" htmlFor="request-url">
-          URL
-        </label>
-        <input
-          id="request-url"
-          className={`url-input ${changed?.url ? 'compare-changed' : ''}`}
-          type="text"
-          spellCheck={false}
-          autoComplete="off"
-          placeholder="https://example.com/path"
-          value={urlRaw}
-          onChange={(event) => onChangeUrl(event.target.value)}
-          title={changed?.url ? `URL differs from ${baseLabel}` : undefined}
-        />
-        <button
-          type="button"
-          className="send-button"
-          disabled={sending}
-          title="⌘/Ctrl+Enter — runs current (including unsaved) edits via Newman"
-          onClick={onSend}
-        >
-          {sending ? 'Sending…' : 'Send'}
-        </button>
+          <label className="visually-hidden" htmlFor="request-url">
+            URL
+          </label>
+          <div className="url-field">
+            <input
+              id="request-url"
+              ref={urlInputRef}
+              className={`url-input ${changed?.url ? 'compare-changed' : ''}`}
+              type="text"
+              spellCheck={false}
+              autoComplete="off"
+              placeholder="https://example.com/path"
+              value={urlRaw}
+              onChange={(event) => onChangeUrl(event.target.value)}
+              onScroll={syncUrlOverlayScroll}
+              title={changed?.url ? `URL differs from ${baseLabel}` : undefined}
+            />
+            <div className="url-overlay" ref={urlOverlayRef} aria-hidden="true">
+              {urlSegments.map((segment, index) =>
+                segment.key == null ? (
+                  <span key={index}>{segment.text}</span>
+                ) : (
+                  <span
+                    key={index}
+                    className={`url-token${segment.value == null ? ' url-token-unresolved' : ''}`}
+                    title={
+                      segment.value == null
+                        ? `${segment.key} is not defined in the collection, folders, or active environment`
+                        : `${segment.key} = ${segment.value || '(empty)'}`
+                    }
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      urlInputRef.current?.focus();
+                    }}
+                  >
+                    {segment.text}
+                  </span>
+                )
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="send-button"
+            disabled={sending}
+            title="⌘/Ctrl+Enter — runs current (including unsaved) edits via Newman"
+            onClick={onSend}
+          >
+            {sending ? 'Sending…' : 'Send'}
+          </button>
+        </div>
+        {urlPreview.hasTokens ? (
+          <div
+            className={`url-preview${
+              urlPreview.unresolved.length > 0 ? ' url-preview-unresolved' : ''
+            }`}
+            title={
+              urlPreview.unresolved.length > 0
+                ? `Unresolved: ${urlPreview.unresolved.join(', ')}`
+                : 'Resolved from collection, folder, and active environment variables'
+            }
+          >
+            <span className="url-preview-label">Preview</span>
+            <code className="url-preview-value">{urlPreview.preview}</code>
+          </div>
+        ) : null}
       </div>
 
       <div className="request-section-tabs" role="tablist" aria-label="Request settings">

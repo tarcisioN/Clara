@@ -226,7 +226,7 @@ May slip to a mini-MVP 1.1 if the rest is delayed.
 - [x] Open a separate `.postman_environment.json`
 - [x] List `values[]` (key, value, enabled)
 - [x] Active environment selector
-- [ ] (Optional) `{{var}}` preview in the URL — real interpolation stays with Newman
+- [x] (Optional) `{{var}}` preview in the URL — real interpolation stays with Newman
 
 ### Validation
 - [x] Env from the repo loads and values match Postman
@@ -273,6 +273,7 @@ Assumption: `newman` is on the user's `PATH`. Installation help comes later.
 - [x] Right-click in the explorer: collection, folders, and requests
 - [x] Actions: Run, Rename, Delete (collection = Close), Duplicate (folder/request)
 - [x] Drag requests in the sidebar to reorder or move across folders/collections (before/after guide line; drop on folder middle = into)
+- [x] Ordering MVP closed (sibling reorder as moved / drag-to-reorder); further order epics deferred
 - [x] Dirty dot on COL / DIR tabs
 - [x] Context menu on tabs (New / Duplicate / Close / Reveal)
 - [x] `···` button in the explorer + collapse collection

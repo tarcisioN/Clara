@@ -12,7 +12,11 @@ import PromptDialog, { type PromptRequest } from './components/PromptDialog.tsx'
 import ResponsePane from './components/ResponsePane.tsx';
 import VariablesPane from './components/VariablesPane.tsx';
 import { decodeItemDrag, ITEM_PATH_MIME } from './components/dnd.ts';
-import { buildSingleRequestCollection } from './newman/buildRunCollection.ts';
+import {
+  buildSingleRequestCollection,
+  resolveInheritedVariables
+} from './newman/buildRunCollection.ts';
+import { buildPreviewVariables } from './postman/urlPreview.ts';
 import type { NewmanRunView } from './newman/parseResult.ts';
 import {
   addEnvironmentValue,
@@ -451,6 +455,18 @@ export default function App() {
     }
     return getRequestByPath(activeCollection.collection.item, activeRequestPath) ?? null;
   }, [activeCollection, activeRequestPath]);
+
+  const urlPreviewVariables = useMemo(() => {
+    if (!activeCollection || !activeRequestPath) {
+      return new Map<string, string>();
+    }
+    return buildPreviewVariables(
+      resolveInheritedVariables(activeCollection.collection, activeRequestPath),
+      selectedActiveEnvironment
+        ? getEnvironmentValues(selectedActiveEnvironment.environment)
+        : undefined
+    );
+  }, [activeCollection, activeRequestPath, selectedActiveEnvironment]);
 
   const activeCompare = activeCollection
     ? (compareByPath[activeCollection.filePath] ?? null)
@@ -4032,6 +4048,7 @@ export default function App() {
                         item={selectedItem}
                         request={selectedRequest}
                         path={activeRequestPath}
+                        urlPreviewVariables={urlPreviewVariables}
                         semanticDiff={requestSemanticDiff}
                         compareBaseRef={activeCompare?.baseRef ?? null}
                         onSwitchToDiff={

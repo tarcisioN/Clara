@@ -202,4 +202,63 @@ try {
   rmSync(home, { recursive: true, force: true });
 }
 
+{
+  const { buildPreviewVariables, interpolateUrlPreview, splitUrlSegments } = await import(
+    '../src/postman/urlPreview.ts'
+  );
+
+  const variables = buildPreviewVariables(
+    [
+      { key: 'baseUrl', value: 'https://collection.example' },
+      { key: 'token', value: 'from-collection' },
+      { key: 'disabled', value: 'nope', disabled: true }
+    ],
+    [
+      { key: 'token', value: 'from-env', enabled: true },
+      { key: 'secret', value: 'x', enabled: false }
+    ]
+  );
+  assert.equal(variables.get('baseUrl'), 'https://collection.example');
+  assert.equal(variables.get('token'), 'from-env', 'environment wins over collection');
+  assert.equal(variables.has('disabled'), false);
+  assert.equal(variables.has('secret'), false);
+
+  const resolved = interpolateUrlPreview('{{baseUrl}}/v1/{{ token }}', variables);
+  assert.equal(resolved.hasTokens, true);
+  assert.equal(resolved.preview, 'https://collection.example/v1/from-env');
+  assert.deepEqual(resolved.unresolved, []);
+
+  const missing = interpolateUrlPreview('{{baseUrl}}/{{missing}}', variables);
+  assert.equal(missing.preview, 'https://collection.example/{{missing}}');
+  assert.deepEqual(missing.unresolved, ['missing']);
+
+  const plain = interpolateUrlPreview('https://plain.example', variables);
+  assert.equal(plain.hasTokens, false);
+  assert.equal(plain.preview, 'https://plain.example');
+
+  const segments = splitUrlSegments('{{baseUrl}}/v1/{{ token }}/x/{{missing}}', variables);
+  assert.deepEqual(
+    segments.map((segment) => segment.text),
+    ['{{baseUrl}}', '/v1/', '{{ token }}', '/x/', '{{missing}}']
+  );
+  assert.deepEqual(
+    segments.map((segment) => segment.key),
+    ['baseUrl', null, 'token', null, 'missing']
+  );
+  assert.equal(segments[0].value, 'https://collection.example');
+  assert.equal(segments[2].value, 'from-env', 'token hover keeps the environment value');
+  assert.equal(segments[4].value, null, 'unknown variable has no hover value');
+  assert.equal(
+    segments.map((segment) => segment.text).join(''),
+    '{{baseUrl}}/v1/{{ token }}/x/{{missing}}',
+    'segments rebuild the raw URL exactly'
+  );
+
+  assert.deepEqual(splitUrlSegments('', variables), []);
+  assert.deepEqual(
+    splitUrlSegments('https://plain.example', variables).map((segment) => segment.key),
+    [null]
+  );
+}
+
 console.log('stage11 checks passed');
