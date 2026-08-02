@@ -185,6 +185,42 @@ assert.equal(multi.executions[1]?.code, 500);
 assert.equal(replaceRunExecution(multi, 7, multi.executions[0]!), multi);
 
 import {
+  TERMINAL_MAX_ENTRIES,
+  buildTerminalEntry,
+  nextTerminalEntries,
+  truncateTerminalText
+} from '../src/components/terminalBuffer.ts';
+
+assert.equal(truncateTerminalText('short'), 'short');
+const long = 'x'.repeat(300_000);
+const truncated = truncateTerminalText(long);
+assert.equal(truncated.length < long.length, true);
+assert.equal(truncated.startsWith('x'.repeat(256_000)), true);
+assert.match(truncated, /truncated .* characters/);
+
+const sample = buildTerminalEntry('Ping', {
+  command: 'newman run …',
+  stdout: 'ok',
+  stderr: '',
+  exitCode: 0,
+  ok: true
+});
+assert.equal(sample.label, 'Ping');
+assert.equal(sample.stdout, 'ok');
+
+const first = { ...sample, id: '1' };
+const second = { ...sample, id: '2' };
+assert.deepEqual(nextTerminalEntries([first], second, false), [second]);
+assert.equal(nextTerminalEntries([first], second, true).map((e) => e.id).join(','), '1,2');
+const many = Array.from({ length: TERMINAL_MAX_ENTRIES }, (_, i) => ({
+  ...sample,
+  id: String(i)
+}));
+assert.equal(nextTerminalEntries(many, { ...sample, id: 'new' }, true).length, TERMINAL_MAX_ENTRIES);
+assert.equal(nextTerminalEntries(many, { ...sample, id: 'new' }, true).at(-1)?.id, 'new');
+assert.equal(nextTerminalEntries(many, { ...sample, id: 'new' }, true)[0]?.id, '1');
+
+import {
   isNewmanNotFoundError,
   newmanMissingRunView,
   NEWMAN_DOCS_URL,

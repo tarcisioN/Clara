@@ -11,6 +11,7 @@ import RequestTabs, { type WorkspaceTabView } from './components/RequestTabs.tsx
 import PromptDialog, { type PromptRequest } from './components/PromptDialog.tsx';
 import ResponsePane from './components/ResponsePane.tsx';
 import TerminalPane, { type TerminalEntry } from './components/TerminalPane.tsx';
+import { buildTerminalEntry, nextTerminalEntries } from './components/terminalBuffer.ts';
 import VariablesPane from './components/VariablesPane.tsx';
 import { decodeItemDrag, ITEM_PATH_MIME } from './components/dnd.ts';
 import { showClaraTooltip } from './components/claraTooltip.ts';
@@ -1630,19 +1631,9 @@ export default function App() {
   }, [refreshCompare]);
 
   const pushTerminalEntry = useCallback((label: string, result: NewmanRunView) => {
-    const entry: TerminalEntry = {
-      id: crypto.randomUUID(),
-      at: Date.now(),
-      label,
-      command: result.command,
-      stdout: result.stdout ?? '',
-      stderr: result.stderr ?? '',
-      exitCode: result.exitCode,
-      ok: result.ok && !result.missingNewman
-    };
-    // Closed terminal = fresh session: keep only this run. Open = accumulate.
+    const entry = buildTerminalEntry(label, result);
     setTerminalEntries((current) =>
-      terminalOpenRef.current ? [...current, entry].slice(-40) : [entry]
+      nextTerminalEntries(current, entry, terminalOpenRef.current)
     );
     if (!terminalOpenRef.current) {
       setTerminalUnread(true);
