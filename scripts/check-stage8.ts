@@ -11,7 +11,10 @@ import {
   buildSingleRequestCollection,
   resolveInheritedAuth
 } from '../src/newman/buildRunCollection.ts';
-import { parseNewmanJsonReport } from '../src/newman/parseResult.ts';
+import {
+  parseNewmanJsonReport,
+  replaceRunExecution
+} from '../src/newman/parseResult.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixturePath = path.join(__dirname, '../fixtures/smoke.postman_collection.json');
@@ -164,6 +167,22 @@ assert.equal(fanout.executions[0]?.scriptRequests, 2);
 assert.equal(fanout.executions[0]?.assertions.length, 1);
 assert.equal(fanout.executions[1]?.name, 'Next');
 assert.equal(fanout.executions[1]?.scriptRequests, 0);
+
+// Re-running one row patches that row only and leaves the rest of the run intact
+const rerun = replaceRunExecution(multi, 1, {
+  ...multi.executions[1]!,
+  code: 200,
+  status: 'OK',
+  responseTime: 9
+});
+assert.equal(rerun.executions.length, 2);
+assert.equal(rerun.executions[0]?.name, 'A');
+assert.equal(rerun.executions[0]?.responseTime, 1);
+assert.equal(rerun.executions[1]?.code, 200);
+assert.equal(rerun.executions[1]?.responseTime, 9);
+assert.equal(rerun.ok, true);
+assert.equal(multi.executions[1]?.code, 500);
+assert.equal(replaceRunExecution(multi, 7, multi.executions[0]!), multi);
 
 import {
   isNewmanNotFoundError,

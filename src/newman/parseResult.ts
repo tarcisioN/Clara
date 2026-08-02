@@ -167,6 +167,30 @@ function collapseScriptRequests(
   return collapsed;
 }
 
+/**
+ * Replace a single row of an existing run with a fresh result, so re-running one
+ * request keeps the rest of the collection/folder output on screen.
+ */
+export function replaceRunExecution(
+  run: NewmanRunView,
+  index: number,
+  execution: NewmanExecutionView
+): NewmanRunView {
+  if (index < 0 || index >= run.executions.length) {
+    return run;
+  }
+  const executions = run.executions.slice();
+  executions[index] = execution;
+  return {
+    ...run,
+    executions,
+    execution: executions[0] ?? null,
+    ok: executions.every((entry) =>
+      entry.assertions.every((assertion) => assertion.ok)
+    )
+  };
+}
+
 /** Status color for the response toolbar / collection run rows. */
 export function executionStatusTone(
   execution: Pick<NewmanExecutionView, 'code' | 'assertions'>

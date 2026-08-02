@@ -19,6 +19,10 @@ type CollectionRunPaneProps = {
   onNewmanReady?: (version: string) => void;
   /** Reveal the request for this run row in the sidebar tree. */
   onRevealRequest?: (execution: NewmanExecutionView, index: number) => void;
+  /** Re-run a single row, replacing only that result. */
+  onRerunRequest?: (execution: NewmanExecutionView, index: number) => void;
+  /** Index of the row currently being re-run. */
+  rerunningIndex?: number | null;
   variablesSlot?: ReactNode;
 };
 
@@ -147,6 +151,8 @@ export default function CollectionRunPane({
   onNewRequest,
   onNewmanReady,
   onRevealRequest,
+  onRerunRequest,
+  rerunningIndex = null,
   variablesSlot
 }: CollectionRunPaneProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
@@ -193,7 +199,7 @@ export default function CollectionRunPane({
           <button
             type="button"
             className="collection-run-button"
-            disabled={running || requestCount === 0}
+            disabled={running || rerunningIndex != null || requestCount === 0}
             onClick={onRun}
             title={runLabel}
           >
@@ -245,61 +251,78 @@ export default function CollectionRunPane({
             const { passed, total } = assertionSummary(execution);
             const tone = executionStatusTone(execution);
             const open = expandedIndex === index;
+            const rerunning = rerunningIndex === index;
             return (
               <li key={`${execution.name}-${index}`} className={open ? 'open' : ''}>
-                <button
-                  type="button"
-                  className="collection-run-row"
-                  onClick={() => {
-                    setExpandedIndex(open ? null : index);
-                    onRevealRequest?.(execution, index);
-                  }}
-                  aria-expanded={open}
+                <div
+                  className={`collection-run-row-wrap ${rerunning ? 'rerunning' : ''}`.trim()}
                 >
-                  <span
-                    className={`collection-run-method method-${execution.method.toLowerCase()}`}
+                  <button
+                    type="button"
+                    className="collection-run-row"
+                    onClick={() => {
+                      setExpandedIndex(open ? null : index);
+                      onRevealRequest?.(execution, index);
+                    }}
+                    aria-expanded={open}
                   >
-                    {execution.method}
-                  </span>
-                  <span className="collection-run-label">
-                    <span className="collection-run-name" title={execution.name}>
-                      {execution.name}
+                    <span
+                      className={`collection-run-method method-${execution.method.toLowerCase()}`}
+                    >
+                      {execution.method}
                     </span>
-                    {execution.scriptRequests > 0 ? (
-                      <span
-                        className="collection-run-script-requests"
-                        title={`${execution.scriptRequests} extra request${
-                          execution.scriptRequests === 1 ? '' : 's'
-                        } sent by pm.sendRequest in this item's scripts`}
-                      >
-                        +{execution.scriptRequests}
+                    <span className="collection-run-label">
+                      <span className="collection-run-name" title={execution.name}>
+                        {execution.name}
                       </span>
-                    ) : null}
-                  </span>
-                  <span className={`collection-run-status status-${tone}`}>
-                    {execution.code ?? '—'} {execution.status}
-                  </span>
-                  <span className="collection-run-time">
-                    {execution.responseTime != null
-                      ? `${execution.responseTime} ms`
-                      : '—'}
-                  </span>
-                  {total > 0 ? (
-                    <span className="collection-run-tests">
-                      <span
-                        className={`test-result-dot ${
-                          passed === total ? 'passed' : 'failed'
-                        }`}
-                      />
-                      ({passed}/{total})
+                      {execution.scriptRequests > 0 ? (
+                        <span
+                          className="collection-run-script-requests"
+                          title={`${execution.scriptRequests} extra request${
+                            execution.scriptRequests === 1 ? '' : 's'
+                          } sent by pm.sendRequest in this item's scripts`}
+                        >
+                          +{execution.scriptRequests}
+                        </span>
+                      ) : null}
                     </span>
-                  ) : (
-                    <span className="collection-run-tests muted">—</span>
-                  )}
-                  <span className="collection-run-chevron" aria-hidden>
-                    {open ? '▾' : '▸'}
-                  </span>
-                </button>
+                    <span className={`collection-run-status status-${tone}`}>
+                      {execution.code ?? '—'} {execution.status}
+                    </span>
+                    <span className="collection-run-time">
+                      {execution.responseTime != null
+                        ? `${execution.responseTime} ms`
+                        : '—'}
+                    </span>
+                    {total > 0 ? (
+                      <span className="collection-run-tests">
+                        <span
+                          className={`test-result-dot ${
+                            passed === total ? 'passed' : 'failed'
+                          }`}
+                        />
+                        ({passed}/{total})
+                      </span>
+                    ) : (
+                      <span className="collection-run-tests muted">—</span>
+                    )}
+                    <span className="collection-run-chevron" aria-hidden>
+                      {open ? '▾' : '▸'}
+                    </span>
+                  </button>
+                  {onRerunRequest ? (
+                    <button
+                      type="button"
+                      className="collection-run-rerun"
+                      disabled={running || rerunningIndex != null}
+                      aria-label={`Run ${execution.name} again`}
+                      title={`Run ${execution.name} again — keeps the rest of this run`}
+                      onClick={() => onRerunRequest(execution, index)}
+                    >
+                      <span aria-hidden>{rerunning ? '⟳' : '↻'}</span>
+                    </button>
+                  ) : null}
+                </div>
                 {open ? <ExecutionDetail execution={execution} /> : null}
               </li>
             );

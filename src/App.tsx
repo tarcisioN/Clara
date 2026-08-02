@@ -18,7 +18,11 @@ import {
   resolveInheritedVariables
 } from './newman/buildRunCollection.ts';
 import { buildPreviewVariables } from './postman/urlPreview.ts';
-import type { NewmanRunView } from './newman/parseResult.ts';
+import {
+  replaceRunExecution,
+  type NewmanExecutionView,
+  type NewmanRunView
+} from './newman/parseResult.ts';
 import {
   addEnvironmentValue,
   assertPostmanEnvironment,
@@ -224,6 +228,16 @@ function fileName(filePath: string): string {
   return filePath.split(/[\\/]/).pop() ?? filePath;
 }
 
+function countAssertions(execution: NewmanExecutionView): {
+  passed: number;
+  total: number;
+} {
+  return {
+    passed: execution.assertions.filter((assertion) => assertion.ok).length,
+    total: execution.assertions.length
+  };
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -316,6 +330,11 @@ export default function App() {
     collectionPath: string;
     path: ItemPath;
   } | null>(null);
+  /** Row currently being re-run inside an existing collection/folder run. */
+  const [rerunningRow, setRerunningRow] = useState<{
+    runKey: string;
+    index: number;
+  } | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -337,6 +356,7 @@ export default function App() {
   const compareBasesRef = useRef(compareBases);
   const sendingRef = useRef(sending);
   const runningKeyRef = useRef(runningKey);
+  const rerunningRowRef = useRef(rerunningRow);
   const sidebarResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const environmentPanelRef = useRef<HTMLDivElement>(null);
   const environmentResizeRef = useRef<{
@@ -355,6 +375,7 @@ export default function App() {
   compareBasesRef.current = compareBases;
   sendingRef.current = sending;
   runningKeyRef.current = runningKey;
+  rerunningRowRef.current = rerunningRow;
 
   const hasResources = collections.length > 0 || environments.length > 0;
   const sidebarFilter = normalizeSidebarQuery(sidebarQuery);
@@ -1648,7 +1669,7 @@ export default function App() {
     const entry = collectionsRef.current.find(
       (candidate) => candidate.filePath === tab.collectionPath
     );
-    if (!entry || runningKeyRef.current) {
+    if (!entry || runningKeyRef.current || rerunningRowRef.current) {
       return;
     }
 
@@ -1698,6 +1719,91 @@ export default function App() {
       setRunningKey(null);
     }
   }, [activeEnvironmentJson]);
+
+  /**
+   * Re-run one row of a collection/folder run and patch just that row, so the
+   * rest of the run output stays on screen.
+   */
+  const rerunScopeExecution = useCallback(
+    async (
+      tab: WorkspaceTab,
+      executions: NewmanExecutionView[],
+      index: number
+    ) => {
+      if (tab.kind !== 'collection' && tab.kind !== 'folder') {
+        return;
+      }
+      const entry = collectionsRef.current.find(
+        (candidate) => candidate.filePath === tab.collectionPath
+      );
+      if (!entry || runningKeyRef.current || rerunningRowRef.current) {
+        return;
+      }
+
+      const scopePath = tab.kind === 'folder' ? tab.path : null;
+      const path = resolveRunExecutionPath(
+        entry.collection.item,
+        scopePath,
+        executions,
+        index
+      );
+      if (!path) {
+        setStatus({
+          kind: 'error',
+          message: 'Could not match this result to a request — run the scope again'
+        });
+        return;
+      }
+
+      const runKey = tabKey(tab);
+      setRerunningRow({ runKey, index });
+      setStatus({ kind: 'idle' });
+      try {
+        const runCollection = buildSingleRequestCollection(entry.collection, path);
+        const environmentJson = activeEnvironmentJson();
+        const result = await window.clara.runNewman(serializeCollection(runCollection), {
+          ...(environmentJson ? { environmentJson } : {})
+        });
+        const execution = result.executions[0] ?? null;
+        setRequestRuns((runs) => ({
+          ...runs,
+          [requestRunKey(tab.collectionPath, path)]: result
+        }));
+
+        if (!execution) {
+          setStatus({
+            kind: 'error',
+            message: result.error ?? 'Newman returned no result for this request'
+          });
+          return;
+        }
+
+        setScopeRuns((runs) => {
+          const current = runs[runKey];
+          if (!current) {
+            return runs;
+          }
+          return {
+            ...runs,
+            [runKey]: replaceRunExecution(current, index, execution)
+          };
+        });
+
+        const { passed, total } = countAssertions(execution);
+        setStatus({
+          kind: 'ok',
+          message: `Re-ran ${execution.name} · ${execution.code ?? '—'} ${
+            execution.status
+          }${total > 0 ? ` · tests ${passed}/${total}` : ''}`.trim()
+        });
+      } catch (error) {
+        setStatus({ kind: 'error', message: errorMessage(error) });
+      } finally {
+        setRerunningRow(null);
+      }
+    },
+    [activeEnvironmentJson]
+  );
 
   const openRequestTab = useCallback(
     (
@@ -4281,6 +4387,18 @@ export default function App() {
                       index
                     );
                   }}
+                  onRerunRequest={(_execution, index) => {
+                    const result = scopeRuns[tabKey(activeTab)];
+                    if (!result) {
+                      return;
+                    }
+                    void rerunScopeExecution(activeTab, result.executions, index);
+                  }}
+                  rerunningIndex={
+                    rerunningRow?.runKey === tabKey(activeTab)
+                      ? rerunningRow.index
+                      : null
+                  }
                   onNewmanReady={(version) => {
                     const key = tabKey(activeTab);
                     setScopeRuns((runs) => {
@@ -4412,6 +4530,18 @@ export default function App() {
                       index
                     );
                   }}
+                  onRerunRequest={(_execution, index) => {
+                    const result = scopeRuns[tabKey(activeTab)];
+                    if (!result) {
+                      return;
+                    }
+                    void rerunScopeExecution(activeTab, result.executions, index);
+                  }}
+                  rerunningIndex={
+                    rerunningRow?.runKey === tabKey(activeTab)
+                      ? rerunningRow.index
+                      : null
+                  }
                   onNewmanReady={(version) => {
                     const key = tabKey(activeTab);
                     setScopeRuns((runs) => {
