@@ -17,6 +17,8 @@ type CollectionRunPaneProps = {
   onRun: () => void;
   onNewRequest?: () => void;
   onNewmanReady?: (version: string) => void;
+  /** Reveal the request for this run row in the sidebar tree. */
+  onRevealRequest?: (execution: NewmanExecutionView, index: number) => void;
   variablesSlot?: ReactNode;
 };
 
@@ -144,6 +146,7 @@ export default function CollectionRunPane({
   onRun,
   onNewRequest,
   onNewmanReady,
+  onRevealRequest,
   variablesSlot
 }: CollectionRunPaneProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
@@ -247,7 +250,10 @@ export default function CollectionRunPane({
                 <button
                   type="button"
                   className="collection-run-row"
-                  onClick={() => setExpandedIndex(open ? null : index)}
+                  onClick={() => {
+                    setExpandedIndex(open ? null : index);
+                    onRevealRequest?.(execution, index);
+                  }}
                   aria-expanded={open}
                 >
                   <span

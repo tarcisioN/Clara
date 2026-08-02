@@ -48,6 +48,7 @@ import {
   getRequestByPath,
   isFolder,
   isRequest,
+  resolveRunExecutionPath,
   updateItemByPath,
   type ItemPath
 } from './postman/tree.ts';
@@ -310,6 +311,11 @@ export default function App() {
   const [requestRuns, setRequestRuns] = useState<Record<string, NewmanRunView>>({});
   const [scopeRuns, setScopeRuns] = useState<Record<string, NewmanRunView>>({});
   const [runningKey, setRunningKey] = useState<string | null>(null);
+  /** Sidebar highlight for a request clicked in a collection/folder run list. */
+  const [runSidebarFocus, setRunSidebarFocus] = useState<{
+    collectionPath: string;
+    path: ItemPath;
+  } | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -1709,6 +1715,7 @@ export default function App() {
       if (!item || !isRequest(item)) {
         return;
       }
+      setRunSidebarFocus(null);
       openTab({ kind: 'request', collectionPath, path }, options);
       const key = tabKey({ kind: 'request', collectionPath, path });
       const viewMode = options?.viewMode ?? 'edit';
@@ -1732,6 +1739,7 @@ export default function App() {
       if (!item || !isFolder(item)) {
         return;
       }
+      setRunSidebarFocus(null);
       openTab({ kind: 'folder', collectionPath, path }, options);
       updateUi(collectionPath, (ui) =>
         ui.expanded.has(path)
@@ -2715,6 +2723,37 @@ export default function App() {
     [scrollSidebarTargetIntoView, updateUi]
   );
 
+  const revealRunExecution = useCallback(
+    (
+      collectionPath: string,
+      scopePath: ItemPath | null,
+      executions: NewmanRunView['executions'],
+      index: number
+    ) => {
+      const entry = collectionsRef.current.find(
+        (candidate) => candidate.filePath === collectionPath
+      );
+      if (!entry) {
+        return;
+      }
+      const path = resolveRunExecutionPath(
+        entry.collection.item,
+        scopePath,
+        executions,
+        index
+      );
+      if (!path) {
+        return;
+      }
+      setRunSidebarFocus({ collectionPath, path });
+      revealInSidebar(
+        { kind: 'request', collectionPath, path },
+        { activate: false }
+      );
+    },
+    [revealInSidebar]
+  );
+
   const focusChangeEntry = useCallback(
     (collectionPath: string, entry: ChangeListEntry) => {
       setFocusedChangeKey(entry.key);
@@ -3611,12 +3650,14 @@ export default function App() {
                       activeTab?.kind === 'collection' &&
                       activeTab.collectionPath === entry.filePath;
                     const treeSelectedPath =
-                      activeTab &&
-                      activeTab.kind !== 'environment' &&
-                      activeTab.collectionPath === entry.filePath &&
-                      (activeTab.kind === 'request' || activeTab.kind === 'folder')
-                        ? activeTab.path
-                        : null;
+                      runSidebarFocus?.collectionPath === entry.filePath
+                        ? runSidebarFocus.path
+                        : activeTab &&
+                            activeTab.kind !== 'environment' &&
+                            activeTab.collectionPath === entry.filePath &&
+                            (activeTab.kind === 'request' || activeTab.kind === 'folder')
+                          ? activeTab.path
+                          : null;
                     const collectionExpanded = ui.collectionExpanded;
                     const compare = compareByPath[entry.filePath];
                     const collectionDirty = ui.collectionDirty || ui.structureDirty;
@@ -3708,7 +3749,8 @@ export default function App() {
                           <button
                             type="button"
                             className="collection-heading-select"
-                            onClick={(event) =>
+                            onClick={(event) => {
+                              setRunSidebarFocus(null);
                               openTab(
                                 {
                                   kind: 'collection',
@@ -3717,8 +3759,8 @@ export default function App() {
                                 event.metaKey || event.ctrlKey
                                   ? { forceNew: true }
                                   : undefined
-                              )
-                            }
+                              );
+                            }}
                             title={collectionTooltip}
                           >
                             <span className="collection-icon" aria-hidden>
@@ -3750,12 +3792,14 @@ export default function App() {
                             changedOnly={sidebar.changedOnly && Boolean(compare)}
                             structuralDiff={compare?.diff ?? null}
                             onToggleFolder={(path) => toggleFolder(entry.filePath, path)}
-                            onSelectFolder={(path, options) =>
-                              openFolderTab(entry.filePath, path, options)
-                            }
-                            onSelectRequest={(path, options) =>
-                              openRequestTab(entry.filePath, path, options)
-                            }
+                            onSelectFolder={(path, options) => {
+                              setRunSidebarFocus(null);
+                              openFolderTab(entry.filePath, path, options);
+                            }}
+                            onSelectRequest={(path, options) => {
+                              setRunSidebarFocus(null);
+                              openRequestTab(entry.filePath, path, options);
+                            }}
                             focusedRemovedKey={
                               compare && focusedChangeKey?.startsWith('__removed__')
                                 ? focusedChangeKey
@@ -4225,6 +4269,18 @@ export default function App() {
                   running={runningKey === tabKey(activeTab)}
                   onRun={() => void runScope(activeTab)}
                   onNewRequest={() => createNewRequestNear(activeTab)}
+                  onRevealRequest={(_execution, index) => {
+                    const result = scopeRuns[tabKey(activeTab)];
+                    if (!result) {
+                      return;
+                    }
+                    revealRunExecution(
+                      activeTab.collectionPath,
+                      null,
+                      result.executions,
+                      index
+                    );
+                  }}
                   onNewmanReady={(version) => {
                     const key = tabKey(activeTab);
                     setScopeRuns((runs) => {
@@ -4344,6 +4400,18 @@ export default function App() {
                   running={runningKey === tabKey(activeTab)}
                   onRun={() => void runScope(activeTab)}
                   onNewRequest={() => createNewRequestNear(activeTab)}
+                  onRevealRequest={(_execution, index) => {
+                    const result = scopeRuns[tabKey(activeTab)];
+                    if (!result || activeTab.kind !== 'folder') {
+                      return;
+                    }
+                    revealRunExecution(
+                      activeTab.collectionPath,
+                      activeTab.path,
+                      result.executions,
+                      index
+                    );
+                  }}
                   onNewmanReady={(version) => {
                     const key = tabKey(activeTab);
                     setScopeRuns((runs) => {

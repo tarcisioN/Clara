@@ -8,7 +8,10 @@ import {
   getItemByPath,
   getRequestByPath,
   isFolder,
-  isRequest
+  isRequest,
+  listRequestPaths,
+  listRequestPathsUnder,
+  resolveRunExecutionPath
 } from '../src/postman/tree.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -43,5 +46,18 @@ assert.equal(getRequestByPath(collection.item, '0'), undefined);
 const folders = collectFolderPaths(collection.item);
 assert.equal(folders.has('0'), true);
 assert.equal(folders.has('0.0'), false);
+
+const allRequestPaths = listRequestPaths(collection.item);
+assert.ok(allRequestPaths.includes('0.0'));
+assert.ok(allRequestPaths.includes('1'));
+assert.deepEqual(listRequestPathsUnder(collection.item, '0'), ['0.0']);
+assert.equal(
+  resolveRunExecutionPath(collection.item, null, [{ name: 'Ping' }, { name: 'Root echo' }], 0),
+  '0.0'
+);
+assert.equal(
+  resolveRunExecutionPath(collection.item, '0', [{ name: 'Ping' }], 0),
+  '0.0'
+);
 
 console.log('stage1 checks passed');

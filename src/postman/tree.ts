@@ -128,3 +128,92 @@ export function countRequestsUnder(item: PostmanItem): number {
   }
   return (item.item ?? []).reduce((sum, child) => sum + countRequestsUnder(child), 0);
 }
+
+/**
+ * Depth-first list of request paths — same order Newman walks items when
+ * running a collection or folder.
+ */
+export function listRequestPaths(
+  items: PostmanItem[] | undefined,
+  parent: ItemPath | null = null
+): ItemPath[] {
+  const paths: ItemPath[] = [];
+
+  const walk = (nodes: PostmanItem[] | undefined, parentPath: ItemPath | null) => {
+    if (!nodes) {
+      return;
+    }
+    nodes.forEach((node, index) => {
+      const path = childPath(parentPath, index);
+      if (isRequest(node)) {
+        paths.push(path);
+      } else if (isFolder(node)) {
+        walk(node.item, path);
+      }
+    });
+  };
+
+  walk(items, parent);
+  return paths;
+}
+
+/** Request paths under a folder, or the whole collection when `folderPath` is null. */
+export function listRequestPathsUnder(
+  items: PostmanItem[] | undefined,
+  folderPath: ItemPath | null
+): ItemPath[] {
+  if (!folderPath) {
+    return listRequestPaths(items, null);
+  }
+  const folder = getItemByPath(items, folderPath);
+  if (!folder || !isFolder(folder)) {
+    return [];
+  }
+  return listRequestPaths(folder.item, folderPath);
+}
+
+/**
+ * Map a collapsed Newman run row back to a collection item path.
+ * Prefers index alignment (Newman DFS order); falls back to name matching.
+ */
+export function resolveRunExecutionPath(
+  items: PostmanItem[] | undefined,
+  scopePath: ItemPath | null,
+  executions: Array<{ name: string }>,
+  index: number
+): ItemPath | null {
+  if (index < 0 || index >= executions.length) {
+    return null;
+  }
+
+  const paths = listRequestPathsUnder(items, scopePath);
+  if (paths.length === executions.length) {
+    return paths[index] ?? null;
+  }
+
+  const used = new Set<ItemPath>();
+  let resolved: ItemPath | null = null;
+
+  for (let i = 0; i <= index; i += 1) {
+    const name = executions[i]?.name;
+    const match = paths.find((path) => {
+      if (used.has(path)) {
+        return false;
+      }
+      const item = getItemByPath(items, path);
+      return (item?.name ?? 'Request') === name;
+    });
+    if (!match) {
+      if (i === index) {
+        return null;
+      }
+      continue;
+    }
+    used.add(match);
+    if (i === index) {
+      resolved = match;
+    }
+  }
+
+  return resolved;
+}
