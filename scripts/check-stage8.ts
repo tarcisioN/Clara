@@ -117,6 +117,53 @@ const multi = parseNewmanJsonReport(
 assert.equal(multi.executions.length, 2);
 assert.equal(multi.execution?.name, 'A');
 assert.equal(multi.executions[1]?.method, 'POST');
+assert.equal(multi.executions[0]?.scriptRequests, 0);
+
+// pm.sendRequest calls repeat the item under the same cursor.ref — collapse them
+const fanout = parseNewmanJsonReport(
+  JSON.stringify({
+    run: {
+      executions: [
+        {
+          cursor: { ref: 'ref-a' },
+          item: { name: 'Throttle' },
+          request: { method: 'GET', url: 'https://example.com/a' },
+          response: { code: 429, status: 'Too Many Requests', header: [], stream: { type: 'Buffer', data: [] }, responseTime: 1, responseSize: 0 },
+          assertions: [{ assertion: 'is 429' }]
+        },
+        {
+          cursor: { ref: 'ref-a' },
+          item: { name: 'Throttle' },
+          request: { method: 'GET', url: 'https://example.com/a' },
+          response: { code: 429, status: 'Too Many Requests', header: [], stream: { type: 'Buffer', data: [] }, responseTime: 1, responseSize: 0 },
+          assertions: [{ assertion: 'is 429' }]
+        },
+        {
+          cursor: { ref: 'ref-a' },
+          item: { name: 'Throttle' },
+          request: { method: 'GET', url: 'https://example.com/a' },
+          response: { code: 429, status: 'Too Many Requests', header: [], stream: { type: 'Buffer', data: [] }, responseTime: 1, responseSize: 0 },
+          assertions: [{ assertion: 'is 429' }]
+        },
+        {
+          cursor: { ref: 'ref-b' },
+          item: { name: 'Next' },
+          request: { method: 'GET', url: 'https://example.com/b' },
+          response: { code: 200, status: 'OK', header: [], stream: { type: 'Buffer', data: [] }, responseTime: 3, responseSize: 0 },
+          assertions: []
+        }
+      ],
+      failures: []
+    }
+  }),
+  { exitCode: 0, command: 'newman run …', stderr: '' }
+);
+assert.equal(fanout.executions.length, 2);
+assert.equal(fanout.executions[0]?.name, 'Throttle');
+assert.equal(fanout.executions[0]?.scriptRequests, 2);
+assert.equal(fanout.executions[0]?.assertions.length, 1);
+assert.equal(fanout.executions[1]?.name, 'Next');
+assert.equal(fanout.executions[1]?.scriptRequests, 0);
 
 import {
   isNewmanNotFoundError,

@@ -157,6 +157,10 @@ export default function CollectionRunPane({
       sum + execution.assertions.filter((assertion) => assertion.ok).length,
     0
   );
+  const scriptRequests = executions.reduce(
+    (sum, execution) => sum + execution.scriptRequests,
+    0
+  );
   const failedRequests = executions.filter((execution) => {
     const { passed, total } = assertionSummary(execution);
     return (
@@ -211,6 +215,7 @@ export default function CollectionRunPane({
         >
           <span>
             {executions.length} request{executions.length === 1 ? '' : 's'}
+            {scriptRequests > 0 ? ` (+${scriptRequests} from scripts)` : ''}
             {totalAssertions > 0
               ? ` · tests ${passedAssertions}/${totalAssertions}`
               : ''}
@@ -250,7 +255,21 @@ export default function CollectionRunPane({
                   >
                     {execution.method}
                   </span>
-                  <span className="collection-run-name">{execution.name}</span>
+                  <span className="collection-run-label">
+                    <span className="collection-run-name" title={execution.name}>
+                      {execution.name}
+                    </span>
+                    {execution.scriptRequests > 0 ? (
+                      <span
+                        className="collection-run-script-requests"
+                        title={`${execution.scriptRequests} extra request${
+                          execution.scriptRequests === 1 ? '' : 's'
+                        } sent by pm.sendRequest in this item's scripts`}
+                      >
+                        +{execution.scriptRequests}
+                      </span>
+                    ) : null}
+                  </span>
                   <span className={`collection-run-status status-${tone}`}>
                     {execution.code ?? '—'} {execution.status}
                   </span>

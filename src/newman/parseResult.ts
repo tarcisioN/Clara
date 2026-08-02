@@ -20,6 +20,11 @@ export type NewmanExecutionView = {
   headers: NewmanResponseHeader[];
   body: string;
   assertions: NewmanAssertion[];
+  /**
+   * Extra HTTP calls Newman reported under the same item, i.e. requests fired by
+   * `pm.sendRequest` inside pre-request/test scripts.
+   */
+  scriptRequests: number;
 };
 
 export type NewmanRunView = {
@@ -40,6 +45,7 @@ export type NewmanRunView = {
 type NewmanJsonReport = {
   run?: {
     executions?: Array<{
+      cursor?: { ref?: string };
       item?: { name?: string };
       request?: {
         method?: string;
@@ -125,8 +131,40 @@ function mapExecution(
       name: assertion.assertion ?? 'assertion',
       ok: !assertion.error,
       error: assertion.error?.message
-    }))
+    })),
+    scriptRequests: 0
   };
+}
+
+/**
+ * Newman pushes one entry per HTTP call, so every `pm.sendRequest` from a script
+ * shows up as a repeat of the item that fired it (same `cursor.ref`). Collapse
+ * them into a single row and keep the count of the script-issued calls.
+ */
+function collapseScriptRequests(
+  executions: NonNullable<NonNullable<NewmanJsonReport['run']>['executions']>
+): NewmanExecutionView[] {
+  const collapsed: NewmanExecutionView[] = [];
+  const indexByRef = new Map<string, number>();
+
+  for (const raw of executions) {
+    const view = mapExecution(raw);
+    const ref = typeof raw.cursor?.ref === 'string' ? raw.cursor.ref : null;
+    if (ref) {
+      const seen = indexByRef.get(ref);
+      if (seen != null) {
+        collapsed[seen] = {
+          ...view,
+          scriptRequests: collapsed[seen].scriptRequests + 1
+        };
+        continue;
+      }
+      indexByRef.set(ref, collapsed.length);
+    }
+    collapsed.push(view);
+  }
+
+  return collapsed;
 }
 
 /** Status color for the response toolbar / collection run rows. */
@@ -183,7 +221,7 @@ export function parseNewmanJsonReport(
     };
   }
 
-  const executions = (report.run?.executions ?? []).map(mapExecution);
+  const executions = collapseScriptRequests(report.run?.executions ?? []);
 
   const failures = (report.run?.failures ?? []).map((failure) => ({
     name: failure.error?.test ?? failure.source?.name ?? failure.error?.name ?? 'failure',
