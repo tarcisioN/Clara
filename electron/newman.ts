@@ -191,9 +191,11 @@ export async function runNewmanCollection(
     ...(payload.folder ? ['--folder', payload.folder] : []),
     ...(environmentPath ? ['--environment', environmentPath] : []),
     '--reporters',
-    'json',
+    'cli,json',
     '--reporter-json-export',
     reportPath,
+    '--color',
+    'off',
     '--suppress-exit-code'
   ];
   const command = `newman ${args.map((arg) => JSON.stringify(arg)).join(' ')}`;
@@ -217,6 +219,7 @@ export async function runNewmanCollection(
         ok: false,
         exitCode: null,
         command,
+        stdout: '',
         stderr: message,
         error: message,
         executions: [],
@@ -233,7 +236,8 @@ export async function runNewmanCollection(
         ok: false,
         exitCode: spawned.exitCode,
         command,
-        stderr: spawned.stderr || spawned.stdout,
+        stdout: spawned.stdout,
+        stderr: spawned.stderr,
         error:
           spawned.stderr.trim() ||
           spawned.stdout.trim() ||
@@ -247,6 +251,7 @@ export async function runNewmanCollection(
     return parseNewmanJsonReport(reportRaw, {
       exitCode: spawned.exitCode,
       command,
+      stdout: spawned.stdout,
       stderr: spawned.stderr
     });
   } finally {

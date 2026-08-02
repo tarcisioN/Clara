@@ -10,6 +10,7 @@ import RequestDiffPane from './components/RequestDiffPane.tsx';
 import RequestTabs, { type WorkspaceTabView } from './components/RequestTabs.tsx';
 import PromptDialog, { type PromptRequest } from './components/PromptDialog.tsx';
 import ResponsePane from './components/ResponsePane.tsx';
+import TerminalPane, { type TerminalEntry } from './components/TerminalPane.tsx';
 import VariablesPane from './components/VariablesPane.tsx';
 import { decodeItemDrag, ITEM_PATH_MIME } from './components/dnd.ts';
 import { showClaraTooltip } from './components/claraTooltip.ts';
@@ -341,6 +342,14 @@ export default function App() {
     runKey: string;
     index: number;
   } | null>(null);
+  const [terminalOpen, setTerminalOpen] = useState(false);
+  const [terminalUnread, setTerminalUnread] = useState(false);
+  const [terminalEntries, setTerminalEntries] = useState<TerminalEntry[]>([]);
+  const [terminalHeight, setTerminalHeight] = useState(220);
+  const terminalOpenRef = useRef(false);
+  const terminalResizeRef = useRef<{ startY: number; startHeight: number } | null>(
+    null
+  );
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -382,6 +391,7 @@ export default function App() {
   sendingRef.current = sending;
   runningKeyRef.current = runningKey;
   rerunningRowRef.current = rerunningRow;
+  terminalOpenRef.current = terminalOpen;
 
   const hasResources = collections.length > 0 || environments.length > 0;
   const sidebarFilter = normalizeSidebarQuery(sidebarQuery);
@@ -1619,6 +1629,23 @@ export default function App() {
     }
   }, [refreshCompare]);
 
+  const pushTerminalEntry = useCallback((label: string, result: NewmanRunView) => {
+    const entry: TerminalEntry = {
+      id: crypto.randomUUID(),
+      at: Date.now(),
+      label,
+      command: result.command,
+      stdout: result.stdout ?? '',
+      stderr: result.stderr ?? '',
+      exitCode: result.exitCode,
+      ok: result.ok && !result.missingNewman
+    };
+    setTerminalEntries((current) => [...current, entry].slice(-40));
+    if (!terminalOpenRef.current) {
+      setTerminalUnread(true);
+    }
+  }, []);
+
   const runSingleRequest = useCallback(async (collectionPath: string, path: ItemPath) => {
     const entry = collectionsRef.current.find(
       (candidate) => candidate.filePath === collectionPath
@@ -1638,6 +1665,11 @@ export default function App() {
         ...(environmentJson ? { environmentJson } : {})
       });
       setRequestRuns((runs) => ({ ...runs, [requestRunKey(collectionPath, path)]: result }));
+      const label =
+        result.execution?.name ??
+        getItemByPath(entry.collection.item, path)?.name ??
+        'Request';
+      pushTerminalEntry(label, result);
       const code = result.execution?.code;
       const unsaved = uiByPathRef.current[collectionPath]?.dirtyPaths.has(path) ?? false;
       if (result.missingNewman) {
@@ -1658,7 +1690,7 @@ export default function App() {
       setSending(false);
       setRunningKey(null);
     }
-  }, [activeEnvironmentJson]);
+  }, [activeEnvironmentJson, pushTerminalEntry]);
 
   const sendRequest = useCallback(async () => {
     const tab = activeTabRef.current;
@@ -1706,6 +1738,12 @@ export default function App() {
         ...(environmentJson ? { environmentJson } : {})
       });
       setScopeRuns((runs) => ({ ...runs, [key]: result }));
+      pushTerminalEntry(
+        tab.kind === 'folder'
+          ? folderName ?? 'Folder run'
+          : entry.collection.info?.name?.trim() || 'Collection run',
+        result
+      );
       const total = result.executions.length;
       const failed = result.failures.length;
       const unsaved = (uiByPathRef.current[tab.collectionPath]?.dirtyPaths.size ?? 0) > 0;
@@ -1724,7 +1762,7 @@ export default function App() {
     } finally {
       setRunningKey(null);
     }
-  }, [activeEnvironmentJson]);
+  }, [activeEnvironmentJson, pushTerminalEntry]);
 
   /**
    * Re-run one row of a collection/folder run and patch just that row, so the
@@ -1775,6 +1813,12 @@ export default function App() {
           ...runs,
           [requestRunKey(tab.collectionPath, path)]: result
         }));
+        pushTerminalEntry(
+          execution?.name ??
+            getItemByPath(entry.collection.item, path)?.name ??
+            'Request',
+          result
+        );
 
         if (!execution) {
           setStatus({
@@ -1808,7 +1852,7 @@ export default function App() {
         setRerunningRow(null);
       }
     },
-    [activeEnvironmentJson]
+    [activeEnvironmentJson, pushTerminalEntry]
   );
 
   const openRequestTab = useCallback(
@@ -3500,6 +3544,42 @@ export default function App() {
     );
   };
 
+  const maxTerminalHeight = () =>
+    Math.max(140, Math.floor(window.innerHeight * 0.55));
+
+  const onTerminalResizePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    terminalResizeRef.current = {
+      startY: event.clientY,
+      startHeight: terminalHeight
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const onTerminalResizePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const drag = terminalResizeRef.current;
+    if (!drag) {
+      return;
+    }
+    const delta = drag.startY - event.clientY;
+    const next = Math.min(
+      maxTerminalHeight(),
+      Math.max(140, drag.startHeight + delta)
+    );
+    setTerminalHeight(next);
+  };
+
+  const onTerminalResizePointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    if (terminalResizeRef.current) {
+      terminalResizeRef.current = null;
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      } catch {
+        // already released
+      }
+    }
+  };
+
   const onEnvironmentResizePointerDown = (
     event: PointerEvent<HTMLDivElement>
   ) => {
@@ -4938,6 +5018,18 @@ export default function App() {
         </div>
       )}
 
+      {terminalOpen ? (
+        <TerminalPane
+          entries={terminalEntries}
+          height={terminalHeight}
+          onResizePointerDown={onTerminalResizePointerDown}
+          onResizePointerMove={onTerminalResizePointerMove}
+          onResizePointerUp={onTerminalResizePointerUp}
+          onClear={() => setTerminalEntries([])}
+          onClose={() => setTerminalOpen(false)}
+        />
+      ) : null}
+
       <footer className="statusbar">
         <span className={`status-indicator ${status.kind}`} aria-hidden />
         <span role="status">
@@ -4958,24 +5050,47 @@ export default function App() {
               : 'No collection open'
             : status.message}
         </span>
+        <span className="statusbar-spacer" />
         {statusbarEnvironment ? (
           <>
-            <span className="statusbar-spacer" />
             <span title={statusbarEnvironment.filePath}>
               env: {statusbarEnvironment.environment.name?.trim() || fileName(statusbarEnvironment.filePath)}
               {activeEnvironmentPath === statusbarEnvironment.filePath ? ' · active' : ''}
             </span>
+            <span className="statusbar-spacer-sm" />
           </>
         ) : null}
         {statusbarCollection ? (
           <>
-            <span className="statusbar-spacer" />
             <span title={statusbarCollection.filePath}>
               {fileName(statusbarCollection.filePath)}
             </span>
             <span>Postman v2.1</span>
+            <span className="statusbar-spacer-sm" />
           </>
         ) : null}
+        <button
+          type="button"
+          className={`statusbar-terminal ${terminalOpen ? 'is-active' : ''} ${
+            terminalUnread && !terminalOpen ? 'has-unread' : ''
+          }`.trim()}
+          aria-pressed={terminalOpen}
+          title={terminalOpen ? 'Hide Terminal' : 'Show Terminal (Newman CLI output)'}
+          onClick={() => {
+            setTerminalOpen((open) => {
+              const next = !open;
+              if (next) {
+                setTerminalUnread(false);
+              }
+              return next;
+            });
+          }}
+        >
+          Terminal
+          {terminalUnread && !terminalOpen ? (
+            <span className="statusbar-terminal-dot" aria-hidden />
+          ) : null}
+        </button>
       </footer>
       {contextMenu ? (
         <ContextMenu

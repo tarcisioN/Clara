@@ -765,6 +765,42 @@ button.primary {
   flex: 1;
 }
 
+.statusbar-spacer-sm {
+  flex: 0 0 12px;
+}
+
+.statusbar-terminal {
+  position: relative;
+  height: 18px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.625rem;
+  cursor: pointer;
+}
+
+.statusbar-terminal:hover,
+.statusbar-terminal.is-active {
+  background: var(--surface-0);
+  color: var(--text);
+}
+
+.statusbar-terminal.has-unread {
+  color: var(--text);
+}
+
+.statusbar-terminal-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--brand);
+}
+
 .status-indicator {
   width: 6px;
   height: 6px;

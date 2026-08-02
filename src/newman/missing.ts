@@ -46,6 +46,7 @@ export function newmanMissingRunView(command: string, stderr = ''): {
   ok: false;
   exitCode: null;
   command: string;
+  stdout: string;
   stderr: string;
   error: string;
   missingNewman: true;
@@ -57,6 +58,7 @@ export function newmanMissingRunView(command: string, stderr = ''): {
     ok: false,
     exitCode: null,
     command,
+    stdout: '',
     stderr,
     error: NEWMAN_MISSING_ERROR,
     missingNewman: true,

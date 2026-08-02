@@ -1,0 +1,130 @@
+.terminal-pane {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 120px;
+  max-height: 55vh;
+  border-top: 1px solid var(--border-1);
+  background: #1e1e1e;
+  color: #d4d4d4;
+}
+
+.terminal-resize {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: ns-resize;
+  z-index: 2;
+}
+
+.terminal-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 28px;
+  padding: 0 10px;
+  border-bottom: 1px solid #333;
+  background: #252526;
+  color: #ccc;
+  font-size: 0.6875rem;
+}
+
+.terminal-header strong {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.terminal-header-meta {
+  color: #888;
+}
+
+.terminal-header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.terminal-header-button {
+  height: 20px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #aaa;
+  font-size: 0.625rem;
+  cursor: pointer;
+}
+
+.terminal-header-button:hover:not(:disabled) {
+  background: #333;
+  color: #eee;
+}
+
+.terminal-header-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.terminal-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.6875rem;
+  line-height: 1.45;
+}
+
+.terminal-empty {
+  margin: 8px 0 0;
+  color: #777;
+}
+
+.terminal-entry + .terminal-entry {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #333;
+}
+
+.terminal-entry-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  color: #9cdcfe;
+}
+
+.terminal-entry.failed .terminal-entry-header {
+  color: #f48771;
+}
+
+.terminal-entry-time {
+  color: #6a9955;
+  flex: none;
+}
+
+.terminal-entry-label {
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-entry-code {
+  margin-left: auto;
+  flex: none;
+  color: #808080;
+}
+
+.terminal-entry-body {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #d4d4d4;
+}

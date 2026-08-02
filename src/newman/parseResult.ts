@@ -31,6 +31,8 @@ export type NewmanRunView = {
   ok: boolean;
   exitCode: number | null;
   command: string;
+  /** Newman CLI reporter output (human-readable run log). */
+  stdout: string;
   stderr: string;
   error?: string;
   /** True when the newman binary was not found on PATH. */
@@ -227,7 +229,12 @@ export function executionStatusTone(
 /** Normalize Newman `--reporter-json-export` output for the response pane. */
 export function parseNewmanJsonReport(
   raw: string,
-  meta: { exitCode: number | null; command: string; stderr: string }
+  meta: {
+    exitCode: number | null;
+    command: string;
+    stdout?: string;
+    stderr: string;
+  }
 ): NewmanRunView {
   let report: NewmanJsonReport;
   try {
@@ -237,6 +244,7 @@ export function parseNewmanJsonReport(
       ok: false,
       exitCode: meta.exitCode,
       command: meta.command,
+      stdout: meta.stdout ?? '',
       stderr: meta.stderr,
       error: 'Could not parse Newman JSON report',
       executions: [],
@@ -259,6 +267,7 @@ export function parseNewmanJsonReport(
     ok,
     exitCode: meta.exitCode,
     command: meta.command,
+    stdout: meta.stdout ?? '',
     stderr: meta.stderr,
     error: runError,
     executions,
