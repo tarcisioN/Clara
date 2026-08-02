@@ -1640,7 +1640,10 @@ export default function App() {
       exitCode: result.exitCode,
       ok: result.ok && !result.missingNewman
     };
-    setTerminalEntries((current) => [...current, entry].slice(-40));
+    // Closed terminal = fresh session: keep only this run. Open = accumulate.
+    setTerminalEntries((current) =>
+      terminalOpenRef.current ? [...current, entry].slice(-40) : [entry]
+    );
     if (!terminalOpenRef.current) {
       setTerminalUnread(true);
     }
