@@ -218,7 +218,13 @@ type ContextTarget =
   | CollectionTarget
   | EnvironmentTarget
   | { kind: 'tab'; tab: WorkspaceTab }
-  | { kind: 'change'; collectionPath: string; entry: ChangeListEntry };
+  | { kind: 'change'; collectionPath: string; entry: ChangeListEntry }
+  | {
+      kind: 'run-result';
+      tab: Extract<WorkspaceTab, { kind: 'collection' | 'folder' }>;
+      index: number;
+      name: string;
+    };
 
 type Status = { kind: 'idle' } | { kind: 'ok'; message: string } | { kind: 'error'; message: string };
 
@@ -2708,6 +2714,21 @@ export default function App() {
           : [])
       ];
     }
+    if (target.kind === 'run-result') {
+      const busy = Boolean(runningKey) || Boolean(rerunningRow);
+      return [
+        {
+          id: 'rerun-request',
+          label: 'Run again',
+          disabled: busy
+        },
+        {
+          id: 'reveal-in-sidebar',
+          label: 'Reveal in Sidebar',
+          separatorBefore: true
+        }
+      ];
+    }
     if (target.kind === 'collection') {
       return [
         { id: 'new-request', label: 'New Request', shortcut: `${shortcutMod} T` },
@@ -3252,6 +3273,26 @@ export default function App() {
             void restoreRequestFromBase(target.collectionPath, target.entry.path);
           }
         }
+      }
+      return;
+    }
+    if (target.kind === 'run-result') {
+      const result = scopeRuns[tabKey(target.tab)];
+      if (id === 'rerun-request') {
+        if (!result) {
+          return;
+        }
+        void rerunScopeExecution(target.tab, result.executions, target.index);
+      } else if (id === 'reveal-in-sidebar') {
+        if (!result) {
+          return;
+        }
+        revealRunExecution(
+          target.tab.collectionPath,
+          target.tab.kind === 'folder' ? target.tab.path : null,
+          result.executions,
+          target.index
+        );
       }
       return;
     }
@@ -4399,6 +4440,17 @@ export default function App() {
                       ? rerunningRow.index
                       : null
                   }
+                  onContextMenu={(event, execution, index) => {
+                    if (activeTab.kind !== 'collection') {
+                      return;
+                    }
+                    openContextMenu(event, {
+                      kind: 'run-result',
+                      tab: activeTab,
+                      index,
+                      name: execution.name
+                    });
+                  }}
                   onNewmanReady={(version) => {
                     const key = tabKey(activeTab);
                     setScopeRuns((runs) => {
@@ -4542,6 +4594,17 @@ export default function App() {
                       ? rerunningRow.index
                       : null
                   }
+                  onContextMenu={(event, execution, index) => {
+                    if (activeTab.kind !== 'folder') {
+                      return;
+                    }
+                    openContextMenu(event, {
+                      kind: 'run-result',
+                      tab: activeTab,
+                      index,
+                      name: execution.name
+                    });
+                  }}
                   onNewmanReady={(version) => {
                     const key = tabKey(activeTab);
                     setScopeRuns((runs) => {

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type MouseEvent, type ReactNode } from 'react';
 import {
   executionStatusTone,
   type NewmanExecutionView,
@@ -23,6 +23,11 @@ type CollectionRunPaneProps = {
   onRerunRequest?: (execution: NewmanExecutionView, index: number) => void;
   /** Index of the row currently being re-run. */
   rerunningIndex?: number | null;
+  onContextMenu?: (
+    event: MouseEvent<HTMLElement>,
+    execution: NewmanExecutionView,
+    index: number
+  ) => void;
   variablesSlot?: ReactNode;
 };
 
@@ -153,6 +158,7 @@ export default function CollectionRunPane({
   onRevealRequest,
   onRerunRequest,
   rerunningIndex = null,
+  onContextMenu,
   variablesSlot
 }: CollectionRunPaneProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
@@ -256,6 +262,7 @@ export default function CollectionRunPane({
               <li key={`${execution.name}-${index}`} className={open ? 'open' : ''}>
                 <div
                   className={`collection-run-row-wrap ${rerunning ? 'rerunning' : ''}`.trim()}
+                  onContextMenu={(event) => onContextMenu?.(event, execution, index)}
                 >
                   <button
                     type="button"
