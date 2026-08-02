@@ -16,6 +16,11 @@ export type PinnedRequest = {
    * snapshot is not written back over an unrelated request.
    */
   detached?: boolean;
+  /**
+   * Unsaved copy (Duplicate Tab). It has no item of its own in the tree, so it
+   * never links to one — only Save As turns it into a request.
+   */
+  draft?: boolean;
 };
 
 export type SaveAsLocation = {
@@ -52,7 +57,11 @@ export function isPinnedDetached(
   pin: PinnedRequest,
   items: PostmanItem[] | undefined
 ): boolean {
-  return pin.detached === true || getItemByPath(items, pin.linkedPath) == null;
+  return (
+    pin.draft === true ||
+    pin.detached === true ||
+    getItemByPath(items, pin.linkedPath) == null
+  );
 }
 
 /**
@@ -69,7 +78,7 @@ export function markDetachedPins(
   const next: Record<string, PinnedRequest> = {};
 
   for (const [key, pin] of Object.entries(pins)) {
-    if (pin.collectionPath !== collectionPath) {
+    if (pin.collectionPath !== collectionPath || pin.draft) {
       next[key] = pin;
       continue;
     }

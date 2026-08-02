@@ -113,6 +113,7 @@ import {
 } from './postman/edit.ts';
 import {
   fromSessionTab,
+  isDraftTab,
   nextOpenTabs,
   parseTabKey,
   requestRunKey,
@@ -523,22 +524,21 @@ export default function App() {
           ? 'GET'
           : (item.request?.method ?? 'GET').toUpperCase();
       const detached = Boolean(pin && isPinnedDetached(pin, entry.collection.item));
+      const draft = isDraftTab(tab);
+      const name = item.name?.trim() || 'Untitled';
+      const note = draft
+        ? 'Unsaved copy — Save As adds it to the collection'
+        : detached
+          ? 'Pinned — not in the current collection file'
+          : 'Pinned — survives reload / branch switches';
       return [
         {
           tab,
-          name: item.name?.trim() || 'Untitled',
+          name,
           badge: method,
-          badgeClass: `method-${method.toLowerCase()}${pin ? ' badge-pinned' : ''}`,
+          badgeClass: `method-${method.toLowerCase()}${pin && !draft ? ' badge-pinned' : ''}`,
           dirty: ui.dirtyPaths.has(tab.path) || detached,
-          tooltip: pin
-            ? [
-                item.name?.trim() || 'Untitled',
-                detached
-                  ? 'Pinned — not in the current collection file'
-                  : 'Pinned — survives reload / branch switches',
-                entry.filePath
-              ].join('\n')
-            : undefined
+          tooltip: pin ? [name, note, entry.filePath].join('\n') : undefined
         }
       ];
     });
@@ -593,6 +593,10 @@ export default function App() {
     if (!activeCollection || !activeRequestPath || !selectedItem || !activeCompare) {
       return null;
     }
+    if (activePinDetached) {
+      // The path belongs to whatever is in the tree, not to this snapshot.
+      return null;
+    }
     const resolution = resolveBaseRequestItem(
       activeCompare.diff,
       activeCollection.collection,
@@ -606,10 +610,13 @@ export default function App() {
       return computeSemanticDiff(selectedItem, null);
     }
     return computeSemanticDiff(selectedItem, resolution.item);
-  }, [activeCollection, activeCompare, activeRequestPath, selectedItem]);
+  }, [activeCollection, activeCompare, activePinDetached, activeRequestPath, selectedItem]);
 
   const requestFieldDiff = useMemo(() => {
     if (!activeCollection || !activeRequestPath || !selectedItem || !activeCompare) {
+      return null;
+    }
+    if (activePinDetached) {
       return null;
     }
     const resolution = resolveBaseRequestItem(
@@ -625,7 +632,7 @@ export default function App() {
       return computeRequestFieldDiff(selectedItem, null);
     }
     return computeRequestFieldDiff(selectedItem, resolution.item);
-  }, [activeCollection, activeCompare, activeRequestPath, selectedItem]);
+  }, [activeCollection, activeCompare, activePinDetached, activeRequestPath, selectedItem]);
 
   const activeRequestViewMode =
     activeTab?.kind === 'request'
@@ -1721,7 +1728,11 @@ export default function App() {
     }
   }, []);
 
-  const runSingleRequest = useCallback(async (collectionPath: string, path: ItemPath) => {
+  const runSingleRequest = useCallback(async (tab: WorkspaceTab) => {
+    if (tab.kind !== 'request') {
+      return;
+    }
+    const { collectionPath, path } = tab;
     const entry = collectionsRef.current.find(
       (candidate) => candidate.filePath === collectionPath
     );
@@ -1729,7 +1740,7 @@ export default function App() {
       return;
     }
 
-    const key = tabKey({ kind: 'request', collectionPath, path });
+    const key = tabKey(tab);
     const pin = pinnedByKeyRef.current[key];
     setSending(true);
     setRunningKey(key);
@@ -1758,7 +1769,10 @@ export default function App() {
       const result = await window.clara.runNewman(serializeCollection(runCollection), {
         ...(environmentJson ? { environmentJson } : {})
       });
-      setRequestRuns((runs) => ({ ...runs, [requestRunKey(collectionPath, path)]: result }));
+      setRequestRuns((runs) => ({
+        ...runs,
+        [requestRunKey(collectionPath, path, tab.draftId)]: result
+      }));
       const label =
         result.execution?.name ??
         pin?.item.name ??
@@ -1794,7 +1808,7 @@ export default function App() {
     if (!tab || tab.kind !== 'request') {
       return;
     }
-    await runSingleRequest(tab.collectionPath, tab.path);
+    await runSingleRequest(tab);
   }, [runSingleRequest]);
 
   const runScope = useCallback(async (tab: WorkspaceTab) => {
@@ -2377,8 +2391,9 @@ export default function App() {
             collectionExpanded: ui.collectionExpanded
           };
         }),
-        openTabs: openTabs.map(toSessionTab),
-        activeTabKey: activeTab ? tabKey(activeTab) : null,
+        // Drafts only exist in memory, so they never make it into the session.
+        openTabs: openTabs.filter((tab) => !isDraftTab(tab)).map(toSessionTab),
+        activeTabKey: activeTab && !isDraftTab(activeTab) ? tabKey(activeTab) : null,
         openedEnvironments: environmentsRef.current.map((entry) => entry.filePath),
         activeEnvironmentPath: activeEnvironmentPathRef.current,
         sidebar: sidebarRef.current,
@@ -2612,8 +2627,9 @@ export default function App() {
         parentPathOf(pin?.linkedPath ?? tab.path) ??
         (tab.path.includes('.') ? parentPathOf(tab.path) : null);
 
+      const draft = isDraftTab(tab);
       const result = await askSaveAs({
-        title: detached ? 'Save pinned request' : 'Save As',
+        title: draft ? 'Save copy' : detached ? 'Save pinned request' : 'Save As',
         defaultName: source.name?.trim() || 'Untitled request',
         locations,
         defaultParentPath: defaultParent,
@@ -2662,7 +2678,9 @@ export default function App() {
           setActiveTab(nextTab);
           setStatus({
             kind: 'ok',
-            message: `Saved “${result.name}” into the collection`
+            message: draft
+              ? `Saved the copy as “${result.name}”`
+              : `Saved “${result.name}” into the collection`
           });
         } else {
           openTab(nextTab, { forceNew: true });
@@ -2686,9 +2704,11 @@ export default function App() {
       }
       const nextPath = remapPathAfterDelete(tab.path, deleted);
       if (nextPath == null) {
-        // Deleting is explicit, so a pinned tab closes too: keeping it would
-        // leave the pin on a path a shifted sibling now owns.
-        return null;
+        // A draft has its own identity and no item in the tree, so it outlives
+        // the request it was copied from. Deleting is explicit, so any other
+        // tab closes: keeping it would leave the pin on a path a shifted
+        // sibling now owns.
+        return isDraftTab(tab) ? tab : null;
       }
       return { ...tab, path: nextPath };
     };
@@ -2840,6 +2860,59 @@ export default function App() {
         message: `Deleted “${label}”, but the file was not written: ${errorMessage(error)}`
       });
     }
+  };
+
+  /**
+   * Duplicate Tab opens an unsaved working copy beside the tab it came from.
+   * It lives as a detached pin, so Save As is what puts it in the collection.
+   */
+  const duplicateTabAsDraft = (tab: WorkspaceTab) => {
+    if (tab.kind !== 'request') {
+      return;
+    }
+    const entry = collectionsRef.current.find(
+      (candidate) => candidate.filePath === tab.collectionPath
+    );
+    if (!entry) {
+      return;
+    }
+    const source =
+      pinnedByKeyRef.current[tabKey(tab)]?.item ??
+      getItemByPath(entry.collection.item, tab.path) ??
+      null;
+    if (!source || !isRequest(source)) {
+      return;
+    }
+
+    const copy: PostmanItem = JSON.parse(JSON.stringify(source)) as PostmanItem;
+    delete copy.item;
+    copy.name = `${source.name?.trim() || 'Untitled request'} Copy`;
+
+    const draftTab: WorkspaceTab = {
+      kind: 'request',
+      collectionPath: tab.collectionPath,
+      path: tab.path,
+      draftId: crypto.randomUUID()
+    };
+
+    setPinnedByKey((current) => ({
+      ...current,
+      [tabKey(draftTab)]: {
+        ...createPinnedRequest(tab.collectionPath, tab.path, copy),
+        draft: true
+      }
+    }));
+    setOpenTabs((current) => {
+      const index = current.findIndex((candidate) => sameTab(candidate, tab));
+      const next = current.slice();
+      next.splice(index === -1 ? current.length : index + 1, 0, draftTab);
+      return next;
+    });
+    setActiveTab(draftTab);
+    setStatus({
+      kind: 'ok',
+      message: `Copy of “${source.name?.trim() || 'Untitled request'}” · use Save As to add it to the collection`
+    });
   };
 
   const duplicateTarget = (target: TreeTarget) => {
@@ -3008,8 +3081,9 @@ export default function App() {
       void runScope(tab);
       return;
     }
-    openTab({ kind: 'request', collectionPath, path: target.path });
-    void runSingleRequest(collectionPath, target.path);
+    const requestTab: WorkspaceTab = { kind: 'request', collectionPath, path: target.path };
+    openTab(requestTab);
+    void runSingleRequest(requestTab);
   };
 
   const openContextMenu = (
@@ -3038,12 +3112,17 @@ export default function App() {
         },
         ...(target.tab.kind === 'request'
           ? [
-              {
-                id: pinnedByKey[tabKey(target.tab)] ? 'unpin-request' : 'pin-request',
-                label: pinnedByKey[tabKey(target.tab)] ? 'Unpin' : 'Pin',
-                separatorBefore: true
-              },
-              { id: 'save-as', label: 'Save As…' }
+              // A draft is not a pin the user chose, so it only offers Save As.
+              ...(isDraftTab(target.tab)
+                ? []
+                : [
+                    {
+                      id: pinnedByKey[tabKey(target.tab)] ? 'unpin-request' : 'pin-request',
+                      label: pinnedByKey[tabKey(target.tab)] ? 'Unpin' : 'Pin',
+                      separatorBefore: true
+                    }
+                  ]),
+              { id: 'save-as', label: 'Save As…', separatorBefore: isDraftTab(target.tab) }
             ]
           : []),
         {
@@ -3631,11 +3710,9 @@ export default function App() {
     if (target.kind === 'tab') {
       if (id === 'new-request') {
         createNewRequestNear(target.tab);
-      } else if (
-        id === 'duplicate-tab' &&
-        target.tab.kind !== 'collection' &&
-        target.tab.kind !== 'environment'
-      ) {
+      } else if (id === 'duplicate-tab' && target.tab.kind === 'request') {
+        duplicateTabAsDraft(target.tab);
+      } else if (id === 'duplicate-tab' && target.tab.kind === 'folder') {
         duplicateTarget(target.tab);
       } else if (id === 'close-tab') {
         closeTab(target.tab);
@@ -5304,6 +5381,7 @@ export default function App() {
                         urlPreviewVariables={urlPreviewVariables}
                         pinned={Boolean(activePin)}
                         pinnedDetached={activePinDetached}
+                        draft={isDraftTab(activeTab)}
                         onPin={activePin ? null : () => pinActiveRequest()}
                         onUnpin={
                           activePin
@@ -5440,14 +5518,19 @@ export default function App() {
                       <ResponsePane
                         result={
                           requestRuns[
-                            requestRunKey(activeTab.collectionPath, activeRequestPath)
+                            requestRunKey(
+                              activeTab.collectionPath,
+                              activeRequestPath,
+                              activeTab.draftId
+                            )
                           ] ?? null
                         }
                         running={sending && runningKey === tabKey(activeTab)}
                         onNewmanReady={(version) => {
                           const key = requestRunKey(
                             activeTab.collectionPath,
-                            activeRequestPath
+                            activeRequestPath,
+                            activeTab.draftId
                           );
                           setRequestRuns((runs) => {
                             const next = { ...runs };

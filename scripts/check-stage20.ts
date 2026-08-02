@@ -98,6 +98,27 @@ assert.equal(markDetachedPins(afterReplace, '/repo/col.json', items)[linkedKey]?
 // Pins of other collections are left alone.
 assert.equal(markDetachedPins(linkedPins, '/repo/other.json', []), linkedPins);
 
+// A draft (Duplicate Tab) is always detached and never links to a tree item,
+// even when it ends up with the same name as the request under its path.
+const draftTab: WorkspaceTab = {
+  kind: 'request',
+  collectionPath: '/repo/col.json',
+  path: '0.0',
+  draftId: 'd1'
+};
+const draftPin = {
+  ...createPinnedRequest('/repo/col.json', '0.0', request),
+  draft: true
+};
+const draftPins = { [tabKey(draftTab)]: draftPin };
+assert.equal(isPinnedDetached(draftPin, items), true);
+assert.equal(markDetachedPins(draftPins, '/repo/col.json', items), draftPins);
+assert.equal(
+  shouldKeepTabAfterReload(draftTab, '/repo/col.json', new Set(), draftPins),
+  true,
+  'a draft survives a reload that has no item at its path'
+);
+
 const updated = updatePinnedItem(pins, key, (item) => ({ ...item, name: 'Pong' }));
 assert.equal(updated[key]?.item.name, 'Pong');
 assert.equal(pins[key]?.item.name, 'Ping');

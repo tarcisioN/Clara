@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
   fromSessionTab,
+  isDraftTab,
   nextOpenTabs,
   parseTabKey,
   requestRunKey,
@@ -52,6 +53,20 @@ assert.equal(
 );
 assert.notEqual(requestRunKey(a, '0'), requestRunKey(b, '0'));
 assert.ok(requestRunKey(a, '0.1').startsWith(requestRunKey(a, '')));
+
+// A draft is a tab of its own, so it never shares identity — or a response —
+// with the request it was copied from.
+{
+  const source: WorkspaceTab = { kind: 'request', collectionPath: a, path: '0.1' };
+  const draft: WorkspaceTab = { ...source, draftId: 'd1' };
+  assert.notEqual(tabKey(draft), tabKey(source));
+  assert.equal(sameTab(draft, source), false);
+  assert.equal(isDraftTab(draft), true);
+  assert.equal(isDraftTab(source), false);
+  assert.deepEqual(parseTabKey(tabKey(draft)), draft);
+  assert.notEqual(requestRunKey(a, '0.1', 'd1'), requestRunKey(a, '0.1'));
+  assert.notEqual(requestRunKey(a, '0.1', 'd1'), requestRunKey(a, '0.1', 'd2'));
+}
 
 assert.equal(parseTabKey('nonsense'), null);
 assert.equal(parseTabKey('request:'), null);

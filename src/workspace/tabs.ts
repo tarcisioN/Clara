@@ -3,7 +3,17 @@ import type { ItemPath } from '../postman/tree.ts';
 export type WorkspaceTab =
   | { kind: 'collection'; collectionPath: string }
   | { kind: 'folder'; collectionPath: string; path: ItemPath }
-  | { kind: 'request'; collectionPath: string; path: ItemPath }
+  | {
+      kind: 'request';
+      collectionPath: string;
+      path: ItemPath;
+      /**
+       * Set on an unsaved working copy (Duplicate Tab). It only has to make the
+       * tab identity unique — the request itself lives in the pinned snapshot
+       * until Save As writes it into the collection.
+       */
+      draftId?: string;
+    }
   | { kind: 'environment'; environmentPath: string };
 
 export type SessionTab =
@@ -29,7 +39,15 @@ export function tabKey(tab: WorkspaceTab): string {
   if (tab.kind === 'collection') {
     return `collection:${collection}`;
   }
+  if (tab.kind === 'request' && tab.draftId) {
+    return `request:${collection}:${tab.path}#${tab.draftId}`;
+  }
   return `${tab.kind}:${collection}:${tab.path}`;
+}
+
+/** An unsaved working copy: it has no item of its own in the collection yet. */
+export function isDraftTab(tab: WorkspaceTab): boolean {
+  return tab.kind === 'request' && Boolean(tab.draftId);
 }
 
 export function sameTab(a: WorkspaceTab, b: WorkspaceTab): boolean {
@@ -98,11 +116,20 @@ export function parseTabKey(key: string): WorkspaceTab | null {
       return null;
     }
     try {
-      return {
-        kind,
-        collectionPath: dec(rest.slice(0, split)),
-        path: rest.slice(split + 1)
-      };
+      const collectionPath = dec(rest.slice(0, split));
+      const rawPath = rest.slice(split + 1);
+      if (kind === 'request') {
+        const draftAt = rawPath.indexOf('#');
+        if (draftAt >= 0) {
+          return {
+            kind,
+            collectionPath,
+            path: rawPath.slice(0, draftAt),
+            draftId: rawPath.slice(draftAt + 1)
+          };
+        }
+      }
+      return { kind, collectionPath, path: rawPath };
     } catch {
       return null;
     }
@@ -138,6 +165,11 @@ export function fromSessionTab(tab: SessionTab): WorkspaceTab {
   };
 }
 
-export function requestRunKey(collectionPath: string, path: ItemPath): string {
-  return `${enc(collectionPath)}::${path}`;
+export function requestRunKey(
+  collectionPath: string,
+  path: ItemPath,
+  draftId?: string
+): string {
+  const base = `${enc(collectionPath)}::${path}`;
+  return draftId ? `${base}#${draftId}` : base;
 }

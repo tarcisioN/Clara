@@ -65,6 +65,8 @@ type RequestPaneProps = {
   urlPreviewVariables?: Map<string, string>;
   pinned?: boolean;
   pinnedDetached?: boolean;
+  /** Unsaved working copy from Duplicate Tab; Save As puts it in the collection. */
+  draft?: boolean;
   onPin?: (() => void) | null;
   onUnpin?: (() => void) | null;
   onSaveAs?: (() => void) | null;
@@ -108,6 +110,7 @@ export default function RequestPane({
   urlPreviewVariables,
   pinned = false,
   pinnedDetached = false,
+  draft = false,
   onPin = null,
   onUnpin = null,
   onSaveAs = null
@@ -282,7 +285,7 @@ export default function RequestPane({
               Save As
             </button>
           ) : null}
-          {pinned && onUnpin ? (
+          {pinned && !draft && onUnpin ? (
             <button
               type="button"
               className="request-action-button is-pinned"
@@ -292,7 +295,7 @@ export default function RequestPane({
               Unpin
             </button>
           ) : null}
-          {!pinned && onPin ? (
+          {!pinned && !draft && onPin ? (
             <button
               type="button"
               className="request-action-button"
@@ -305,7 +308,16 @@ export default function RequestPane({
         </div>
       </div>
 
-      {pinnedDetached ? (
+      {draft ? (
+        <div className="compare-banner compare-banner-pinned" role="status">
+          <span>Unsaved copy — not in the collection yet</span>
+          {onSaveAs ? (
+            <button type="button" onClick={onSaveAs}>
+              Save As…
+            </button>
+          ) : null}
+        </div>
+      ) : pinnedDetached ? (
         <div className="compare-banner compare-banner-pinned" role="status">
           <span>Pinned — not in the current collection file</span>
           {onSaveAs ? (
