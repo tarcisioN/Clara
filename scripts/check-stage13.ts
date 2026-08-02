@@ -3,7 +3,8 @@ import {
   collectChangedFolderPaths,
   computeStructuralDiff,
   pathVisibleWhenChangedOnly,
-  removedUnderParent
+  removedUnderParent,
+  reorderedPositions
 } from '../src/git/structuralDiff.ts';
 import type { PostmanCollection } from '../src/postman/types.ts';
 
@@ -165,5 +166,58 @@ assert.equal(orderDiff.movedFromIndex.get('2'), 1);
 assert.equal(orderDiff.moved, 3);
 assert.equal(orderDiff.modified, 0);
 assert.equal(orderDiff.changedCount, 3);
+
+// Order is ranked among paired siblings only.
+assert.deepEqual([...reorderedPositions([0, 1, 2])], []);
+assert.deepEqual([...reorderedPositions([2, 0, 1])], [0, 1, 2]);
+assert.deepEqual(
+  [...reorderedPositions([0, 2])],
+  [],
+  'a gap left by a removed sibling is not a move'
+);
+
+// Inserting a sibling shifts indexes but moves nobody.
+const currentInserted: PostmanCollection = {
+  info: base.info,
+  item: [
+    { name: 'New', request: { method: 'GET', url: 'https://example.com/new' } },
+    ...baseOrder.item!
+  ]
+};
+const insertedDiff = computeStructuralDiff(currentInserted, baseOrder);
+assert.equal(insertedDiff.statusByPath.get('0'), 'added');
+assert.equal(insertedDiff.statusByPath.get('1'), 'unchanged');
+assert.equal(insertedDiff.statusByPath.get('2'), 'unchanged');
+assert.equal(insertedDiff.statusByPath.get('3'), 'unchanged');
+assert.equal(insertedDiff.moved, 0);
+assert.equal(insertedDiff.added, 1);
+assert.equal(insertedDiff.changedCount, 1);
+
+// Removing a sibling likewise leaves the survivors unchanged.
+const currentRemoved: PostmanCollection = {
+  info: base.info,
+  item: [baseOrder.item![0]!, baseOrder.item![2]!]
+};
+const removedOrderDiff = computeStructuralDiff(currentRemoved, baseOrder);
+assert.equal(removedOrderDiff.statusByPath.get('0'), 'unchanged');
+assert.equal(removedOrderDiff.statusByPath.get('1'), 'unchanged');
+assert.equal(removedOrderDiff.moved, 0);
+assert.equal(removedOrderDiff.removedCount, 1);
+assert.equal(removedOrderDiff.changedCount, 1);
+
+// A real move is still reported when a sibling was added in the same parent.
+const currentMovedWithInsert: PostmanCollection = {
+  info: base.info,
+  item: [
+    baseOrder.item![2]!,
+    { name: 'New', request: { method: 'GET', url: 'https://example.com/new' } },
+    baseOrder.item![0]!,
+    baseOrder.item![1]!
+  ]
+};
+const movedWithInsertDiff = computeStructuralDiff(currentMovedWithInsert, baseOrder);
+assert.equal(movedWithInsertDiff.statusByPath.get('0'), 'moved');
+assert.equal(movedWithInsertDiff.statusByPath.get('1'), 'added');
+assert.equal(movedWithInsertDiff.moved, 3);
 
 console.log('stage13 checks passed');

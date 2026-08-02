@@ -4,6 +4,7 @@ import {
   isPinnedDetached,
   isRequestTabPinned,
   listSaveAsLocations,
+  markDetachedPins,
   remapPinnedTabKey,
   shouldKeepTabAfterReload,
   updatePinnedItem
@@ -68,6 +69,34 @@ assert.deepEqual(
   [other],
   'unpinned clean active is still replaced'
 );
+
+// A reload that leaves another request at the pinned path must detach the pin,
+// so edits never write over the request that took its place.
+const linkedPin = createPinnedRequest('/repo/col.json', '0.0', request);
+const linkedPins = { [tabKey({ ...tab, path: '0.0' })]: linkedPin };
+const linkedKey = tabKey({ ...tab, path: '0.0' });
+
+assert.equal(
+  markDetachedPins(linkedPins, '/repo/col.json', items),
+  linkedPins,
+  'a pin whose request is still there stays linked'
+);
+
+const replaced: PostmanItem[] = [
+  { name: 'Folder', item: [{ name: 'Other', request: { method: 'GET', url: 'x' } }] }
+];
+const afterReplace = markDetachedPins(linkedPins, '/repo/col.json', replaced);
+assert.equal(afterReplace[linkedKey]?.detached, true);
+assert.equal(isPinnedDetached(afterReplace[linkedKey]!, replaced), true);
+
+const afterRemoval = markDetachedPins(linkedPins, '/repo/col.json', []);
+assert.equal(afterRemoval[linkedKey]?.detached, true);
+
+// Coming back to a branch that still has the request links the pin again.
+assert.equal(markDetachedPins(afterReplace, '/repo/col.json', items)[linkedKey]?.detached, false);
+
+// Pins of other collections are left alone.
+assert.equal(markDetachedPins(linkedPins, '/repo/other.json', []), linkedPins);
 
 const updated = updatePinnedItem(pins, key, (item) => ({ ...item, name: 'Pong' }));
 assert.equal(updated[key]?.item.name, 'Pong');

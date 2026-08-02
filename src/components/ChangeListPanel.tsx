@@ -27,6 +27,9 @@ type ChangeListPanelProps = {
   currentBranch: string | null;
   compareSource: 'working' | 'saved';
   collection: PostmanCollection;
+  /** Which collection these changes belong to (the active tab's). */
+  collectionName: string;
+  collectionPath: string;
   entries: ChangeListEntry[];
   activeKey: string | null;
   expanded: boolean;
@@ -211,6 +214,8 @@ export default function ChangeListPanel({
   currentBranch,
   compareSource,
   collection,
+  collectionName,
+  collectionPath,
   entries,
   activeKey,
   expanded,
@@ -357,9 +362,9 @@ export default function ChangeListPanel({
             {expanded ? '▾' : '▸'}
           </span>
           <strong>Changes</strong>
-          {currentBranch ? (
-            <span className="sidebar-count" title="Current branch">
-              {currentBranch}
+          {!expanded ? (
+            <span className="sidebar-count" title={`Collection: ${collectionPath}`}>
+              {collectionName}
             </span>
           ) : null}
           <span className="sidebar-count" title="Change counts">
@@ -401,6 +406,18 @@ export default function ChangeListPanel({
 
       {expanded ? (
         <>
+          <div className="change-list-scope">
+            <span className="change-list-scope-collection" title={collectionPath}>
+              {collectionName}
+            </span>
+            <span className="change-list-scope-branch">
+              on{' '}
+              <strong title={currentBranch ? 'Current branch' : 'No branch checked out'}>
+                {currentBranch ?? 'detached HEAD'}
+              </strong>
+            </span>
+          </div>
+
           <div className="change-list-controls">
             <BranchSuggestionBox
               value={branchValue}

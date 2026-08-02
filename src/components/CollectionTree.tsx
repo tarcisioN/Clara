@@ -83,10 +83,15 @@ function hasItemDrag(event: DragEvent): boolean {
   return Array.from(event.dataTransfer.types).includes(ITEM_PATH_MIME);
 }
 
-/** Vertical place for a row: folders expose a middle "into" band. */
+/**
+ * Vertical place for a row: folders expose a middle "into" band. An expanded
+ * folder has no "after" band — its children sit right below, so dropping there
+ * means the folder, not the gap after its whole subtree.
+ */
 function rowDropRelation(
   event: DragEvent<HTMLElement>,
-  folder: boolean
+  folder: boolean,
+  expandedFolder = false
 ): MoveTarget['relation'] {
   const rect = event.currentTarget.getBoundingClientRect();
   const y = event.clientY - rect.top;
@@ -95,7 +100,7 @@ function rowDropRelation(
     if (ratio < 0.25) {
       return 'before';
     }
-    if (ratio > 0.75) {
+    if (!expandedFolder && ratio > 0.75) {
       return 'after';
     }
     return 'into';
@@ -294,7 +299,7 @@ function TreeNode({
     event.preventDefault();
     event.stopPropagation();
     event.dataTransfer.dropEffect = 'move';
-    const relation = rowDropRelation(event, folder);
+    const relation = rowDropRelation(event, folder, isExpanded);
     const target: MoveTarget =
       relation === 'into' ? { relation: 'into', path } : { relation, path };
     onDropIndicator({ collectionPath, target });
@@ -312,10 +317,39 @@ function TreeNode({
     if (!payload) {
       return;
     }
-    const relation = rowDropRelation(event, folder);
+    const relation = rowDropRelation(event, folder, isExpanded);
     const target: MoveTarget =
       relation === 'into' ? { relation: 'into', path } : { relation, path };
     onMoveItem(payload.collectionPath, payload.path, collectionPath, target);
+  };
+
+  /** Strip below the last child: the drop target for "last position in here". */
+  const onTailDragOver = (event: DragEvent<HTMLElement>) => {
+    if (!acceptDrop(event)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'move';
+    onDropIndicator({ collectionPath, target: { relation: 'into', path } });
+  };
+
+  const onTailDrop = (event: DragEvent<HTMLElement>) => {
+    if (!onMoveItem || !hasItemDrag(event)) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const payload = decodeItemDrag(event.dataTransfer.getData(ITEM_PATH_MIME));
+    onDropIndicator(null);
+    onDragPath(null);
+    if (!payload) {
+      return;
+    }
+    onMoveItem(payload.collectionPath, payload.path, collectionPath, {
+      relation: 'into',
+      path
+    });
   };
 
   const sharedNodeProps = {
@@ -421,6 +455,28 @@ function TreeNode({
                 onSelect={onSelectRemoved}
               />
             ))}
+            {onMoveItem ? (
+              <li className="tree-node">
+                <div
+                  className={`tree-drop-tail ${
+                    dropIndicator?.collectionPath === collectionPath &&
+                    dropIndicator.target.relation === 'into' &&
+                    dropIndicator.target.path === path
+                      ? 'active'
+                      : ''
+                  }`.trim()}
+                  style={{ marginLeft: 8 + (depth + 1) * 10 }}
+                  onDragOver={onTailDragOver}
+                  onDragLeave={(event) => {
+                    if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                      return;
+                    }
+                    onDropIndicator(null);
+                  }}
+                  onDrop={onTailDrop}
+                />
+              </li>
+            ) : null}
           </ul>
         )}
       </li>

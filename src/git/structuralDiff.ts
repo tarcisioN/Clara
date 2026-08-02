@@ -120,6 +120,26 @@ export function pairChildren(
   return pairs;
 }
 
+/**
+ * Positions whose order changed, given the base positions of paired siblings
+ * listed in current order. Ranking happens among paired items only, so a
+ * sibling that was added or removed never makes the others look moved.
+ */
+export function reorderedPositions(basePositions: number[]): Set<number> {
+  const rankOf = new Map(
+    [...basePositions]
+      .sort((a, b) => a - b)
+      .map((basePosition, rank) => [basePosition, rank] as const)
+  );
+  const moved = new Set<number>();
+  basePositions.forEach((basePosition, position) => {
+    if (rankOf.get(basePosition) !== position) {
+      moved.add(position);
+    }
+  });
+  return moved;
+}
+
 function removedGhost(
   parentPath: ItemPath | null,
   item: PostmanItem,
@@ -226,6 +246,22 @@ export function computeStructuralDiff(
   ) => {
     const pairs = pairChildren(currentItems ?? [], baseItems ?? []);
 
+    // `pairs` lists matched siblings in current order, so their base positions
+    // describe the reorder on their own — added/removed siblings are excluded.
+    const matched = pairs.filter(
+      (pair) =>
+        pair.current !== undefined &&
+        pair.currentIndex !== undefined &&
+        pair.base !== undefined &&
+        pair.baseIndex !== undefined
+    );
+    const reordered = reorderedPositions(matched.map((pair) => pair.baseIndex!));
+    const movedCurrentIndexes = new Set(
+      matched
+        .filter((_pair, position) => reordered.has(position))
+        .map((pair) => pair.currentIndex!)
+    );
+
     for (const pair of pairs) {
       if (pair.current && pair.currentIndex !== undefined && !pair.base) {
         markNewSubtree(pair.current, childPath(parentPath, pair.currentIndex));
@@ -248,8 +284,7 @@ export function computeStructuralDiff(
       if (isFolder(node) && isFolder(original)) {
         const metaChanged = stable(folderMeta(node)) !== stable(folderMeta(original));
         walk(node.item, original.item, path);
-        const reordered =
-          pair.baseIndex !== undefined && pair.currentIndex !== pair.baseIndex;
+        const reordered = movedCurrentIndexes.has(pair.currentIndex);
         if (metaChanged) {
           statusByPath.set(path, 'modified');
           modified += 1;
@@ -269,8 +304,7 @@ export function computeStructuralDiff(
       }
 
       if (isRequest(node) && isRequest(original)) {
-        const reordered =
-          pair.baseIndex !== undefined && pair.currentIndex !== pair.baseIndex;
+        const reordered = movedCurrentIndexes.has(pair.currentIndex);
         if (requestEqual(node, original)) {
           if (reordered) {
             statusByPath.set(path, 'moved');

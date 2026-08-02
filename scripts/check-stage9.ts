@@ -131,10 +131,19 @@ assert.equal(getItemByPath(movedUp.collection.item, '0')?.name, 'Form login');
 assert.equal(movedUp.newPath, '0');
 assert.equal(getItemByPath(movedUp.collection.item, '1')?.name, 'Health');
 
+// Dropping "into" a folder lands in its last position (the tree's tail target).
 const nestedMove = moveItem(collection, '1', { relation: 'into', path: '0' });
 assert.equal(nestedMove.newPath, '0.1');
 assert.equal(getItemByPath(nestedMove.collection.item, '0.1')?.name, 'Root echo');
 assert.equal((getItemByPath(nestedMove.collection.item, '0')?.item ?? []).length, 2);
+
+// Dropping the last child back onto its own folder changes nothing.
+const alreadyLast = moveItem(nestedMove.collection, '0.1', {
+  relation: 'into',
+  path: '0'
+});
+assert.equal(alreadyLast.newPath, '0.1');
+assert.equal(alreadyLast.collection, nestedMove.collection);
 
 const noop = moveItem(collection, '1', { relation: 'before', path: '1' });
 assert.equal(noop.newPath, '1');

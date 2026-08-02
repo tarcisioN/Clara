@@ -1,5 +1,6 @@
 import type { PostmanItem } from '../postman/types.ts';
 import { getItemByPath, isFolder, type ItemPath } from '../postman/tree.ts';
+import { matchKey } from '../git/structuralDiff.ts';
 import { tabKey, type WorkspaceTab } from './tabs.ts';
 
 export type PinnedRequest = {
@@ -10,6 +11,11 @@ export type PinnedRequest = {
   linkedPath: ItemPath;
   /** Live editable snapshot. */
   item: PostmanItem;
+  /**
+   * Set when a reload left `linkedPath` pointing at something else, so the
+   * snapshot is not written back over an unrelated request.
+   */
+  detached?: boolean;
 };
 
 export type SaveAsLocation = {
@@ -46,7 +52,38 @@ export function isPinnedDetached(
   pin: PinnedRequest,
   items: PostmanItem[] | undefined
 ): boolean {
-  return getItemByPath(items, pin.linkedPath) == null;
+  return pin.detached === true || getItemByPath(items, pin.linkedPath) == null;
+}
+
+/**
+ * Re-check pins of `collectionPath` after the file changed underneath us: a
+ * linked pin whose path is gone — or now holds a different request — detaches,
+ * and one whose request came back links again.
+ */
+export function markDetachedPins(
+  pins: Record<string, PinnedRequest>,
+  collectionPath: string,
+  items: PostmanItem[] | undefined
+): Record<string, PinnedRequest> {
+  let changed = false;
+  const next: Record<string, PinnedRequest> = {};
+
+  for (const [key, pin] of Object.entries(pins)) {
+    if (pin.collectionPath !== collectionPath) {
+      next[key] = pin;
+      continue;
+    }
+    const linked = getItemByPath(items, pin.linkedPath);
+    const detached = !linked || matchKey(linked) !== matchKey(pin.item);
+    if (detached === (pin.detached === true)) {
+      next[key] = pin;
+      continue;
+    }
+    next[key] = { ...pin, detached };
+    changed = true;
+  }
+
+  return changed ? next : pins;
 }
 
 /** Keep pinned request tabs even when their path vanished from the tree. */

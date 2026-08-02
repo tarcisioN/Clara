@@ -130,11 +130,13 @@ import {
 } from './workspace/collectionUi.ts';
 import { computeDirtyState } from './workspace/dirty.ts';
 import { decideExternalChange } from './workspace/externalChanges.ts';
+import { deleteFromSavedCollection } from './workspace/savedTree.ts';
 import {
   createPinnedRequest,
   isPinnedDetached,
   isRequestTabPinned,
   listSaveAsLocations,
+  markDetachedPins,
   remapPinnedTabKey,
   shouldKeepTabAfterReload,
   updatePinnedItem,
@@ -934,6 +936,9 @@ export default function App() {
         filterValidTabs(collectionPath, collection.item, openTabsRef.current).map(tabKey)
       );
       const pins = pinnedByKeyRef.current;
+      setPinnedByKey((current) =>
+        markDetachedPins(current, collectionPath, collection.item)
+      );
       const survivingTabs = openTabsRef.current.filter((tab) =>
         shouldKeepTabAfterReload(tab, collectionPath, validKeys, pins)
       );
@@ -2681,9 +2686,8 @@ export default function App() {
       }
       const nextPath = remapPathAfterDelete(tab.path, deleted);
       if (nextPath == null) {
-        if (tab.kind === 'request' && pinnedByKeyRef.current[tabKey(tab)]) {
-          return tab;
-        }
+        // Deleting is explicit, so a pinned tab closes too: keeping it would
+        // leave the pin on a path a shifted sibling now owns.
         return null;
       }
       return { ...tab, path: nextPath };
@@ -2771,7 +2775,11 @@ export default function App() {
     );
   };
 
-  const deleteTarget = (target: TreeTarget | CollectionTarget) => {
+  /**
+   * Deleting writes the removal straight to the file, rebuilt from the last
+   * saved tree so unrelated pending edits stay unsaved.
+   */
+  const deleteTarget = async (target: TreeTarget | CollectionTarget) => {
     if (target.kind === 'collection') {
       closeCollection(target.collectionPath);
       return;
@@ -2784,11 +2792,54 @@ export default function App() {
     }
     const item = getItemByPath(entry.collection.item, target.path);
     const label = item?.name?.trim() || target.kind;
-    if (!window.confirm(`Delete "${label}"?`)) {
+    if (!window.confirm(`Delete "${label}"? This removes it from the file.`)) {
       return;
     }
-    applyCollectionUpdate(entry.filePath, deleteItem(entry.collection, target.path));
+
+    const nextCollection = deleteItem(entry.collection, target.path);
+    let savedAfterDelete: PostmanCollection | null = null;
+    try {
+      savedAfterDelete = deleteFromSavedCollection(
+        entry.collection,
+        assertPostmanCollection(JSON.parse(entry.originalRaw)),
+        target.path
+      );
+    } catch {
+      savedAfterDelete = null;
+    }
+
+    applyCollectionUpdate(entry.filePath, nextCollection);
     remapTabsAfterDelete(entry.filePath, target.path);
+
+    if (!savedAfterDelete) {
+      setStatus({ kind: 'ok', message: `Deleted “${label}” · unsaved` });
+      return;
+    }
+
+    try {
+      const contents = serializeCollection(savedAfterDelete, {
+        trailingNewline: trailingNewlineFromRaw(entry.originalRaw)
+      });
+      await window.clara.saveCollection(entry.filePath, contents);
+      setCollections((list) =>
+        list.map((candidate) =>
+          candidate.filePath === entry.filePath
+            ? { ...candidate, originalRaw: contents }
+            : candidate
+        )
+      );
+      syncDirty(entry.filePath, nextCollection, contents);
+      void refreshCompare(entry.filePath, nextCollection);
+      setStatus({
+        kind: 'ok',
+        message: `Deleted “${label}” from ${fileName(entry.filePath)}`
+      });
+    } catch (error) {
+      setStatus({
+        kind: 'error',
+        message: `Deleted “${label}”, but the file was not written: ${errorMessage(error)}`
+      });
+    }
   };
 
   const duplicateTarget = (target: TreeTarget) => {
@@ -3726,7 +3777,7 @@ export default function App() {
     } else if (id === 'rename') {
       void renameTarget(target);
     } else if (id === 'delete') {
-      deleteTarget(target);
+      void deleteTarget(target);
     } else if (id === 'duplicate' && target.kind !== 'collection') {
       duplicateTarget(target);
     } else if (
@@ -4450,6 +4501,11 @@ export default function App() {
                 currentBranch={activeCompare.currentBranch}
                 compareSource={activeCompare.compareSource}
                 collection={activeCollection.collection}
+                collectionName={
+                  activeCollection.collection.info?.name?.trim() ||
+                  fileName(activeCollection.filePath)
+                }
+                collectionPath={activeCollection.filePath}
                 entries={changeList}
                 activeKey={focusedChangeKey}
                 expanded={sidebar.changesExpanded}
