@@ -753,7 +753,10 @@ export default function App() {
           return;
         }
 
-        const git = existing?.git ?? (await discoverForCollection(collectionPath));
+        const git =
+          existing?.git && !options?.forceReloadBase
+            ? existing.git
+            : await discoverForCollection(collectionPath);
         if (!git) {
           setCompareByPath((current) => ({ ...current, [collectionPath]: null }));
           return;
@@ -4058,7 +4061,9 @@ export default function App() {
             {activeCompare && activeCollection ? (
               <ChangeListPanel
                 baseRef={activeCompare.baseRef}
+                defaultBase={activeCompare.git.defaultBase}
                 branches={activeCompare.git.branches}
+                recentRevisions={activeCompare.git.recentRevisions}
                 currentBranch={activeCompare.currentBranch}
                 compareSource={activeCompare.compareSource}
                 collection={activeCollection.collection}

@@ -11,6 +11,7 @@ import {
 import type { ChangeListEntry } from '../git/changeList.ts';
 import { folderLabelForEntry } from '../git/changeList.ts';
 import type { PostmanCollection } from '../postman/types.ts';
+import type { GitRevision } from '../../electron/git.ts';
 import {
   CHANGES_COLLAPSE_HEIGHT,
   CHANGES_DEFAULT_HEIGHT,
@@ -20,7 +21,9 @@ import './ChangeListPanel.css';
 
 type ChangeListPanelProps = {
   baseRef: string;
+  defaultBase: string;
   branches: string[];
+  recentRevisions: GitRevision[];
   currentBranch: string | null;
   compareSource: 'working' | 'saved';
   collection: PostmanCollection;
@@ -37,6 +40,24 @@ type ChangeListPanelProps = {
   onRefresh: () => void;
 };
 
+function matchRecentRevision(
+  baseRef: string,
+  revisions: GitRevision[]
+): GitRevision | null {
+  const trimmed = baseRef.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return (
+    revisions.find(
+      (revision) =>
+        revision.sha === trimmed ||
+        revision.shortSha === trimmed ||
+        revision.sha.startsWith(trimmed)
+    ) ?? null
+  );
+}
+
 function ChangeBadge({ kind }: { kind: ChangeListEntry['changeKind'] }) {
   const label =
     kind === 'added' ? '+' : kind === 'removed' ? '−' : kind === 'moved' ? '↕' : '~';
@@ -48,27 +69,30 @@ function ChangeBadge({ kind }: { kind: ChangeListEntry['changeKind'] }) {
 }
 
 function BranchSuggestionBox({
-  baseRef,
+  value,
   branches,
+  disabled,
   onChangeBase
 }: {
-  baseRef: string;
+  /** Branch/ref shown in the input. Empty when comparing against a revision SHA. */
+  value: string;
   branches: string[];
+  disabled?: boolean;
   onChangeBase: (baseRef: string) => void;
 }) {
   const listboxId = useId();
-  const [query, setQuery] = useState(baseRef);
+  const [query, setQuery] = useState(value);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
 
   useEffect(() => {
-    setQuery(baseRef);
-  }, [baseRef]);
+    setQuery(value);
+  }, [value]);
 
   const suggestions = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return [...new Set(branches)]
-      .filter((branch) => branch !== baseRef || normalized !== baseRef.toLowerCase())
+      .filter((branch) => branch !== value || normalized !== value.toLowerCase())
       .filter((branch) => !normalized || branch.toLowerCase().includes(normalized))
       .sort((left, right) => {
         const leftStarts = left.toLowerCase().startsWith(normalized);
@@ -79,7 +103,7 @@ function BranchSuggestionBox({
         return left.localeCompare(right);
       })
       .slice(0, 3);
-  }, [baseRef, branches, query]);
+  }, [branches, query, value]);
 
   useEffect(() => {
     setActiveIndex(0);
@@ -88,13 +112,13 @@ function BranchSuggestionBox({
   const choose = (ref: string) => {
     const trimmed = ref.trim();
     if (!trimmed) {
-      setQuery(baseRef);
+      setQuery(value);
       setOpen(false);
       return;
     }
     setQuery(trimmed);
     setOpen(false);
-    if (trimmed !== baseRef) {
+    if (trimmed !== value) {
       onChangeBase(trimmed);
     }
   };
@@ -112,7 +136,7 @@ function BranchSuggestionBox({
       event.preventDefault();
       choose(open && suggestions[activeIndex] ? suggestions[activeIndex] : query);
     } else if (event.key === 'Escape') {
-      setQuery(baseRef);
+      setQuery(value);
       setOpen(false);
     }
   };
@@ -122,7 +146,7 @@ function BranchSuggestionBox({
       className="change-list-base"
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) {
-          setQuery(baseRef);
+          setQuery(value);
           setOpen(false);
         }
       }}
@@ -132,6 +156,8 @@ function BranchSuggestionBox({
         type="text"
         role="combobox"
         value={query}
+        disabled={disabled}
+        placeholder="branch"
         aria-label="Compare base branch or ref"
         aria-autocomplete="list"
         aria-controls={listboxId}
@@ -179,7 +205,9 @@ function BranchSuggestionBox({
 
 export default function ChangeListPanel({
   baseRef,
+  defaultBase,
   branches,
+  recentRevisions,
   currentBranch,
   compareSource,
   collection,
@@ -199,6 +227,11 @@ export default function ChangeListPanel({
   const modified = entries.filter((entry) => entry.changeKind === 'modified').length;
   const removed = entries.filter((entry) => entry.changeKind === 'removed').length;
   const moved = entries.filter((entry) => entry.changeKind === 'moved').length;
+  const selectedRevision = useMemo(
+    () => matchRecentRevision(baseRef, recentRevisions),
+    [baseRef, recentRevisions]
+  );
+  const branchValue = selectedRevision ? '' : baseRef;
   const [height, setHeight] = useState(CHANGES_DEFAULT_HEIGHT);
   const panelRef = useRef<HTMLDivElement>(null);
   const resizeRef = useRef<{ startY: number; startHeight: number } | null>(null);
@@ -370,10 +403,40 @@ export default function ChangeListPanel({
         <>
           <div className="change-list-controls">
             <BranchSuggestionBox
-              baseRef={baseRef}
+              value={branchValue}
               branches={branches}
               onChangeBase={onChangeBase}
             />
+            <label
+              className="change-list-revision"
+              title={
+                selectedRevision
+                  ? `${selectedRevision.shortSha} — ${selectedRevision.subject}`
+                  : 'Last 5 commits before HEAD'
+              }
+            >
+              <span className="visually-hidden">Compare revision</span>
+              <select
+                value={selectedRevision?.sha ?? ''}
+                aria-label="Compare recent revision"
+                disabled={recentRevisions.length === 0}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  onChangeBase(next || defaultBase);
+                }}
+              >
+                <option value="">rev</option>
+                {recentRevisions.map((revision) => (
+                  <option
+                    key={revision.sha}
+                    value={revision.sha}
+                    title={revision.subject}
+                  >
+                    {revision.shortSha}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="change-list-source">
               <span className="visually-hidden">Compare source</span>
               <select

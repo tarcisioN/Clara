@@ -46,6 +46,15 @@ function runGit(
   });
 }
 
+export type GitRevision = {
+  /** Full commit SHA. */
+  sha: string;
+  /** Short SHA for compact UI (7 chars). */
+  shortSha: string;
+  /** First line of the commit message. */
+  subject: string;
+};
+
 export type GitDiscoverResult =
   | {
       inRepo: true;
@@ -54,6 +63,8 @@ export type GitDiscoverResult =
       currentBranch: string | null;
       defaultBase: string;
       branches: string[];
+      /** Last commits before HEAD — for the Changes revision picker. */
+      recentRevisions: GitRevision[];
     }
   | { inRepo: false };
 
@@ -163,6 +174,44 @@ export async function currentBranch(repoRoot: string): Promise<string | null> {
 }
 
 /**
+ * Last `limit` commits before HEAD (excludes the current tip). Used as quick
+ * compare bases in the Changes panel.
+ */
+export async function listRecentRevisions(
+  repoRoot: string,
+  limit = 5
+): Promise<GitRevision[]> {
+  if (limit <= 0) {
+    return [];
+  }
+  const result = await runGit(repoRoot, [
+    'log',
+    '-n',
+    String(limit),
+    '--skip=1',
+    '--format=%H%x09%s'
+  ]);
+  if (result.exitCode !== 0) {
+    return [];
+  }
+  return result.stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const tab = line.indexOf('\t');
+      const sha = tab >= 0 ? line.slice(0, tab) : line;
+      const subject = tab >= 0 ? line.slice(tab + 1) : '';
+      return {
+        sha,
+        shortSha: sha.slice(0, 7),
+        subject
+      };
+    })
+    .filter((entry) => /^[0-9a-f]{7,40}$/i.test(entry.sha));
+}
+
+/**
  * Read a tracked file at `ref` without checking it out.
  * `relPath` must use forward slashes as git expects.
  */
@@ -213,10 +262,11 @@ export async function discoverGit(collectionPath: string): Promise<GitDiscoverRe
     return { inRepo: false };
   }
 
-  const [branch, defaultBase, branches] = await Promise.all([
+  const [branch, defaultBase, branches, recentRevisions] = await Promise.all([
     currentBranch(repoRoot),
     resolveDefaultBase(repoRoot),
-    listBranches(repoRoot)
+    listBranches(repoRoot),
+    listRecentRevisions(repoRoot, 5)
   ]);
 
   return {
@@ -225,7 +275,8 @@ export async function discoverGit(collectionPath: string): Promise<GitDiscoverRe
     relPath,
     currentBranch: branch,
     defaultBase,
-    branches
+    branches,
+    recentRevisions
   };
 }
 

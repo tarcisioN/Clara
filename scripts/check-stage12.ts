@@ -60,6 +60,9 @@ try {
   assert.equal(discovered.defaultBase, 'main');
   assert.ok(discovered.branches.includes('main'));
   assert.ok(discovered.branches.includes('feature'));
+  assert.equal(discovered.recentRevisions.length, 1);
+  assert.equal(discovered.recentRevisions[0]?.shortSha.length, 7);
+  assert.match(discovered.recentRevisions[0]?.subject ?? '', /add smoke collection/);
 
   assert.equal(await resolveDefaultBase(repo), 'main');
 

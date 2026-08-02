@@ -105,16 +105,18 @@
 }
 
 .change-list-base,
+.change-list-revision,
 .change-list-source {
   min-width: 0;
-  flex: 1;
 }
 
 .change-list-base {
   position: relative;
+  flex: 1;
 }
 
 .change-list-base input,
+.change-list-revision select,
 .change-list-source select {
   width: 100%;
   height: 22px;
@@ -124,6 +126,15 @@
   background: var(--surface-0, #fff);
   color: inherit;
   font-size: 0.65625rem;
+}
+
+.change-list-revision {
+  flex: 0 0 72px;
+}
+
+.change-list-revision select {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.625rem;
 }
 
 .change-list-source {
