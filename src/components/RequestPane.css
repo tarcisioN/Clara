@@ -20,6 +20,34 @@
   min-width: 0;
 }
 
+.request-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.request-action-button {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border-1);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  cursor: pointer;
+}
+
+.request-action-button:hover {
+  color: var(--text);
+  background: var(--surface-0);
+}
+
+.request-action-button.is-pinned {
+  border-color: var(--brand);
+  color: var(--brand-text);
+}
+
 .request-view-mode {
   display: inline-flex;
   border: 1px solid var(--border, #e5e7eb);
@@ -328,6 +356,27 @@
 .compare-banner-added {
   color: #1f6b3a;
   background: rgba(47, 133, 90, 0.12);
+}
+
+.compare-banner-pinned {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  color: #5b4a1f;
+  background: rgba(184, 148, 48, 0.14);
+}
+
+.compare-banner-pinned button {
+  height: 24px;
+  padding: 0 10px;
+  border: 1px solid rgba(120, 90, 20, 0.35);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.55);
+  color: inherit;
+  font-size: 0.6875rem;
+  cursor: pointer;
 }
 
 .compare-banner-changed {

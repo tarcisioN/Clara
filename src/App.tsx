@@ -9,6 +9,10 @@ import RequestPane from './components/RequestPane.tsx';
 import RequestDiffPane from './components/RequestDiffPane.tsx';
 import RequestTabs, { type WorkspaceTabView } from './components/RequestTabs.tsx';
 import PromptDialog, { type PromptRequest } from './components/PromptDialog.tsx';
+import SaveAsDialog, {
+  type SaveAsRequest,
+  type SaveAsResult
+} from './components/SaveAsDialog.tsx';
 import ResponsePane from './components/ResponsePane.tsx';
 import TerminalPane, { type TerminalEntry } from './components/TerminalPane.tsx';
 import { buildTerminalEntry, nextTerminalEntries } from './components/terminalBuffer.ts';
@@ -51,7 +55,6 @@ import {
   collectFolderPaths,
   countRequestsUnder,
   getItemByPath,
-  getRequestByPath,
   isFolder,
   isRequest,
   resolveRunExecutionPath,
@@ -127,6 +130,16 @@ import {
 } from './workspace/collectionUi.ts';
 import { computeDirtyState } from './workspace/dirty.ts';
 import { decideExternalChange } from './workspace/externalChanges.ts';
+import {
+  createPinnedRequest,
+  isPinnedDetached,
+  isRequestTabPinned,
+  listSaveAsLocations,
+  remapPinnedTabKey,
+  shouldKeepTabAfterReload,
+  updatePinnedItem,
+  type PinnedRequest
+} from './workspace/pinnedRequest.ts';
 import {
   discoverForCollection,
   loadCollectionAtRef,
@@ -359,6 +372,12 @@ export default function App() {
   const [prompt, setPrompt] = useState<
     (PromptRequest & { resolve: (value: string | null) => void }) | null
   >(null);
+  const [saveAsPrompt, setSaveAsPrompt] = useState<
+    (SaveAsRequest & { resolve: (value: SaveAsResult | null) => void }) | null
+  >(null);
+  const [pinnedByKey, setPinnedByKey] = useState<Record<string, PinnedRequest>>({});
+  const pinnedByKeyRef = useRef(pinnedByKey);
+  const saveRequestAsRef = useRef<(tab: WorkspaceTab) => Promise<void>>(async () => {});
 
   const collectionsRef = useRef(collections);
   const environmentsRef = useRef(environments);
@@ -393,6 +412,7 @@ export default function App() {
   runningKeyRef.current = runningKey;
   rerunningRowRef.current = rerunningRow;
   terminalOpenRef.current = terminalOpen;
+  pinnedByKeyRef.current = pinnedByKey;
 
   const hasResources = collections.length > 0 || environments.length > 0;
   const sidebarFilter = normalizeSidebarQuery(sidebarQuery);
@@ -479,14 +499,13 @@ export default function App() {
           }
         ];
       }
-      const item = getItemByPath(entry.collection.item, tab.path);
+      const pin = tab.kind === 'request' ? pinnedByKey[tabKey(tab)] : undefined;
+      const item =
+        pin?.item ?? getItemByPath(entry.collection.item, tab.path) ?? null;
       if (!item) {
         return [];
       }
       if (tab.kind === 'folder') {
-        if (!isFolder(item)) {
-          return [];
-        }
         return [
           {
             tab,
@@ -497,37 +516,60 @@ export default function App() {
           }
         ];
       }
-      const request = getRequestByPath(entry.collection.item, tab.path);
-      if (!request || !isRequest(item)) {
-        return [];
-      }
+      const method =
+        typeof item.request === 'string'
+          ? 'GET'
+          : (item.request?.method ?? 'GET').toUpperCase();
+      const detached = Boolean(pin && isPinnedDetached(pin, entry.collection.item));
       return [
         {
           tab,
-          name: item.name?.trim() || 'Untitled request',
-          badge: (request.method ?? 'GET').toUpperCase(),
-          badgeClass: `method-${(request.method ?? 'GET').toLowerCase()}`,
-          dirty: ui.dirtyPaths.has(tab.path)
+          name: item.name?.trim() || 'Untitled',
+          badge: method,
+          badgeClass: `method-${method.toLowerCase()}${pin ? ' badge-pinned' : ''}`,
+          dirty: ui.dirtyPaths.has(tab.path) || detached,
+          tooltip: pin
+            ? [
+                item.name?.trim() || 'Untitled',
+                detached
+                  ? 'Pinned — not in the current collection file'
+                  : 'Pinned — survives reload / branch switches',
+                entry.filePath
+              ].join('\n')
+            : undefined
         }
       ];
     });
-  }, [collections, countsByPath, environments, uiByPath, openTabs]);
+  }, [collections, countsByPath, environments, pinnedByKey, uiByPath, openTabs]);
 
   const activeRequestPath = activeTab?.kind === 'request' ? activeTab.path : null;
+  const activePin =
+    activeTab?.kind === 'request' ? (pinnedByKey[tabKey(activeTab)] ?? null) : null;
+  const activePinDetached = Boolean(
+    activePin &&
+      activeCollection &&
+      isPinnedDetached(activePin, activeCollection.collection.item)
+  );
 
   const selectedItem = useMemo(() => {
     if (!activeCollection || !activeRequestPath) {
       return null;
     }
+    if (activePin) {
+      return activePin.item;
+    }
     return getItemByPath(activeCollection.collection.item, activeRequestPath) ?? null;
-  }, [activeCollection, activeRequestPath]);
+  }, [activeCollection, activePin, activeRequestPath]);
 
   const selectedRequest = useMemo(() => {
-    if (!activeCollection || !activeRequestPath) {
+    if (!selectedItem || !isRequest(selectedItem)) {
       return null;
     }
-    return getRequestByPath(activeCollection.collection.item, activeRequestPath) ?? null;
-  }, [activeCollection, activeRequestPath]);
+    if (typeof selectedItem.request === 'string') {
+      return { method: 'GET', url: selectedItem.request };
+    }
+    return selectedItem.request ?? null;
+  }, [selectedItem]);
 
   const urlPreviewVariables = useMemo(() => {
     if (!activeCollection || !activeRequestPath) {
@@ -891,11 +933,9 @@ export default function App() {
       const validKeys = new Set(
         filterValidTabs(collectionPath, collection.item, openTabsRef.current).map(tabKey)
       );
-      const survivingTabs = openTabsRef.current.filter(
-        (tab) =>
-          tab.kind === 'environment' ||
-          tab.collectionPath !== collectionPath ||
-          validKeys.has(tabKey(tab))
+      const pins = pinnedByKeyRef.current;
+      const survivingTabs = openTabsRef.current.filter((tab) =>
+        shouldKeepTabAfterReload(tab, collectionPath, validKeys, pins)
       );
       if (survivingTabs.length !== openTabsRef.current.length) {
         setOpenTabs(survivingTabs);
@@ -1115,6 +1155,14 @@ export default function App() {
     []
   );
 
+  const askSaveAs = useCallback(
+    (request: SaveAsRequest): Promise<SaveAsResult | null> =>
+      new Promise((resolve) => {
+        setSaveAsPrompt({ ...request, resolve });
+      }),
+    []
+  );
+
   const applyCollectionUpdate = useCallback(
     (collectionPath: string, collection: PostmanCollection) => {
       const entry = collectionsRef.current.find(
@@ -1170,6 +1218,17 @@ export default function App() {
       );
       return entry ? isEnvironmentDirty(entry.environment, entry.originalRaw) : false;
     }
+    if (tab.kind === 'request') {
+      const pin = pinnedByKeyRef.current[tabKey(tab)];
+      if (pin) {
+        const entry = collectionsRef.current.find(
+          (candidate) => candidate.filePath === tab.collectionPath
+        );
+        if (entry && isPinnedDetached(pin, entry.collection.item)) {
+          return true;
+        }
+      }
+    }
     const ui = uiByPathRef.current[tab.collectionPath];
     if (!ui) {
       return false;
@@ -1188,7 +1247,10 @@ export default function App() {
       setOpenTabs((current) =>
         nextOpenTabs(current, tab, activeTabRef.current, {
           forceNew: options?.forceNew,
-          isDirty: isTabDirty
+          // Dirty and pinned tabs keep their slot — opening another request appends.
+          isDirty: (candidate) =>
+            isTabDirty(candidate) ||
+            isRequestTabPinned(candidate, pinnedByKeyRef.current)
         })
       );
       setActiveTab(tab);
@@ -1538,6 +1600,17 @@ export default function App() {
     }
 
     const active = activeTabRef.current;
+    if (active?.kind === 'request') {
+      const pin = pinnedByKeyRef.current[tabKey(active)];
+      const entry = collectionsList.find(
+        (candidate) => candidate.filePath === active.collectionPath
+      );
+      if (pin && entry && isPinnedDetached(pin, entry.collection.item)) {
+        await saveRequestAsRef.current(active);
+        return;
+      }
+    }
+
     let saveEnvironment: LoadedEnvironment | undefined;
     let saveCollection: LoadedCollection | undefined;
 
@@ -1652,11 +1725,30 @@ export default function App() {
     }
 
     const key = tabKey({ kind: 'request', collectionPath, path });
+    const pin = pinnedByKeyRef.current[key];
     setSending(true);
     setRunningKey(key);
     setStatus({ kind: 'idle' });
     try {
-      const runCollection = buildSingleRequestCollection(entry.collection, path);
+      let runCollection;
+      if (pin && isPinnedDetached(pin, entry.collection.item)) {
+        const cloned = JSON.parse(JSON.stringify(pin.item)) as PostmanItem;
+        delete cloned.item;
+        runCollection = {
+          info: {
+            name: `Clara run — ${cloned.name ?? path}`,
+            schema:
+              typeof entry.collection.info?.schema === 'string'
+                ? entry.collection.info.schema
+                : 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
+            _postman_id: `clara-pin-${key}`
+          },
+          item: [cloned],
+          ...(entry.collection.variable ? { variable: entry.collection.variable } : {})
+        };
+      } else {
+        runCollection = buildSingleRequestCollection(entry.collection, path);
+      }
       const environmentJson = activeEnvironmentJson();
       const result = await window.clara.runNewman(serializeCollection(runCollection), {
         ...(environmentJson ? { environmentJson } : {})
@@ -1664,11 +1756,14 @@ export default function App() {
       setRequestRuns((runs) => ({ ...runs, [requestRunKey(collectionPath, path)]: result }));
       const label =
         result.execution?.name ??
+        pin?.item.name ??
         getItemByPath(entry.collection.item, path)?.name ??
         'Request';
       pushTerminalEntry(label, result);
       const code = result.execution?.code;
-      const unsaved = uiByPathRef.current[collectionPath]?.dirtyPaths.has(path) ?? false;
+      const unsaved =
+        (uiByPathRef.current[collectionPath]?.dirtyPaths.has(path) ?? false) ||
+        Boolean(pin && isPinnedDetached(pin, entry.collection.item));
       if (result.missingNewman) {
         setStatus({ kind: 'error', message: result.error ?? 'Newman not found' });
       } else {
@@ -1917,6 +2012,16 @@ export default function App() {
         return;
       }
       const next = current.filter((entry) => !sameTab(entry, tab));
+      if (tab.kind === 'request') {
+        const key = tabKey(tab);
+        setPinnedByKey((pins) => {
+          if (!pins[key]) {
+            return pins;
+          }
+          const { [key]: _removed, ...rest } = pins;
+          return rest;
+        });
+      }
       setOpenTabs(next);
       setActiveTab((active) =>
         active && sameTab(active, tab)
@@ -2399,11 +2504,28 @@ export default function App() {
   ]);
 
   const editSelectedItem = (updater: (item: PostmanItem) => PostmanItem) => {
-    if (!activeCollection || !activeRequestPath) {
+    if (!activeCollection || !activeRequestPath || !activeTab || activeTab.kind !== 'request') {
       return;
     }
 
+    const key = tabKey(activeTab);
+    const pin = pinnedByKeyRef.current[key];
+
     try {
+      if (pin) {
+        setPinnedByKey((current) => updatePinnedItem(current, key, updater));
+        // Linked pins write through so ⌘S has no special case.
+        if (!isPinnedDetached(pin, activeCollection.collection.item)) {
+          const collection = updateCollectionItem(
+            activeCollection.collection,
+            activeRequestPath,
+            updater
+          );
+          applyCollectionUpdate(activeCollection.filePath, collection);
+        }
+        return;
+      }
+
       const collection = updateCollectionItem(
         activeCollection.collection,
         activeRequestPath,
@@ -2415,6 +2537,143 @@ export default function App() {
     }
   };
 
+  const pinActiveRequest = useCallback(() => {
+    const tab = activeTabRef.current;
+    if (!tab || tab.kind !== 'request') {
+      return;
+    }
+    const entry = collectionsRef.current.find(
+      (candidate) => candidate.filePath === tab.collectionPath
+    );
+    if (!entry) {
+      return;
+    }
+    const key = tabKey(tab);
+    if (pinnedByKeyRef.current[key]) {
+      return;
+    }
+    const existing = getItemByPath(entry.collection.item, tab.path);
+    const item = existing && isRequest(existing) ? existing : null;
+    if (!item) {
+      return;
+    }
+    setPinnedByKey((current) => ({
+      ...current,
+      [key]: createPinnedRequest(tab.collectionPath, tab.path, item)
+    }));
+    setStatus({ kind: 'ok', message: `Pinned “${item.name?.trim() || 'Untitled'}”` });
+  }, []);
+
+  const unpinRequestTab = useCallback((tab: WorkspaceTab) => {
+    if (tab.kind !== 'request') {
+      return;
+    }
+    const key = tabKey(tab);
+    setPinnedByKey((current) => {
+      if (!current[key]) {
+        return current;
+      }
+      const { [key]: _removed, ...rest } = current;
+      return rest;
+    });
+  }, []);
+
+  const saveRequestAs = useCallback(
+    async (tab: WorkspaceTab) => {
+      if (tab.kind !== 'request') {
+        return;
+      }
+      const entry = collectionsRef.current.find(
+        (candidate) => candidate.filePath === tab.collectionPath
+      );
+      if (!entry) {
+        return;
+      }
+      const key = tabKey(tab);
+      const pin = pinnedByKeyRef.current[key];
+      const source =
+        pin?.item ?? getItemByPath(entry.collection.item, tab.path) ?? null;
+      if (!source || !isRequest(source)) {
+        setStatus({ kind: 'error', message: 'No request to save' });
+        return;
+      }
+
+      const detached = Boolean(pin && isPinnedDetached(pin, entry.collection.item));
+      const locations = listSaveAsLocations(
+        entry.collection.item,
+        entry.collection.info?.name?.trim() || 'Collection root'
+      );
+      const defaultParent =
+        parentPathOf(pin?.linkedPath ?? tab.path) ??
+        (tab.path.includes('.') ? parentPathOf(tab.path) : null);
+
+      const result = await askSaveAs({
+        title: detached ? 'Save pinned request' : 'Save As',
+        defaultName: source.name?.trim() || 'Untitled request',
+        locations,
+        defaultParentPath: defaultParent,
+        confirmLabel: detached ? 'Save' : 'Save As'
+      });
+      if (!result) {
+        return;
+      }
+
+      const toInsert: PostmanItem = {
+        ...JSON.parse(JSON.stringify(source)),
+        name: result.name
+      };
+      delete toInsert.item;
+
+      try {
+        const inserted = insertItem(entry.collection, result.parentPath, toInsert);
+        applyCollectionUpdate(entry.filePath, inserted.collection);
+        if (result.parentPath) {
+          updateUi(entry.filePath, (ui) => ({
+            ...ui,
+            expanded: new Set(ui.expanded).add(result.parentPath!),
+            collectionExpanded: true
+          }));
+        } else {
+          updateUi(entry.filePath, (ui) =>
+            ui.collectionExpanded ? ui : { ...ui, collectionExpanded: true }
+          );
+        }
+
+        const nextTab: WorkspaceTab = {
+          kind: 'request',
+          collectionPath: entry.filePath,
+          path: inserted.newPath
+        };
+
+        if (detached && pin) {
+          setPinnedByKey((current) => {
+            const without = { ...current };
+            delete without[key];
+            return without;
+          });
+          setOpenTabs((current) =>
+            current.map((candidate) => (sameTab(candidate, tab) ? nextTab : candidate))
+          );
+          setActiveTab(nextTab);
+          setStatus({
+            kind: 'ok',
+            message: `Saved “${result.name}” into the collection`
+          });
+        } else {
+          openTab(nextTab, { forceNew: true });
+          setStatus({
+            kind: 'ok',
+            message: `Saved a copy as “${result.name}”`
+          });
+        }
+      } catch (error) {
+        setStatus({ kind: 'error', message: errorMessage(error) });
+      }
+    },
+    [applyCollectionUpdate, askSaveAs, openTab, updateUi]
+  );
+  saveRequestAsRef.current = saveRequestAs;
+
   const remapTabsAfterDelete = (collectionPath: string, deleted: ItemPath) => {
     const remap = (tab: WorkspaceTab): WorkspaceTab | null => {
       if (tab.kind === 'environment' || tab.collectionPath !== collectionPath || tab.kind === 'collection') {
@@ -2422,12 +2681,36 @@ export default function App() {
       }
       const nextPath = remapPathAfterDelete(tab.path, deleted);
       if (nextPath == null) {
+        if (tab.kind === 'request' && pinnedByKeyRef.current[tabKey(tab)]) {
+          return tab;
+        }
         return null;
       }
       return { ...tab, path: nextPath };
     };
 
-    setOpenTabs((current) => current.flatMap((tab) => remap(tab) ?? []));
+    const current = openTabsRef.current;
+    let nextPins = pinnedByKeyRef.current;
+    const nextTabs: WorkspaceTab[] = [];
+    for (const tab of current) {
+      const remapped = remap(tab);
+      if (!remapped) {
+        if (tab.kind === 'request') {
+          const key = tabKey(tab);
+          if (nextPins[key]) {
+            const { [key]: _removed, ...rest } = nextPins;
+            nextPins = rest;
+          }
+        }
+        continue;
+      }
+      if (tab.kind === 'request' && remapped.kind === 'request' && tab.path !== remapped.path) {
+        nextPins = remapPinnedTabKey(nextPins, tab, remapped);
+      }
+      nextTabs.push(remapped);
+    }
+    setPinnedByKey(nextPins);
+    setOpenTabs(nextTabs);
     setActiveTab((active) => (active ? remap(active) : active));
   };
 
@@ -2702,6 +2985,16 @@ export default function App() {
           label: 'Duplicate Tab',
           disabled: target.tab.kind === 'collection' || target.tab.kind === 'environment'
         },
+        ...(target.tab.kind === 'request'
+          ? [
+              {
+                id: pinnedByKey[tabKey(target.tab)] ? 'unpin-request' : 'pin-request',
+                label: pinnedByKey[tabKey(target.tab)] ? 'Unpin' : 'Pin',
+                separatorBefore: true
+              },
+              { id: 'save-as', label: 'Save As…' }
+            ]
+          : []),
         {
           id: 'close-tab',
           label: 'Close Tab',
@@ -2796,6 +3089,25 @@ export default function App() {
     return [
       ...(target.kind === 'folder'
         ? [{ id: 'new-request', label: 'New Request', shortcut: `${shortcutMod} T` }]
+        : []),
+      ...(target.kind === 'request'
+        ? [
+            {
+              id: pinnedByKey[tabKey({ kind: 'request', collectionPath: target.collectionPath, path: target.path })]
+                ? 'unpin-request'
+                : 'pin-request',
+              label: pinnedByKey[
+                tabKey({
+                  kind: 'request',
+                  collectionPath: target.collectionPath,
+                  path: target.path
+                })
+              ]
+                ? 'Unpin'
+                : 'Pin'
+            },
+            { id: 'save-as', label: 'Save As…' }
+          ]
         : []),
       { id: 'run', label: target.kind === 'folder' ? 'Run folder' : 'Run' },
       { id: 'rename', label: 'Rename' },
@@ -3286,6 +3598,32 @@ export default function App() {
         closeAllTabs({ force: true });
       } else if (id === 'reveal-in-sidebar') {
         revealInSidebar(target.tab);
+      } else if (id === 'pin-request' && target.tab.kind === 'request') {
+        const requestTab = target.tab;
+        const entry = collectionsRef.current.find(
+          (candidate) => candidate.filePath === requestTab.collectionPath
+        );
+        const item = entry
+          ? getItemByPath(entry.collection.item, requestTab.path)
+          : null;
+        if (entry && item && isRequest(item)) {
+          setPinnedByKey((current) => ({
+            ...current,
+            [tabKey(requestTab)]: createPinnedRequest(
+              requestTab.collectionPath,
+              requestTab.path,
+              item
+            )
+          }));
+          setStatus({
+            kind: 'ok',
+            message: `Pinned “${item.name?.trim() || 'Untitled'}”`
+          });
+        }
+      } else if (id === 'unpin-request' && target.tab.kind === 'request') {
+        unpinRequestTab(target.tab);
+      } else if (id === 'save-as' && target.tab.kind === 'request') {
+        void saveRequestAs(target.tab);
       }
       return;
     }
@@ -3339,6 +3677,39 @@ export default function App() {
     }
     if (id === 'run') {
       runTarget(target);
+    } else if (id === 'pin-request' && target.kind === 'request') {
+      const entry = collectionsRef.current.find(
+        (candidate) => candidate.filePath === target.collectionPath
+      );
+      const item = entry ? getItemByPath(entry.collection.item, target.path) : null;
+      if (entry && item && isRequest(item)) {
+        const tab = {
+          kind: 'request' as const,
+          collectionPath: target.collectionPath,
+          path: target.path
+        };
+        openRequestTab(target.collectionPath, target.path);
+        setPinnedByKey((current) => ({
+          ...current,
+          [tabKey(tab)]: createPinnedRequest(target.collectionPath, target.path, item)
+        }));
+        setStatus({
+          kind: 'ok',
+          message: `Pinned “${item.name?.trim() || 'Untitled'}”`
+        });
+      }
+    } else if (id === 'unpin-request' && target.kind === 'request') {
+      unpinRequestTab({
+        kind: 'request',
+        collectionPath: target.collectionPath,
+        path: target.path
+      });
+    } else if (id === 'save-as' && target.kind === 'request') {
+      void saveRequestAs({
+        kind: 'request',
+        collectionPath: target.collectionPath,
+        path: target.path
+      });
     } else if (id === 'new-request') {
       if (target.kind === 'collection') {
         createNewRequestNear({
@@ -3666,6 +4037,18 @@ export default function App() {
             title="⌘S / Ctrl+S"
           >
             Save
+          </button>
+          <button
+            type="button"
+            disabled={activeTab?.kind !== 'request'}
+            onClick={() => {
+              if (activeTab?.kind === 'request') {
+                void saveRequestAs(activeTab);
+              }
+            }}
+            title="Save a copy with a new name or location"
+          >
+            Save As
           </button>
         </div>
       </header>
@@ -4863,6 +5246,18 @@ export default function App() {
                         request={selectedRequest}
                         path={activeRequestPath}
                         urlPreviewVariables={urlPreviewVariables}
+                        pinned={Boolean(activePin)}
+                        pinnedDetached={activePinDetached}
+                        onPin={activePin ? null : () => pinActiveRequest()}
+                        onUnpin={
+                          activePin
+                            ? () => {
+                                unpinRequestTab(activeTab);
+                                setStatus({ kind: 'ok', message: 'Unpinned request' });
+                              }
+                            : null
+                        }
+                        onSaveAs={() => void saveRequestAs(activeTab)}
                         semanticDiff={requestSemanticDiff}
                         compareBaseRef={activeCompare?.baseRef ?? null}
                         onSwitchToDiff={
@@ -5114,6 +5509,23 @@ export default function App() {
           onCancel={() => {
             prompt.resolve(null);
             setPrompt(null);
+          }}
+        />
+      ) : null}
+      {saveAsPrompt ? (
+        <SaveAsDialog
+          title={saveAsPrompt.title}
+          defaultName={saveAsPrompt.defaultName}
+          locations={saveAsPrompt.locations}
+          defaultParentPath={saveAsPrompt.defaultParentPath}
+          confirmLabel={saveAsPrompt.confirmLabel}
+          onConfirm={(value) => {
+            saveAsPrompt.resolve(value);
+            setSaveAsPrompt(null);
+          }}
+          onCancel={() => {
+            saveAsPrompt.resolve(null);
+            setSaveAsPrompt(null);
           }}
         />
       ) : null}

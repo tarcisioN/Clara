@@ -45,7 +45,8 @@ export type OpenTabOptions = {
  * Decide the next tab strip after opening `tab`.
  * - Already open → unchanged list (caller still activates).
  * - `forceNew` → append.
- * - Else if the active tab is present and not dirty → replace it in place.
+ * - Else if the active tab is present and not sticky (`isDirty` — unsaved
+ *   and/or pinned) → replace it in place.
  * - Else → append.
  */
 export function nextOpenTabs(

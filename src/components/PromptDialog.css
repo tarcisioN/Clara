@@ -32,7 +32,8 @@
   font-size: 0.75rem;
 }
 
-.prompt-dialog input {
+.prompt-dialog input,
+.prompt-dialog select {
   width: 100%;
   height: 32px;
   padding: 0 10px;
@@ -43,7 +44,8 @@
   font-size: 0.8125rem;
 }
 
-.prompt-dialog input:focus {
+.prompt-dialog input:focus,
+.prompt-dialog select:focus {
   outline: none;
   border-color: var(--border-2);
   box-shadow: inset 0 0 0 1px var(--border-2);

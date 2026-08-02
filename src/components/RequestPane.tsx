@@ -63,6 +63,11 @@ type RequestPaneProps = {
   sending: boolean;
   /** Collection + folder + active env values for display-only {{var}} preview. */
   urlPreviewVariables?: Map<string, string>;
+  pinned?: boolean;
+  pinnedDetached?: boolean;
+  onPin?: (() => void) | null;
+  onUnpin?: (() => void) | null;
+  onSaveAs?: (() => void) | null;
 };
 
 export default function RequestPane({
@@ -100,7 +105,12 @@ export default function RequestPane({
   onChangeTestScript,
   onSend,
   sending,
-  urlPreviewVariables
+  urlPreviewVariables,
+  pinned = false,
+  pinnedDetached = false,
+  onPin = null,
+  onUnpin = null,
+  onSaveAs = null
 }: RequestPaneProps) {
   const [activeSection, setActiveSection] = useState<RequestSection>('params');
   const [renaming, setRenaming] = useState(false);
@@ -266,7 +276,49 @@ export default function RequestPane({
             </button>
           </div>
         ) : null}
+        <div className="request-title-actions">
+          {onSaveAs ? (
+            <button type="button" className="request-action-button" onClick={onSaveAs}>
+              Save As
+            </button>
+          ) : null}
+          {pinned && onUnpin ? (
+            <button
+              type="button"
+              className="request-action-button is-pinned"
+              onClick={onUnpin}
+              title="Unpin — tab will follow the collection file again"
+            >
+              Unpin
+            </button>
+          ) : null}
+          {!pinned && onPin ? (
+            <button
+              type="button"
+              className="request-action-button"
+              onClick={onPin}
+              title="Pin — keep this request if the collection file changes"
+            >
+              Pin
+            </button>
+          ) : null}
+        </div>
       </div>
+
+      {pinnedDetached ? (
+        <div className="compare-banner compare-banner-pinned" role="status">
+          <span>Pinned — not in the current collection file</span>
+          {onSaveAs ? (
+            <button type="button" onClick={onSaveAs}>
+              Save As…
+            </button>
+          ) : null}
+        </div>
+      ) : pinned ? (
+        <div className="compare-banner compare-banner-pinned" role="status">
+          Pinned — survives reload and branch switches
+        </div>
+      ) : null}
 
       {semanticDiff?.isAdded ? (
         <div className="compare-banner compare-banner-added" role="status">

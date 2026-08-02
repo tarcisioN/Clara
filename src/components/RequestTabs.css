@@ -104,6 +104,10 @@
   letter-spacing: 0.02em;
 }
 
+.request-tab-method.badge-pinned {
+  box-shadow: inset 0 -2px 0 var(--brand);
+}
+
 .request-tab-method.method-post,
 .request-tab-method.method-patch {
   color: var(--method-post);

@@ -32,7 +32,8 @@
     "check:stage16": "node --experimental-strip-types scripts/check-stage16.ts",
     "check:stage17": "node --experimental-strip-types scripts/check-stage17.ts",
     "check:stage18": "node --experimental-strip-types scripts/check-stage18.ts",
-    "check:stage19": "node --experimental-strip-types scripts/check-stage19.ts"
+    "check:stage19": "node --experimental-strip-types scripts/check-stage19.ts",
+    "check:stage20": "node --experimental-strip-types scripts/check-stage20.ts"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
