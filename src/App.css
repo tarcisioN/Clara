@@ -678,6 +678,11 @@ button.primary {
   min-height: 0;
 }
 
+/* Diff and removed-request views have no response to show, so the request pane takes the full height. */
+.detail-split-single {
+  grid-template-rows: 1fr;
+}
+
 .detail-request,
 .detail-response {
   min-height: 0;

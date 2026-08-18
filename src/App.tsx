@@ -639,6 +639,11 @@ export default function App() {
       ? (requestViewModeByKey[tabKey(activeTab)] ?? 'edit')
       : 'edit';
 
+  const showingRequestDiff =
+    activeRequestViewMode === 'diff' &&
+    Boolean(requestFieldDiff) &&
+    Boolean(activeCompare);
+
   const removedFieldDiff = useMemo(() => {
     if (!removedDiffView) {
       return null;
@@ -4980,7 +4985,7 @@ export default function App() {
                 removedDiffView &&
                 removedFieldDiff &&
                 (compareByPath[removedDiffView.collectionPath]?.baseRef ?? null) && (
-                  <div className="detail-split">
+                  <div className="detail-split detail-split-single">
                     <div className="detail-request">
                       <RequestDiffPane
                         key={`removed:${removedDiffView.ghostKey}`}
@@ -5334,7 +5339,11 @@ export default function App() {
                 activeRequestPath &&
                 selectedItem &&
                 selectedRequest && (
-                  <div className="detail-split">
+                  <div
+                    className={`detail-split${
+                      showingRequestDiff ? ' detail-split-single' : ''
+                    }`}
+                  >
                     <div className="detail-request">
                       {activeRequestViewMode === 'diff' &&
                       requestFieldDiff &&
@@ -5514,6 +5523,7 @@ export default function App() {
                       />
                       )}
                     </div>
+                    {showingRequestDiff ? null : (
                     <div className="detail-response">
                       <ResponsePane
                         result={
@@ -5544,6 +5554,7 @@ export default function App() {
                         }}
                       />
                     </div>
+                    )}
                   </div>
                 )}
             </main>

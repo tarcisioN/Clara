@@ -1,10 +1,9 @@
 .request-diff-pane {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  height: 100%;
   min-height: 0;
-  overflow: auto;
-  padding: 16px 18px 24px;
+  overflow: hidden;
 }
 
 .request-diff-header {
@@ -12,6 +11,18 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  flex: 0 0 auto;
+  padding: 16px 18px 14px;
+}
+
+.request-diff-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 18px 24px;
 }
 
 .request-diff-title h2 {

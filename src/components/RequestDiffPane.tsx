@@ -233,126 +233,128 @@ export default function RequestDiffPane({
         </div>
       </div>
 
-      <p
-        className={`request-diff-banner ${
-          semantic.isRemoved ? 'request-diff-banner-removed' : ''
-        }`}
-        role="status"
-      >
-        {semantic.isAdded
-          ? `New request — not in ${baseRef}`
-          : semantic.isRemoved
-            ? `Removed from working tree — showing ${baseRef}`
-            : changedSections.length === 0
-              ? `No field differences vs ${baseRef}`
-              : `Comparing vs ${baseRef} · ${changedSections.length} section${
-                  changedSections.length === 1 ? '' : 's'
-                }`}
-      </p>
-
-      {(semantic.sections.method ||
-        semantic.sections.url ||
-        semantic.isAdded ||
-        semantic.isRemoved) && (
-        <section className="request-diff-section" data-section="url">
-          <header className="request-diff-section-header">
-            <h3>Method &amp; URL</h3>
-            {canRestoreSection ? (
-              <span className="request-diff-section-actions">
-                {semantic.sections.method && onRestoreSection ? (
-                  <button
-                    type="button"
-                    className="request-diff-restore"
-                    onClick={() => onRestoreSection('method')}
-                  >
-                    Restore method
-                  </button>
-                ) : null}
-                {semantic.sections.url && onRestoreSection ? (
-                  <button
-                    type="button"
-                    className="request-diff-restore"
-                    onClick={() => onRestoreSection('url')}
-                  >
-                    Restore URL
-                  </button>
-                ) : null}
-              </span>
-            ) : null}
-          </header>
-          <StackedBars
-            label="url"
-            base={fieldDiff.url.base}
-            current={fieldDiff.url.current}
-            baseMethod={fieldDiff.method.base || undefined}
-            currentMethod={fieldDiff.method.current || undefined}
-          />
-        </section>
-      )}
-
-      {changedSections.includes('params') ? (
-        <Section
-          title={SECTION_LABELS.params}
-          section="params"
-          onRestore={canRestoreSection ? onRestoreSection : null}
+      <div className="request-diff-body">
+        <p
+          className={`request-diff-banner ${
+            semantic.isRemoved ? 'request-diff-banner-removed' : ''
+          }`}
+          role="status"
         >
-          <KeyedDiffView rows={fieldDiff.params.rows} />
-        </Section>
-      ) : null}
+          {semantic.isAdded
+            ? `New request — not in ${baseRef}`
+            : semantic.isRemoved
+              ? `Removed from working tree — showing ${baseRef}`
+              : changedSections.length === 0
+                ? `No field differences vs ${baseRef}`
+                : `Comparing vs ${baseRef} · ${changedSections.length} section${
+                    changedSections.length === 1 ? '' : 's'
+                  }`}
+        </p>
 
-      {changedSections.includes('headers') ? (
-        <Section
-          title={SECTION_LABELS.headers}
-          section="headers"
-          onRestore={canRestoreSection ? onRestoreSection : null}
-        >
-          <KeyedDiffView rows={fieldDiff.headers.rows} />
-        </Section>
-      ) : null}
+        {(semantic.sections.method ||
+          semantic.sections.url ||
+          semantic.isAdded ||
+          semantic.isRemoved) && (
+          <section className="request-diff-section" data-section="url">
+            <header className="request-diff-section-header">
+              <h3>Method &amp; URL</h3>
+              {canRestoreSection ? (
+                <span className="request-diff-section-actions">
+                  {semantic.sections.method && onRestoreSection ? (
+                    <button
+                      type="button"
+                      className="request-diff-restore"
+                      onClick={() => onRestoreSection('method')}
+                    >
+                      Restore method
+                    </button>
+                  ) : null}
+                  {semantic.sections.url && onRestoreSection ? (
+                    <button
+                      type="button"
+                      className="request-diff-restore"
+                      onClick={() => onRestoreSection('url')}
+                    >
+                      Restore URL
+                    </button>
+                  ) : null}
+                </span>
+              ) : null}
+            </header>
+            <StackedBars
+              label="url"
+              base={fieldDiff.url.base}
+              current={fieldDiff.url.current}
+              baseMethod={fieldDiff.method.base || undefined}
+              currentMethod={fieldDiff.method.current || undefined}
+            />
+          </section>
+        )}
 
-      {changedSections.includes('auth') ? (
-        <Section
-          title={SECTION_LABELS.auth}
-          section="auth"
-          onRestore={canRestoreSection ? onRestoreSection : null}
-        >
-          <AuthDiff auth={fieldDiff.auth} />
-        </Section>
-      ) : null}
+        {changedSections.includes('params') ? (
+          <Section
+            title={SECTION_LABELS.params}
+            section="params"
+            onRestore={canRestoreSection ? onRestoreSection : null}
+          >
+            <KeyedDiffView rows={fieldDiff.params.rows} />
+          </Section>
+        ) : null}
 
-      {changedSections.includes('body') ? (
-        <Section
-          title={SECTION_LABELS.body}
-          section="body"
-          onRestore={canRestoreSection ? onRestoreSection : null}
-        >
-          <BodyDiff body={fieldDiff.body} />
-        </Section>
-      ) : null}
+        {changedSections.includes('headers') ? (
+          <Section
+            title={SECTION_LABELS.headers}
+            section="headers"
+            onRestore={canRestoreSection ? onRestoreSection : null}
+          >
+            <KeyedDiffView rows={fieldDiff.headers.rows} />
+          </Section>
+        ) : null}
 
-      {changedSections.includes('prerequest') ? (
-        <Section
-          title={SECTION_LABELS.prerequest}
-          section="prerequest"
-          onRestore={canRestoreSection ? onRestoreSection : null}
-        >
-          <TextDiffView block={fieldDiff.prerequest} />
-        </Section>
-      ) : null}
+        {changedSections.includes('auth') ? (
+          <Section
+            title={SECTION_LABELS.auth}
+            section="auth"
+            onRestore={canRestoreSection ? onRestoreSection : null}
+          >
+            <AuthDiff auth={fieldDiff.auth} />
+          </Section>
+        ) : null}
 
-      {changedSections.includes('tests') ? (
-        <Section
-          title={SECTION_LABELS.tests}
-          section="tests"
-          onRestore={canRestoreSection ? onRestoreSection : null}
-        >
-          <TextDiffView block={fieldDiff.tests} />
-        </Section>
-      ) : null}
+        {changedSections.includes('body') ? (
+          <Section
+            title={SECTION_LABELS.body}
+            section="body"
+            onRestore={canRestoreSection ? onRestoreSection : null}
+          >
+            <BodyDiff body={fieldDiff.body} />
+          </Section>
+        ) : null}
 
-      {!semantic.isAdded && !semantic.isRemoved && changedSections.length === 0 ? (
-        <p className="request-diff-empty">This request matches {baseRef}.</p>
-      ) : null}
+        {changedSections.includes('prerequest') ? (
+          <Section
+            title={SECTION_LABELS.prerequest}
+            section="prerequest"
+            onRestore={canRestoreSection ? onRestoreSection : null}
+          >
+            <TextDiffView block={fieldDiff.prerequest} />
+          </Section>
+        ) : null}
+
+        {changedSections.includes('tests') ? (
+          <Section
+            title={SECTION_LABELS.tests}
+            section="tests"
+            onRestore={canRestoreSection ? onRestoreSection : null}
+          >
+            <TextDiffView block={fieldDiff.tests} />
+          </Section>
+        ) : null}
+
+        {!semantic.isAdded && !semantic.isRemoved && changedSections.length === 0 ? (
+          <p className="request-diff-empty">This request matches {baseRef}.</p>
+        ) : null}
+      </div>
     </div>
   );
 }
