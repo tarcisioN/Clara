@@ -4,6 +4,7 @@ export type AppCommand =
   | { type: 'open-environment' }
   | { type: 'save' }
   | { type: 'save-all' }
+  | { type: 'quick-open' }
   | { type: 'send' }
   | { type: 'close-tab' }
   | { type: 'force-close-tab' }

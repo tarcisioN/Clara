@@ -9,6 +9,7 @@ import RequestPane from './components/RequestPane.tsx';
 import RequestDiffPane from './components/RequestDiffPane.tsx';
 import RequestTabs, { type WorkspaceTabView } from './components/RequestTabs.tsx';
 import PromptDialog, { type PromptRequest } from './components/PromptDialog.tsx';
+import CommandPalette from './components/CommandPalette.tsx';
 import SaveAsDialog, {
   type SaveAsRequest,
   type SaveAsResult
@@ -130,6 +131,11 @@ import {
 } from './workspace/collectionUi.ts';
 import { computeDirtyState } from './workspace/dirty.ts';
 import { decideExternalChange } from './workspace/externalChanges.ts';
+import {
+  searchCollections,
+  type CollectionSearchHit,
+  type SearchSection
+} from './workspace/collectionSearch.ts';
 import {
   deleteFromSavedCollection,
   writeCollectionMetaToSaved,
@@ -381,6 +387,12 @@ export default function App() {
   const [saveAsPrompt, setSaveAsPrompt] = useState<
     (SaveAsRequest & { resolve: (value: SaveAsResult | null) => void }) | null
   >(null);
+  const [quickOpenOpen, setQuickOpenOpen] = useState(false);
+  const [quickOpenQuery, setQuickOpenQuery] = useState('');
+  const [focusSection, setFocusSection] = useState<{
+    section: SearchSection;
+    token: number;
+  } | null>(null);
   const [pinnedByKey, setPinnedByKey] = useState<Record<string, PinnedRequest>>({});
   const pinnedByKeyRef = useRef(pinnedByKey);
   const saveRequestAsRef = useRef<(tab: WorkspaceTab) => Promise<void>>(async () => {});
@@ -429,6 +441,26 @@ export default function App() {
   const anyDirty =
     collections.some((entry) => isCollectionDirty(uiByPath[entry.filePath] ?? EMPTY_UI)) ||
     environments.some((entry) => isEnvironmentDirty(entry.environment, entry.originalRaw));
+
+  const quickOpenHits = useMemo(() => {
+    if (!quickOpenOpen) {
+      return [];
+    }
+    const drafts = Object.entries(pinnedByKey)
+      .filter(([, pin]) => pin.draft)
+      .flatMap(([key, pin]) => {
+        const tab = parseTabKey(key);
+        return tab?.kind === 'request' ? [{ tab, pin }] : [];
+      });
+    return searchCollections(
+      collections.map((entry) => ({
+        filePath: entry.filePath,
+        collection: entry.collection
+      })),
+      quickOpenQuery,
+      { drafts }
+    );
+  }, [collections, pinnedByKey, quickOpenOpen, quickOpenQuery]);
 
   const activeCollection =
     activeTab && activeTab.kind !== 'environment'
@@ -2168,6 +2200,82 @@ export default function App() {
     [openTab, updateUi]
   );
 
+  const openQuickOpen = useCallback(() => {
+    if (collectionsRef.current.length === 0) {
+      setStatus({ kind: 'error', message: 'Open a collection first' });
+      return;
+    }
+    setQuickOpenQuery('');
+    setQuickOpenOpen(true);
+  }, []);
+
+  const selectQuickOpenHit = useCallback(
+    (hit: CollectionSearchHit) => {
+      setQuickOpenOpen(false);
+      setQuickOpenQuery('');
+      setFocusSection({ section: hit.section, token: Date.now() });
+
+      updateUi(hit.collectionPath, (ui) => {
+        const expanded = new Set(ui.expanded);
+        const indexes = hit.path.split('.');
+        let changed = !ui.collectionExpanded;
+        for (let depth = 1; depth < indexes.length; depth += 1) {
+          const ancestor = indexes.slice(0, depth).join('.');
+          if (!expanded.has(ancestor)) {
+            expanded.add(ancestor);
+            changed = true;
+          }
+        }
+        if (hit.kind === 'folder' && !expanded.has(hit.path)) {
+          expanded.add(hit.path);
+          changed = true;
+        }
+        if (!changed) {
+          return ui;
+        }
+        return { ...ui, collectionExpanded: true, expanded };
+      });
+      setSidebar((current) =>
+        current.collectionsExpanded
+          ? current
+          : { ...current, collectionsExpanded: true }
+      );
+
+      if (hit.kind === 'folder') {
+        openFolderTab(hit.collectionPath, hit.path);
+        setStatus({
+          kind: 'ok',
+          message: `Opened folder “${hit.name}”`
+        });
+        return;
+      }
+
+      if (hit.draftId) {
+        const draftTab: WorkspaceTab = {
+          kind: 'request',
+          collectionPath: hit.collectionPath,
+          path: hit.path,
+          draftId: hit.draftId
+        };
+        setOpenTabs((current) =>
+          current.some((tab) => sameTab(tab, draftTab)) ? current : [...current, draftTab]
+        );
+        setActiveTab(draftTab);
+        setRequestViewModeByKey((current) => ({
+          ...current,
+          [tabKey(draftTab)]: 'edit'
+        }));
+      } else {
+        openRequestTab(hit.collectionPath, hit.path);
+      }
+      setStatus({
+        kind: 'ok',
+        message: `Opened “${hit.name}” · ${hit.fieldLabel}`
+      });
+    },
+    [openFolderTab, openRequestTab, updateUi]
+  );
+
   const closeTab = useCallback(
     (tab: WorkspaceTab, options?: { force?: boolean }) => {
       const force = options?.force ?? false;
@@ -2627,6 +2735,9 @@ export default function App() {
         case 'save-all':
           void saveAllDirty();
           break;
+        case 'quick-open':
+          openQuickOpen();
+          break;
         case 'send':
           void sendRequest();
           break;
@@ -2671,6 +2782,7 @@ export default function App() {
     openEnvironment,
     saveActiveTab,
     saveAllDirty,
+    openQuickOpen,
     sendRequest,
     closeTab,
     createNewRequestNear,
@@ -5616,6 +5728,8 @@ export default function App() {
                             : null
                         }
                         onSaveAs={() => void saveRequestAs(activeTab)}
+                        focusSection={focusSection?.section ?? null}
+                        focusSectionToken={focusSection?.token ?? 0}
                         semanticDiff={requestSemanticDiff}
                         compareBaseRef={activeCompare?.baseRef ?? null}
                         onSwitchToDiff={
@@ -5855,6 +5969,18 @@ export default function App() {
           items={contextMenuItems}
           onSelect={handleContextAction}
           onClose={() => setContextMenu(null)}
+        />
+      ) : null}
+      {quickOpenOpen ? (
+        <CommandPalette
+          query={quickOpenQuery}
+          hits={quickOpenHits}
+          onQueryChange={setQuickOpenQuery}
+          onSelect={selectQuickOpenHit}
+          onClose={() => {
+            setQuickOpenOpen(false);
+            setQuickOpenQuery('');
+          }}
         />
       ) : null}
       {prompt ? (

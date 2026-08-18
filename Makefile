@@ -1,4 +1,4 @@
-.PHONY: help install install-app package dev build typecheck check check-stage0 check-stage1 check-stage2 check-stage3 check-stage4 check-stage5 check-stage6 check-stage7 check-stage8 check-stage9 check-stage10 check-stage11 check-stage12 check-stage13 check-stage14 check-stage15 check-stage16 check-stage17 check-stage18 check-stage19 check-stage20 check-stage21
+.PHONY: help install install-app package dev build typecheck check check-stage0 check-stage1 check-stage2 check-stage3 check-stage4 check-stage5 check-stage6 check-stage7 check-stage8 check-stage9 check-stage10 check-stage11 check-stage12 check-stage13 check-stage14 check-stage15 check-stage16 check-stage17 check-stage18 check-stage19 check-stage20 check-stage21 check-stage22
 
 APP_NAME := Clara
 APP_BUNDLE := $(APP_NAME).app
@@ -36,6 +36,7 @@ help:
 	@echo "  make check-stage19 Request field diff view (text / keyed / stacked)"
 	@echo "  make check-stage20 Pin / Save As helpers"
 	@echo "  make check-stage21 Delete written into the saved tree"
+	@echo "  make check-stage22 Collection quick-open search (⌘P)"
 
 install:
 	npm install
@@ -63,7 +64,7 @@ build:
 typecheck:
 	npm run typecheck
 
-check: typecheck check-stage0 check-stage1 check-stage2 check-stage3 check-stage4 check-stage5 check-stage6 check-stage7 check-stage8 check-stage9 check-stage10 check-stage11 check-stage12 check-stage13 check-stage14 check-stage15 check-stage16 check-stage17 check-stage18 check-stage19 check-stage20 check-stage21
+check: typecheck check-stage0 check-stage1 check-stage2 check-stage3 check-stage4 check-stage5 check-stage6 check-stage7 check-stage8 check-stage9 check-stage10 check-stage11 check-stage12 check-stage13 check-stage14 check-stage15 check-stage16 check-stage17 check-stage18 check-stage19 check-stage20 check-stage21 check-stage22
 
 check-stage0:
 	npm run check:stage0
@@ -130,3 +131,6 @@ check-stage20:
 
 check-stage21:
 	npm run check:stage21
+
+check-stage22:
+	npm run check:stage22

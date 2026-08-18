@@ -120,6 +120,11 @@ function buildMenu() {
           click: () => sendCommand({ type: 'save-all' })
         },
         {
+          label: 'Search Collections…',
+          accelerator: 'CmdOrCtrl+P',
+          click: () => sendCommand({ type: 'quick-open' })
+        },
+        {
           label: 'Send Request',
           accelerator: 'CmdOrCtrl+Enter',
           click: () => sendCommand({ type: 'send' })

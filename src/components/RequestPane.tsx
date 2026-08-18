@@ -69,6 +69,9 @@ type RequestPaneProps = {
   onPin?: (() => void) | null;
   onUnpin?: (() => void) | null;
   onSaveAs?: (() => void) | null;
+  /** When this token changes, switch the active section (e.g. from ⌘P). */
+  focusSection?: RequestSection | null;
+  focusSectionToken?: number;
 };
 
 export default function RequestPane({
@@ -111,7 +114,9 @@ export default function RequestPane({
   draft = false,
   onPin = null,
   onUnpin = null,
-  onSaveAs = null
+  onSaveAs = null,
+  focusSection = null,
+  focusSectionToken = 0
 }: RequestPaneProps) {
   const [activeSection, setActiveSection] = useState<RequestSection>('params');
   const [renaming, setRenaming] = useState(false);
@@ -121,6 +126,12 @@ export default function RequestPane({
   const urlInputRef = useRef<HTMLInputElement>(null);
   const urlOverlayRef = useRef<HTMLDivElement>(null);
   const displayName = item.name?.trim() || '(unnamed request)';
+
+  useEffect(() => {
+    if (focusSection) {
+      setActiveSection(focusSection);
+    }
+  }, [focusSection, focusSectionToken]);
 
   const syncUrlOverlayScroll = useCallback(() => {
     if (urlOverlayRef.current && urlInputRef.current) {
