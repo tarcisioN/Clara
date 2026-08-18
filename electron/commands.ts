@@ -3,6 +3,7 @@ export type AppCommand =
   | { type: 'new-collection' }
   | { type: 'open-environment' }
   | { type: 'save' }
+  | { type: 'save-all' }
   | { type: 'send' }
   | { type: 'close-tab' }
   | { type: 'force-close-tab' }

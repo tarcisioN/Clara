@@ -130,7 +130,11 @@ import {
 } from './workspace/collectionUi.ts';
 import { computeDirtyState } from './workspace/dirty.ts';
 import { decideExternalChange } from './workspace/externalChanges.ts';
-import { deleteFromSavedCollection } from './workspace/savedTree.ts';
+import {
+  deleteFromSavedCollection,
+  writeCollectionMetaToSaved,
+  writeItemToSavedCollection
+} from './workspace/savedTree.ts';
 import {
   createPinnedRequest,
   isPinnedDetached,
@@ -1607,8 +1611,98 @@ export default function App() {
     setStatus({ kind: 'ok', message: `Closed ${fileName(collectionPath)}` });
   }, []);
 
-  /** Save the resource behind the active tab; fall back to the first dirty one. */
-  const saveActiveResource = useCallback(async () => {
+  /**
+   * ⇧⌘S — write every dirty collection and environment file in full.
+   * When `preferSingle` is set (no active tab), stop after the first dirty one.
+   */
+  const saveAllDirty = useCallback(
+    async (options?: { preferSingle?: boolean }) => {
+      const collectionsList = collectionsRef.current;
+      const environmentsList = environmentsRef.current;
+      if (collectionsList.length === 0 && environmentsList.length === 0) {
+        return;
+      }
+
+      setStatus({ kind: 'idle' });
+      const savedNames: string[] = [];
+      try {
+        for (const saveEnvironment of environmentsList) {
+          if (
+            !isEnvironmentDirty(saveEnvironment.environment, saveEnvironment.originalRaw)
+          ) {
+            continue;
+          }
+          const contents = serializeEnvironment(saveEnvironment.environment, {
+            trailingNewline: trailingNewlineFromRaw(saveEnvironment.originalRaw)
+          });
+          await window.clara.saveEnvironment(saveEnvironment.filePath, contents);
+          setEnvironments((current) =>
+            current.map((entry) =>
+              entry.filePath === saveEnvironment.filePath
+                ? { ...entry, originalRaw: contents }
+                : entry
+            )
+          );
+          savedNames.push(fileName(saveEnvironment.filePath));
+          if (options?.preferSingle) {
+            setStatus({ kind: 'ok', message: `Saved ${saveEnvironment.filePath}` });
+            return;
+          }
+        }
+
+        for (const saveCollection of collectionsList) {
+          if (!isCollectionDirty(uiByPathRef.current[saveCollection.filePath] ?? EMPTY_UI)) {
+            continue;
+          }
+          const contents = serializeCollection(saveCollection.collection, {
+            trailingNewline: trailingNewlineFromRaw(saveCollection.originalRaw)
+          });
+          await window.clara.saveCollection(saveCollection.filePath, contents);
+          setCollections((current) =>
+            current.map((entry) =>
+              entry.filePath === saveCollection.filePath
+                ? { ...entry, originalRaw: contents }
+                : entry
+            )
+          );
+          setUiByPath((current) => ({
+            ...current,
+            [saveCollection.filePath]: clearCollectionDirty(
+              current[saveCollection.filePath] ?? createCollectionUiState()
+            )
+          }));
+          void refreshCompare(saveCollection.filePath, saveCollection.collection);
+          savedNames.push(fileName(saveCollection.filePath));
+          if (options?.preferSingle) {
+            setStatus({ kind: 'ok', message: `Saved ${saveCollection.filePath}` });
+            return;
+          }
+        }
+
+        if (savedNames.length === 0) {
+          setStatus({ kind: 'ok', message: 'No changes to save' });
+          return;
+        }
+        setStatus({
+          kind: 'ok',
+          message:
+            savedNames.length === 1
+              ? `Saved ${savedNames[0]}`
+              : `Saved ${savedNames.length} files · ${savedNames.join(', ')}`
+        });
+      } catch (error) {
+        setStatus({ kind: 'error', message: errorMessage(error) });
+      }
+    },
+    [refreshCompare]
+  );
+
+  /**
+   * ⌘S — save only the active tab. Request/folder tabs write that item into the
+   * last-saved file so sibling edits stay dirty; collection tabs write meta only
+   * (or the whole file when structure changed); environment tabs write their file.
+   */
+  const saveActiveTab = useCallback(async () => {
     const collectionsList = collectionsRef.current;
     const environmentsList = environmentsRef.current;
     if (collectionsList.length === 0 && environmentsList.length === 0) {
@@ -1627,46 +1721,21 @@ export default function App() {
       }
     }
 
-    let saveEnvironment: LoadedEnvironment | undefined;
-    let saveCollection: LoadedCollection | undefined;
-
-    if (active?.kind === 'environment') {
-      saveEnvironment = environmentsList.find(
-        (entry) => entry.filePath === active.environmentPath
-      );
-    } else if (active) {
-      saveCollection = collectionsList.find(
-        (entry) => entry.filePath === active.collectionPath
-      );
-    }
-
-    if (!saveEnvironment && !saveCollection) {
-      saveEnvironment = environmentsList.find((entry) =>
-        isEnvironmentDirty(entry.environment, entry.originalRaw)
-      );
-      saveCollection = collectionsList.find((entry) =>
-        isCollectionDirty(uiByPathRef.current[entry.filePath] ?? EMPTY_UI)
-      );
-    }
-
-    if (!saveEnvironment && !saveCollection) {
-      saveEnvironment = environmentsList[0];
-      saveCollection = collectionsList[0];
-    }
-
-    // Prefer the kind matching the active tab when both somehow resolve.
-    if (active?.kind === 'environment' && saveEnvironment) {
-      saveCollection = undefined;
-    } else if (active && active.kind !== 'environment' && saveCollection) {
-      saveEnvironment = undefined;
-    } else if (saveEnvironment && saveCollection) {
-      // Active tab unclear — prefer first dirty; environments checked first above when no active match.
-      saveCollection = undefined;
-    }
-
     setStatus({ kind: 'idle' });
     try {
-      if (saveEnvironment) {
+      if (!active) {
+        // No tab — fall back to saving the first dirty resource (full file).
+        await saveAllDirty({ preferSingle: true });
+        return;
+      }
+
+      if (active.kind === 'environment') {
+        const saveEnvironment = environmentsList.find(
+          (entry) => entry.filePath === active.environmentPath
+        );
+        if (!saveEnvironment) {
+          return;
+        }
         const hasDirty = isEnvironmentDirty(
           saveEnvironment.environment,
           saveEnvironment.originalRaw
@@ -1684,23 +1753,94 @@ export default function App() {
               : entry
           )
         );
-        setStatus({ kind: 'ok', message: `Saved ${saveEnvironment.filePath}` });
+        setStatus({ kind: 'ok', message: `Saved ${fileName(saveEnvironment.filePath)}` });
         return;
       }
 
+      const saveCollection = collectionsList.find(
+        (entry) => entry.filePath === active.collectionPath
+      );
       if (!saveCollection) {
         return;
       }
 
-      const hasDirty = isCollectionDirty(
-        uiByPathRef.current[saveCollection.filePath] ?? EMPTY_UI
-      );
-      const contents = hasDirty
-        ? serializeCollection(saveCollection.collection, {
-            trailingNewline: trailingNewlineFromRaw(saveCollection.originalRaw)
-          })
-        : saveCollection.originalRaw;
+      const ui = uiByPathRef.current[saveCollection.filePath] ?? EMPTY_UI;
+      let baseline: PostmanCollection;
+      try {
+        baseline = assertPostmanCollection(JSON.parse(saveCollection.originalRaw));
+      } catch {
+        await persistCollection(saveCollection.filePath, saveCollection.collection);
+        setStatus({
+          kind: 'ok',
+          message: `Saved ${fileName(saveCollection.filePath)}`
+        });
+        return;
+      }
 
+      if (active.kind === 'collection') {
+        if (ui.structureDirty) {
+          // Reorders / inserts / deletes need a full write.
+          await persistCollection(saveCollection.filePath, saveCollection.collection);
+          setStatus({
+            kind: 'ok',
+            message: `Saved ${fileName(saveCollection.filePath)}`
+          });
+          return;
+        }
+        if (!ui.collectionDirty) {
+          setStatus({ kind: 'ok', message: 'No changes to save' });
+          return;
+        }
+        const nextSaved = writeCollectionMetaToSaved(saveCollection.collection, baseline);
+        const contents = serializeCollection(nextSaved, {
+          trailingNewline: trailingNewlineFromRaw(saveCollection.originalRaw)
+        });
+        await window.clara.saveCollection(saveCollection.filePath, contents);
+        setCollections((current) =>
+          current.map((entry) =>
+            entry.filePath === saveCollection.filePath
+              ? { ...entry, originalRaw: contents }
+              : entry
+          )
+        );
+        syncDirty(saveCollection.filePath, saveCollection.collection, contents);
+        void refreshCompare(saveCollection.filePath, saveCollection.collection);
+        setStatus({
+          kind: 'ok',
+          message: `Saved collection variables · ${fileName(saveCollection.filePath)}`
+        });
+        return;
+      }
+
+      // request or folder tab — write only that item
+      if (active.kind === 'request' && !ui.dirtyPaths.has(active.path)) {
+        setStatus({ kind: 'ok', message: 'No changes to save' });
+        return;
+      }
+      if (active.kind === 'folder' && !ui.dirtyFolderPaths.has(active.path)) {
+        setStatus({ kind: 'ok', message: 'No changes to save' });
+        return;
+      }
+
+      const nextSaved = writeItemToSavedCollection(
+        saveCollection.collection,
+        baseline,
+        active.path
+      );
+      if (!nextSaved) {
+        setStatus({
+          kind: 'error',
+          message:
+            active.kind === 'request'
+              ? 'Cannot save this request alone yet — use Save All (⇧⌘S) or Save As'
+              : 'Cannot save this folder alone yet — use Save All (⇧⌘S)'
+        });
+        return;
+      }
+
+      const contents = serializeCollection(nextSaved, {
+        trailingNewline: trailingNewlineFromRaw(saveCollection.originalRaw)
+      });
       await window.clara.saveCollection(saveCollection.filePath, contents);
       setCollections((current) =>
         current.map((entry) =>
@@ -1709,18 +1849,19 @@ export default function App() {
             : entry
         )
       );
-      setUiByPath((current) => ({
-        ...current,
-        [saveCollection.filePath]: clearCollectionDirty(
-          current[saveCollection.filePath] ?? createCollectionUiState()
-        )
-      }));
+      syncDirty(saveCollection.filePath, saveCollection.collection, contents);
       void refreshCompare(saveCollection.filePath, saveCollection.collection);
-      setStatus({ kind: 'ok', message: `Saved ${saveCollection.filePath}` });
+      const label =
+        getItemByPath(saveCollection.collection.item, active.path)?.name?.trim() ||
+        active.kind;
+      setStatus({
+        kind: 'ok',
+        message: `Saved “${label}” · ${fileName(saveCollection.filePath)}`
+      });
     } catch (error) {
       setStatus({ kind: 'error', message: errorMessage(error) });
     }
-  }, [refreshCompare]);
+  }, [persistCollection, refreshCompare, saveAllDirty, syncDirty]);
 
   const pushTerminalEntry = useCallback((label: string, result: NewmanRunView) => {
     const entry = buildTerminalEntry(label, result);
@@ -2475,7 +2616,10 @@ export default function App() {
           void openEnvironment();
           break;
         case 'save':
-          void saveActiveResource();
+          void saveActiveTab();
+          break;
+        case 'save-all':
+          void saveAllDirty();
           break;
         case 'send':
           void sendRequest();
@@ -2519,7 +2663,8 @@ export default function App() {
     openCollection,
     createNewCollection,
     openEnvironment,
-    saveActiveResource,
+    saveActiveTab,
+    saveAllDirty,
     sendRequest,
     closeTab,
     createNewRequestNear,
@@ -4216,10 +4361,19 @@ export default function App() {
             type="button"
             className={anyDirty ? 'save-dirty' : ''}
             disabled={!hasResources}
-            onClick={() => void saveActiveResource()}
-            title="⌘S / Ctrl+S"
+            onClick={() => void saveActiveTab()}
+            title="Save active tab · ⌘S / Ctrl+S"
           >
             Save
+          </button>
+          <button
+            type="button"
+            className={anyDirty ? 'save-dirty' : ''}
+            disabled={!hasResources || !anyDirty}
+            onClick={() => void saveAllDirty()}
+            title="Save all dirty files · ⇧⌘S / Ctrl+Shift+S"
+          >
+            Save All
           </button>
           <button
             type="button"

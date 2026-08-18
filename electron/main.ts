@@ -115,6 +115,11 @@ function buildMenu() {
           click: () => sendCommand({ type: 'save' })
         },
         {
+          label: 'Save All',
+          accelerator: 'CmdOrCtrl+Shift+S',
+          click: () => sendCommand({ type: 'save-all' })
+        },
+        {
           label: 'Send Request',
           accelerator: 'CmdOrCtrl+Enter',
           click: () => sendCommand({ type: 'send' })
