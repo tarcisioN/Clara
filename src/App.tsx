@@ -5160,6 +5160,9 @@ export default function App() {
               tabs={tabs}
               activeTab={activeTab}
               onSelect={setActiveTab}
+              onRevealInSidebar={(tab) =>
+                revealInSidebar(tab, { activate: false })
+              }
               onClose={closeTab}
               onDropRequest={(collectionPath, path) =>
                 openRequestTab(collectionPath, path, { forceNew: true })

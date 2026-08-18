@@ -17,6 +17,8 @@ type RequestTabsProps = {
   tabs: WorkspaceTabView[];
   activeTab: WorkspaceTab | null;
   onSelect: (tab: WorkspaceTab) => void;
+  /** Reveal the tab's item in the sidebar (same effect as Follow for one shot). */
+  onRevealInSidebar?: ((tab: WorkspaceTab) => void) | null;
   onClose: (tab: WorkspaceTab) => void;
   onDropRequest: (collectionPath: string, path: string) => void;
   onReorder: (from: WorkspaceTab, to: WorkspaceTab, place: 'before' | 'after') => void;
@@ -24,6 +26,9 @@ type RequestTabsProps = {
   /** Opens a blank unsaved request tab. Null hides the + control. */
   onNewRequest?: (() => void) | null;
 };
+
+/** Generous window so a slow second click still reveals the sidebar target. */
+const TAB_REVEAL_DOUBLE_CLICK_MS = 1500;
 
 function TabLabel({ children, tooltip }: { children: string; tooltip?: string }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -61,6 +66,7 @@ export default function RequestTabs({
   tabs,
   activeTab,
   onSelect,
+  onRevealInSidebar = null,
   onClose,
   onDropRequest,
   onReorder,
@@ -72,9 +78,30 @@ export default function RequestTabs({
     key: string;
     place: 'before' | 'after';
   } | null>(null);
+  const lastTabClickRef = useRef<{ key: string; at: number } | null>(null);
 
   const hasType = (event: DragEvent, mime: string) =>
     Array.from(event.dataTransfer.types).includes(mime);
+
+  const handleTabClick = (tab: WorkspaceTab) => {
+    const key = tabKey(tab);
+    const now = Date.now();
+    const previous = lastTabClickRef.current;
+    const isDouble =
+      Boolean(onRevealInSidebar) &&
+      previous != null &&
+      previous.key === key &&
+      now - previous.at <= TAB_REVEAL_DOUBLE_CLICK_MS;
+
+    onSelect(tab);
+
+    if (isDouble && onRevealInSidebar) {
+      lastTabClickRef.current = null;
+      onRevealInSidebar(tab);
+      return;
+    }
+    lastTabClickRef.current = { key, at: now };
+  };
 
   return (
     <div
@@ -139,11 +166,16 @@ export default function RequestTabs({
             aria-selected={active}
             tabIndex={active ? 0 : -1}
             draggable
-            onClick={() => onSelect(entry.tab)}
+            title={
+              onRevealInSidebar
+                ? 'Double-click to reveal in the sidebar'
+                : undefined
+            }
+            onClick={() => handleTabClick(entry.tab)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') {
                 event.preventDefault();
-                onSelect(entry.tab);
+                handleTabClick(entry.tab);
               }
             }}
             onAuxClick={(event) => {
