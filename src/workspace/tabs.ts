@@ -8,9 +8,9 @@ export type WorkspaceTab =
       collectionPath: string;
       path: ItemPath;
       /**
-       * Set on an unsaved working copy (Duplicate Tab). It only has to make the
-       * tab identity unique — the request itself lives in the pinned snapshot
-       * until Save As writes it into the collection.
+       * Set on an unsaved working copy (Duplicate Tab or tab-bar "+"). It only
+       * has to make the tab identity unique — the request itself lives in the
+       * pinned snapshot until Save As writes it into the collection.
        */
       draftId?: string;
     }

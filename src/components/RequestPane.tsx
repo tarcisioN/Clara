@@ -234,39 +234,46 @@ export default function RequestPane({
     <div className="request-pane">
       <div className="request-title">
         <div className="request-title-main">
-          {renaming && onRename ? (
-            <input
-              ref={renameInputRef}
-              className="request-title-input"
-              type="text"
-              value={draftName}
-              spellCheck={false}
-              autoComplete="off"
-              aria-label="Request name"
-              onChange={(event) => setDraftName(event.target.value)}
-              onBlur={commitRename}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  commitRename();
-                } else if (event.key === 'Escape') {
-                  event.preventDefault();
-                  cancelRename();
-                }
-              }}
-            />
-          ) : onRename ? (
-            <button
-              type="button"
-              className="request-title-button"
-              title="Click to rename"
-              onClick={startRename}
-            >
-              {displayName}
-            </button>
-          ) : (
-            <h2>{displayName}</h2>
-          )}
+          <div className="request-title-heading">
+            {renaming && onRename ? (
+              <input
+                ref={renameInputRef}
+                className="request-title-input"
+                type="text"
+                value={draftName}
+                spellCheck={false}
+                autoComplete="off"
+                aria-label="Request name"
+                onChange={(event) => setDraftName(event.target.value)}
+                onBlur={commitRename}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    commitRename();
+                  } else if (event.key === 'Escape') {
+                    event.preventDefault();
+                    cancelRename();
+                  }
+                }}
+              />
+            ) : onRename ? (
+              <button
+                type="button"
+                className="request-title-button"
+                title="Click to rename"
+                onClick={startRename}
+              >
+                {displayName}
+              </button>
+            ) : (
+              <h2>{displayName}</h2>
+            )}
+            {draft ? (
+              <span className="request-title-status" role="status">
+                (unsaved)
+              </span>
+            ) : null}
+          </div>
           <span className="request-path">{path}</span>
         </div>
         {onSwitchToDiff ? (
@@ -308,16 +315,7 @@ export default function RequestPane({
         </div>
       </div>
 
-      {draft ? (
-        <div className="compare-banner compare-banner-pinned" role="status">
-          <span>Unsaved copy — not in the collection yet</span>
-          {onSaveAs ? (
-            <button type="button" onClick={onSaveAs}>
-              Save As…
-            </button>
-          ) : null}
-        </div>
-      ) : pinnedDetached ? (
+      {!draft && pinnedDetached ? (
         <div className="compare-banner compare-banner-pinned" role="status">
           <span>Pinned — not in the current collection file</span>
           {onSaveAs ? (
@@ -326,7 +324,9 @@ export default function RequestPane({
             </button>
           ) : null}
         </div>
-      ) : pinned ? (
+      ) : null}
+
+      {!draft && pinned && !pinnedDetached ? (
         <div className="compare-banner compare-banner-pinned" role="status">
           Pinned — survives reload and branch switches
         </div>

@@ -21,6 +21,8 @@ type RequestTabsProps = {
   onDropRequest: (collectionPath: string, path: string) => void;
   onReorder: (from: WorkspaceTab, to: WorkspaceTab, place: 'before' | 'after') => void;
   onContextMenu: (event: MouseEvent, tab: WorkspaceTab) => void;
+  /** Opens a blank unsaved request tab. Null hides the + control. */
+  onNewRequest?: (() => void) | null;
 };
 
 function TabLabel({ children, tooltip }: { children: string; tooltip?: string }) {
@@ -62,7 +64,8 @@ export default function RequestTabs({
   onClose,
   onDropRequest,
   onReorder,
-  onContextMenu
+  onContextMenu,
+  onNewRequest = null
 }: RequestTabsProps) {
   const [treeDropTarget, setTreeDropTarget] = useState(false);
   const [reorderOver, setReorderOver] = useState<{
@@ -213,6 +216,18 @@ export default function RequestTabs({
           </div>
         );
       })}
+
+      {onNewRequest ? (
+        <button
+          type="button"
+          className="request-tabs-new"
+          aria-label="New request"
+          title="New unsaved request"
+          onClick={onNewRequest}
+        >
+          +
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -17,8 +17,8 @@ export type PinnedRequest = {
    */
   detached?: boolean;
   /**
-   * Unsaved copy (Duplicate Tab). It has no item of its own in the tree, so it
-   * never links to one — only Save As turns it into a request.
+   * Unsaved copy (Duplicate Tab / tab-bar "+"). It has no item of its own in the
+   * tree, so it never links to one — only Save As turns it into a request.
    */
   draft?: boolean;
 };

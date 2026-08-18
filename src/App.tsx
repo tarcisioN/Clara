@@ -527,7 +527,7 @@ export default function App() {
       const draft = isDraftTab(tab);
       const name = item.name?.trim() || 'Untitled';
       const note = draft
-        ? 'Unsaved copy — Save As adds it to the collection'
+        ? 'Unsaved request — Save As adds it to the collection'
         : detached
           ? 'Pinned — not in the current collection file'
           : 'Pinned — survives reload / branch switches';
@@ -2634,7 +2634,7 @@ export default function App() {
 
       const draft = isDraftTab(tab);
       const result = await askSaveAs({
-        title: draft ? 'Save copy' : detached ? 'Save pinned request' : 'Save As',
+        title: draft ? 'Save request' : detached ? 'Save pinned request' : 'Save As',
         defaultName: source.name?.trim() || 'Untitled request',
         locations,
         defaultParentPath: defaultParent,
@@ -2683,9 +2683,7 @@ export default function App() {
           setActiveTab(nextTab);
           setStatus({
             kind: 'ok',
-            message: draft
-              ? `Saved the copy as “${result.name}”`
-              : `Saved “${result.name}” into the collection`
+            message: `Saved “${result.name}” into the collection`
           });
         } else {
           openTab(nextTab, { forceNew: true });
@@ -2866,6 +2864,59 @@ export default function App() {
       });
     }
   };
+
+  /**
+   * Tab-bar "+" opens a blank unsaved request. It lives as a detached pin, so
+   * Save As is what puts it in the collection. `near` only picks the collection
+   * and the default Save As parent (sibling of a request, inside a folder, or
+   * collection root).
+   */
+  const createBlankDraftRequest = useCallback((near: WorkspaceTab | null) => {
+    const collectionPath =
+      near && near.kind !== 'environment'
+        ? near.collectionPath
+        : collectionsRef.current[0]?.filePath;
+    if (!collectionPath) {
+      setStatus({ kind: 'error', message: 'Open a collection first' });
+      return;
+    }
+    const entry = collectionsRef.current.find(
+      (candidate) => candidate.filePath === collectionPath
+    );
+    if (!entry) {
+      return;
+    }
+
+    // linkedPath only hints Save As' default folder; the draft has no tree item.
+    let linkedPath: ItemPath = '0';
+    if (near?.kind === 'folder' && near.collectionPath === collectionPath) {
+      linkedPath = `${near.path}.0`;
+    } else if (near?.kind === 'request' && near.collectionPath === collectionPath) {
+      linkedPath = near.path;
+    }
+
+    const item = createRequestItem();
+    const draftTab: WorkspaceTab = {
+      kind: 'request',
+      collectionPath,
+      path: linkedPath,
+      draftId: crypto.randomUUID()
+    };
+
+    setPinnedByKey((current) => ({
+      ...current,
+      [tabKey(draftTab)]: {
+        ...createPinnedRequest(collectionPath, linkedPath, item),
+        draft: true
+      }
+    }));
+    setOpenTabs((current) => [...current, draftTab]);
+    setActiveTab(draftTab);
+    setStatus({
+      kind: 'ok',
+      message: 'New request · use Save As to add it to the collection'
+    });
+  }, []);
 
   /**
    * Duplicate Tab opens an unsaved working copy beside the tab it came from.
@@ -4845,6 +4896,11 @@ export default function App() {
               onReorder={reorderTabs}
               onContextMenu={(event, tab) =>
                 openContextMenu(event, { kind: 'tab', tab })
+              }
+              onNewRequest={
+                collections.length > 0
+                  ? () => createBlankDraftRequest(activeTab)
+                  : null
               }
             />
 

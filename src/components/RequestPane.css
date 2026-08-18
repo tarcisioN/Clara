@@ -20,6 +20,20 @@
   min-width: 0;
 }
 
+.request-title-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.request-title-status {
+  flex: 0 0 auto;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
 .request-title-actions {
   display: flex;
   align-items: center;
