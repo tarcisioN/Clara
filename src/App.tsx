@@ -348,7 +348,7 @@ export default function App() {
   const [sidebarQuery, setSidebarQuery] = useState('');
   const [sessionHydrated, setSessionHydrated] = useState(false);
   const [sessionHome, setSessionHome] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
+  const [sendingKeys, setSendingKeys] = useState<ReadonlySet<string>>(() => new Set());
   const [requestRuns, setRequestRuns] = useState<Record<string, NewmanRunView>>({});
   const [scopeRuns, setScopeRuns] = useState<Record<string, NewmanRunView>>({});
   const [runningKey, setRunningKey] = useState<string | null>(null);
@@ -395,7 +395,7 @@ export default function App() {
   const activeEnvironmentPathRef = useRef(activeEnvironmentPath);
   const sidebarRef = useRef(sidebar);
   const compareBasesRef = useRef(compareBases);
-  const sendingRef = useRef(sending);
+  const sendingKeysRef = useRef(sendingKeys);
   const runningKeyRef = useRef(runningKey);
   const rerunningRowRef = useRef(rerunningRow);
   const sidebarResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -414,7 +414,7 @@ export default function App() {
   activeEnvironmentPathRef.current = activeEnvironmentPath;
   sidebarRef.current = sidebar;
   compareBasesRef.current = compareBases;
-  sendingRef.current = sending;
+  sendingKeysRef.current = sendingKeys;
   runningKeyRef.current = runningKey;
   rerunningRowRef.current = rerunningRow;
   terminalOpenRef.current = terminalOpen;
@@ -1881,14 +1881,14 @@ export default function App() {
     const entry = collectionsRef.current.find(
       (candidate) => candidate.filePath === collectionPath
     );
-    if (!entry || sendingRef.current) {
+    const key = tabKey(tab);
+    // Only block a second Send on the same tab; other tabs can fly in parallel.
+    if (!entry || sendingKeysRef.current.has(key)) {
       return;
     }
 
-    const key = tabKey(tab);
     const pin = pinnedByKeyRef.current[key];
-    setSending(true);
-    setRunningKey(key);
+    setSendingKeys((current) => new Set(current).add(key));
     setStatus({ kind: 'idle' });
     try {
       let runCollection;
@@ -1943,8 +1943,14 @@ export default function App() {
     } catch (error) {
       setStatus({ kind: 'error', message: errorMessage(error) });
     } finally {
-      setSending(false);
-      setRunningKey(null);
+      setSendingKeys((current) => {
+        if (!current.has(key)) {
+          return current;
+        }
+        const next = new Set(current);
+        next.delete(key);
+        return next;
+      });
     }
   }, [activeEnvironmentJson, pushTerminalEntry]);
 
@@ -5725,7 +5731,7 @@ export default function App() {
                           editSelectedItem((item) => setItemScriptSource(item, 'test', source))
                         }
                         onSend={() => void sendRequest()}
-                        sending={sending}
+                        sending={sendingKeys.has(tabKey(activeTab))}
                       />
                       )}
                     </div>
@@ -5741,7 +5747,7 @@ export default function App() {
                             )
                           ] ?? null
                         }
-                        running={sending && runningKey === tabKey(activeTab)}
+                        running={sendingKeys.has(tabKey(activeTab))}
                         onNewmanReady={(version) => {
                           const key = requestRunKey(
                             activeTab.collectionPath,
