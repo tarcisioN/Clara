@@ -11,6 +11,7 @@ import {
   promoteRequestUrlToObject,
   removeRequestQueryParam,
   setRequestQueryParamDisabled,
+  setRequestUrl,
   updateCollectionItem,
   updateRequestQueryParam
 } from '../src/postman/edit.ts';
@@ -71,9 +72,15 @@ const trimmed = updateCollectionItem(withExtra, '0.0', (item) =>
 );
 assert.equal(getRequestQueryParams(getItemByPath(trimmed.item, '0.0')!).length, 2);
 
-// string URL: no query table until promote
-assert.equal(getRequestQueryParams(getItemByPath(collection.item, '1')!).length, 0);
+// string URL: table reads query from raw; first params edit promotes to object
 assert.equal(typeof getRequestByPath(collection.item, '1')!.url, 'string');
+assert.equal(getRequestQueryParams(getItemByPath(collection.item, '1')!).length, 0);
+
+const withQuery = updateCollectionItem(collection, '1', (item) => addRequestQueryParam(item));
+const withQueryUrl = getRequestByPath(withQuery.item, '1')!.url;
+assert.ok(isUrlObject(withQueryUrl));
+assert.equal(withQueryUrl.raw?.includes('?'), true);
+assert.equal(getRequestQueryParams(getItemByPath(withQuery.item, '1')!).length, 1);
 
 const promoted = updateCollectionItem(collection, '1', (item) => promoteRequestUrlToObject(item));
 const promotedUrl = getRequestByPath(promoted.item, '1')!.url;
@@ -81,18 +88,24 @@ assert.ok(isUrlObject(promotedUrl));
 assert.equal(promotedUrl.raw, 'https://example.com/echo');
 assert.deepEqual(promotedUrl.host, ['example', 'com']);
 
-const promotedWithQuery = updateCollectionItem(promoted, '1', (item) =>
-  addRequestQueryParam(item)
-);
-const q = getRequestQueryParams(getItemByPath(promotedWithQuery.item, '1')!);
-assert.equal(q.length, 1);
-assert.ok(isUrlObject(getRequestByPath(promotedWithQuery.item, '1')!.url));
-assert.match(
-  (getRequestByPath(promotedWithQuery.item, '1')!.url as { raw?: string }).raw ?? '',
-  /\?=/
-);
-
 assert.deepEqual(ensureUrlObject('https://a.b/c?x=1').query, [{ key: 'x', value: '1' }]);
+assert.deepEqual(ensureUrlObject('https://a.b/c?x=1&flag').query, [
+  { key: 'x', value: '1' },
+  { key: 'flag', value: null }
+]);
+
+// editing a param on a still-string URL promotes, then patches
+const stringWithQuery = updateCollectionItem(collection, '1', (item) =>
+  setRequestUrl(item, 'https://example.com/echo?a=1&b=2')
+);
+assert.equal(typeof getRequestByPath(stringWithQuery.item, '1')!.url, 'string');
+const renamedFromString = updateCollectionItem(stringWithQuery, '1', (item) =>
+  updateRequestQueryParam(item, 0, { key: 'alpha', value: '9' })
+);
+const renamedUrl = getRequestByPath(renamedFromString.item, '1')!.url;
+assert.ok(isUrlObject(renamedUrl));
+assert.deepEqual(renamedUrl.query?.[0], { key: 'alpha', value: '9' });
+assert.equal(renamedUrl.raw, 'https://example.com/echo?alpha=9&b=2');
 
 assert.throws(
   () => updateCollectionItem(collection, '0.0', (item) => removeRequestQueryParam(item, 9)),

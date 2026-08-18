@@ -8,7 +8,7 @@ import type {
 import type { PostmanBodyMode, PostmanUrlEncodedParam } from '../postman/body.ts';
 import type { EditableAuthType } from '../postman/auth.ts';
 import type { ItemPath } from '../postman/tree.ts';
-import { getUrlRaw, isUrlObject } from '../postman/url.ts';
+import { getUrlRaw } from '../postman/url.ts';
 import { getItemScriptSource } from '../postman/edit.ts';
 import { hasScriptContent } from '../postman/scripts.ts';
 import { interpolateUrlPreview, splitUrlSegments } from '../postman/urlPreview.ts';
@@ -16,7 +16,7 @@ import type { RequestSectionKey, RequestSemanticDiff } from '../git/semanticDiff
 import HeaderTable from './HeaderTable.tsx';
 import BodyPane from './BodyPane.tsx';
 import AuthPane from './AuthPane.tsx';
-import QueryParamsPane from './QueryParamsPane.tsx';
+import QueryParamsPane, { listVisibleQueryParams } from './QueryParamsPane.tsx';
 import ScriptsPane from './ScriptsPane.tsx';
 import './RequestPane.css';
 
@@ -35,7 +35,6 @@ type RequestPaneProps = {
   onRename?: (name: string) => void;
   onChangeMethod: (method: string) => void;
   onChangeUrl: (raw: string) => void;
-  onPromoteUrlToObject: () => void;
   onAddQueryParam: () => void;
   onChangeQueryParam: (index: number, patch: Pick<PostmanQueryParam, 'key' | 'value'>) => void;
   onToggleQueryParamDisabled: (index: number, disabled: boolean) => void;
@@ -84,7 +83,6 @@ export default function RequestPane({
   onRename,
   onChangeMethod,
   onChangeUrl,
-  onPromoteUrlToObject,
   onAddQueryParam,
   onChangeQueryParam,
   onToggleQueryParamDisabled,
@@ -186,15 +184,10 @@ export default function RequestPane({
   useEffect(() => {
     syncUrlOverlayScroll();
   }, [urlRaw, syncUrlOverlayScroll]);
-  const urlShape = typeof item.request === 'string'
-    ? 'request string'
-    : isUrlObject(request.url)
-      ? 'url object'
-      : 'url string';
   const headers = request.header ?? [];
-  const queryCount = isUrlObject(request.url)
-    ? request.url.query?.filter((param) => !param.disabled).length ?? 0
-    : 0;
+  const queryCount = listVisibleQueryParams(request.url).filter(
+    (param) => !param.disabled
+  ).length;
   const headerCount = headers.filter((header) => !header.disabled).length;
   const hasBody = request.body?.mode && request.body.mode !== 'none';
   const hasAuth = request.auth?.type && request.auth.type !== 'noauth';
@@ -475,9 +468,6 @@ export default function RequestPane({
             ) : null}
           </button>
         ))}
-        <span className="url-shape">
-          {urlShape}
-        </span>
       </div>
 
       {activeSectionChanged && onRestoreSection ? (
@@ -493,7 +483,6 @@ export default function RequestPane({
         {activeSection === 'params' && (
           <QueryParamsPane
             url={request.url}
-            onPromoteToObject={onPromoteUrlToObject}
             onAdd={onAddQueryParam}
             onChange={onChangeQueryParam}
             onToggleDisabled={onToggleQueryParamDisabled}

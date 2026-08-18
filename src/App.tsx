@@ -88,7 +88,6 @@ import {
   addRequestUrlEncodedParam,
   getCollectionVariables,
   getItemVariables,
-  promoteRequestUrlToObject,
   removeRequestHeader,
   removeRequestQueryParam,
   removeRequestUrlEncodedParam,
@@ -5502,9 +5501,6 @@ export default function App() {
                         }
                         onChangeUrl={(raw) =>
                           editSelectedItem((item) => setRequestUrl(item, raw))
-                        }
-                        onPromoteUrlToObject={() =>
-                          editSelectedItem((item) => promoteRequestUrlToObject(item))
                         }
                         onAddQueryParam={() =>
                           editSelectedItem((item) => addRequestQueryParam(item))

@@ -437,13 +437,6 @@
   background: rgba(212, 136, 26, 0.06);
 }
 
-.url-shape {
-  margin-left: auto;
-  padding-bottom: 9px;
-  color: var(--text-faint);
-  font-size: 0.6875rem;
-}
-
 .request-section-content {
   display: flex;
   flex-direction: column;
